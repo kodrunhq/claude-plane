@@ -83,9 +83,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
+- [ ] 04-01-PLAN.md — Agent scrollback persistence + session attach/detach lifecycle
+- [ ] 04-02-PLAN.md — Server session registry, REST handlers, WebSocket terminal bridge
+- [ ] 04-03-PLAN.md — Frontend xterm.js terminal component + WebSocket hook
 
 ### Phase 5: Frontend
 **Goal**: Users interact with claude-plane through a polished React SPA that provides cross-fleet session visibility, machine status, and streamlined session lifecycle controls
@@ -128,6 +128,6 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 1. Foundation | 0/3 | Planning complete | - |
 | 2. Agent Core | 0/2 | Planning complete | - |
 | 3. Server Core | 0/3 | Planning complete | - |
-| 4. Terminal Streaming | 0/3 | Not started | - |
+| 4. Terminal Streaming | 0/3 | Planning complete | - |
 | 5. Frontend | 0/2 | Not started | - |
 | 6. Job System | 0/2 | Not started | - |
