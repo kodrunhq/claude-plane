@@ -66,8 +66,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — JWT auth service, token blocklist, revoked token store
+- [ ] 03-02-PLAN.md — Machine store CRUD, connection manager with DB-backed status
+- [ ] 03-03-PLAN.md — Chi REST API: router, JWT middleware, auth + machine handlers
 
 ### Phase 4: Terminal Streaming
 **Goal**: A user in the browser can create a session on a remote machine, see real-time terminal output, type commands, and have the session persist when the browser disconnects
@@ -126,7 +127,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/3 | Planning complete | - |
 | 2. Agent Core | 0/2 | Planning complete | - |
-| 3. Server Core | 0/2 | Not started | - |
+| 3. Server Core | 0/3 | Planning complete | - |
 | 4. Terminal Streaming | 0/3 | Not started | - |
 | 5. Frontend | 0/2 | Not started | - |
 | 6. Job System | 0/2 | Not started | - |
