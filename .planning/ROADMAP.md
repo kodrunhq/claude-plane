@@ -47,11 +47,11 @@ Plans:
   2. Agent establishes a persistent bidirectional gRPC stream to the server that stays alive across idle periods
   3. Agent automatically reconnects with exponential backoff when the server connection drops
   4. Agent can spawn a Claude CLI process in a PTY and relay its output to the gRPC stream
-**Plans**: 3 plans
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Server gRPC listener (mTLS) + Agent client (dial, register, stream, reconnect)
+- [ ] 02-02-PLAN.md — PTY session lifecycle + session manager with command dispatch
 
 ### Phase 3: Server Core
 **Goal**: Server accepts agent connections over mTLS, tracks connected machines, and exposes authenticated REST API endpoints for user and session management
@@ -125,7 +125,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/3 | Planning complete | - |
-| 2. Agent Core | 0/2 | Not started | - |
+| 2. Agent Core | 0/2 | Planning complete | - |
 | 3. Server Core | 0/2 | Not started | - |
 | 4. Terminal Streaming | 0/3 | Not started | - |
 | 5. Frontend | 0/2 | Not started | - |
