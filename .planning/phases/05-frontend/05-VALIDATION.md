@@ -2,12 +2,12 @@
 phase: 5
 slug: frontend
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-12
 ---
 
-# Phase 5 — Validation Strategy
+# Phase 5 -- Validation Strategy
 
 > Per-phase validation contract for feedback sampling during execution.
 
@@ -38,26 +38,29 @@ created: 2026-03-12
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 05-01-01 | 01 | 1 | (scaffold) | build | `cd web && npx tsc --noEmit && npm run build` | ❌ W0 | ⬜ pending |
-| 05-01-02 | 01 | 1 | SESS-04 | unit | `cd web && npx vitest run src/__tests__/views/CommandCenter.test.tsx` | ❌ W0 | ⬜ pending |
-| 05-02-01 | 02 | 2 | SESS-04 | unit | `cd web && npx vitest run src/__tests__/views/SessionsPage.test.tsx` | ❌ W0 | ⬜ pending |
-| 05-02-02 | 02 | 2 | SC-2 | unit | `cd web && npx vitest run src/__tests__/views/MachinesPage.test.tsx` | ❌ W0 | ⬜ pending |
-| 05-02-03 | 02 | 2 | SC-4 | smoke | `cd web && npm run build && test -f dist/index.html` | ❌ W0 | ⬜ pending |
+| 05-00-01 | 00 | 0 | (infra) | config | `cd web && npx vitest run --reporter=verbose` | N/A | pending |
+| 05-00-02 | 00 | 0 | (infra) | stub | `cd web && npx vitest run --reporter=verbose` | Created by task | pending |
+| 05-01-01 | 01 | 1 | (scaffold) | build | `cd web && npx tsc --noEmit && npx vitest run --reporter=verbose` | N/A | pending |
+| 05-01-02 | 01 | 1 | (scaffold) | build | `cd web && npx tsc --noEmit && npx vite build && npx vitest run --reporter=verbose` | N/A | pending |
+| 05-02-01 | 02 | 1 | SESS-04 | build+unit | `cd web && npx tsc --noEmit && npx vitest run --reporter=verbose` | N/A | pending |
+| 05-02-02 | 02 | 1 | SESS-04 | build+unit | `cd web && npx tsc --noEmit && npx vite build && npx vitest run --reporter=verbose` | N/A | pending |
+| 05-03-01 | 03 | 2 | SESS-04 | unit | `cd web && npx tsc --noEmit && npx vitest run --reporter=verbose` | W0 stubs | pending |
+| 05-03-02 | 03 | 2 | SESS-04 | unit+build | `cd web && npx tsc --noEmit && npx vite build && npx vitest run --reporter=verbose` | W0 stubs | pending |
+| 05-04-01 | 04 | 3 | SESS-04 | build+go | `cd web && npx vite build && go vet ./internal/server/frontend/...` | N/A | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
-## Wave 0 Requirements
+## Wave 0 Requirements (Plan 05-00)
 
-- [ ] `web/src/__tests__/views/SessionsPage.test.tsx` — session listing tests
-- [ ] `web/src/__tests__/views/CommandCenter.test.tsx` — dashboard panel tests
-- [ ] `web/src/__tests__/views/MachinesPage.test.tsx` — machine status tests
-- [ ] `web/src/__tests__/components/sessions/NewSessionModal.test.tsx` — lifecycle actions
-- [ ] `web/src/__tests__/setup.ts` — test setup with React Testing Library
+- [x] Plan 05-00 created to install test deps and configure Vitest
+- [ ] `web/src/__tests__/setup.ts` -- test setup with React Testing Library
+- [ ] `web/src/__tests__/views/CommandCenter.test.tsx` -- stub test
+- [ ] `web/src/__tests__/views/SessionsPage.test.tsx` -- stub test
+- [ ] `web/src/__tests__/views/MachinesPage.test.tsx` -- stub test
+- [ ] `web/src/__tests__/components/sessions/NewSessionModal.test.tsx` -- stub test
 - [ ] Dev dependencies: `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`, `jsdom`
-
-*If none: "Existing infrastructure covers all phase requirements."*
 
 ---
 
@@ -73,11 +76,11 @@ created: 2026-03-12
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify with vitest or go vet commands
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (Plan 05-00)
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending

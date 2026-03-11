@@ -96,12 +96,14 @@ Plans:
   2. User can see which machines are online/offline and navigate to create or attach sessions from the machine list
   3. Session lifecycle actions (create, attach, detach, terminate) are accessible through the UI without using the API directly
   4. The frontend is embedded in the server binary and served as a single-page application
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — App shell (layout, routing, Tailwind v4 theming), API clients, shared components
-- [ ] 05-02-PLAN.md — Command Center dashboard, Sessions list, Machines view, event stream, lifecycle actions
-- [ ] 05-03-PLAN.md — Go embed SPA handler for serving frontend from server binary
+- [ ] 05-00-PLAN.md — Test infrastructure (Vitest config, stub test files)
+- [ ] 05-01-PLAN.md — Project config, Vite + Tailwind v4 theming, routing scaffold
+- [ ] 05-02-PLAN.md — API clients, shared types, Zustand store, app shell layout, shared components
+- [ ] 05-03-PLAN.md — Command Center dashboard, Sessions list, Machines view, event stream, lifecycle actions
+- [ ] 05-04-PLAN.md — Go embed SPA handler for serving frontend from server binary
 
 ### Phase 6: Job System
 **Goal**: Users can create and execute multi-step jobs as interactive notebooks, with ordered steps that run on sessions and support rerun
