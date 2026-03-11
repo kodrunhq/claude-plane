@@ -99,8 +99,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — App shell (layout, routing, Tailwind v4 theming), API clients, shared components
+- [ ] 05-02-PLAN.md — Command Center dashboard, Sessions list, Machines view, event stream, lifecycle actions
+- [ ] 05-03-PLAN.md — Go embed SPA handler for serving frontend from server binary
 
 ### Phase 6: Job System
 **Goal**: Users can create and execute multi-step jobs as interactive notebooks, with ordered steps that run on sessions and support rerun
@@ -129,5 +130,5 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 2. Agent Core | 0/2 | Planning complete | - |
 | 3. Server Core | 0/3 | Planning complete | - |
 | 4. Terminal Streaming | 0/3 | Planning complete | - |
-| 5. Frontend | 0/2 | Not started | - |
+| 5. Frontend | 0/3 | Planning complete | - |
 | 6. Job System | 0/2 | Not started | - |
