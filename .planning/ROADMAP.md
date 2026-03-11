@@ -31,12 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Server starts, initializes a SQLite database with WAL mode, and creates all schema tables
   4. Both binaries read configuration from a TOML file and fail with clear errors on missing required fields
   5. An admin account can be seeded via server CLI command on first run
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Go module scaffold, protobuf contract, binary entrypoints
+- [ ] 01-02-PLAN.md — CA tooling (mTLS certs) + TOML config parsing
+- [ ] 01-03-PLAN.md — SQLite store (WAL mode, full schema) + admin seeding
 
 ### Phase 2: Agent Core
 **Goal**: Agent binary authenticates to server using its mTLS certificate and maintains a persistent bidirectional gRPC stream with reconnection on failure
@@ -47,7 +47,7 @@ Plans:
   2. Agent establishes a persistent bidirectional gRPC stream to the server that stays alive across idle periods
   3. Agent automatically reconnects with exponential backoff when the server connection drops
   4. Agent can spawn a Claude CLI process in a PTY and relay its output to the gRPC stream
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 02-01: TBD
@@ -63,7 +63,7 @@ Plans:
   3. Server accepts incoming mTLS agent connections and tracks them as online
   4. Server displays a list of connected agents with online/offline status via REST API
   5. Unauthenticated API requests are rejected with 401
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 03-01: TBD
@@ -79,7 +79,7 @@ Plans:
   3. User can detach from a session and reattach later, with the session still running on the agent
   4. User can terminate a session and the underlying PTY process is cleaned up
   5. Resizing the browser terminal window updates the remote PTY dimensions so output reflows correctly
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 04-01: TBD
@@ -95,7 +95,7 @@ Plans:
   2. User can see which machines are online/offline and navigate to create or attach sessions from the machine list
   3. Session lifecycle actions (create, attach, detach, terminate) are accessible through the UI without using the API directly
   4. The frontend is embedded in the server binary and served as a single-page application
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 05-01: TBD
@@ -110,7 +110,7 @@ Plans:
   2. User can execute individual steps and see their output in real time
   3. User can rerun a previously completed step and see updated output
   4. Steps with dependencies wait for prerequisite steps to complete before executing
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 06-01: TBD
@@ -124,7 +124,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 0/3 | Planning complete | - |
 | 2. Agent Core | 0/2 | Not started | - |
 | 3. Server Core | 0/2 | Not started | - |
 | 4. Terminal Streaming | 0/3 | Not started | - |
