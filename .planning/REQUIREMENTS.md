@@ -1,7 +1,7 @@
 # Requirements: claude-plane
 
 **Defined:** 2026-03-11
-**Core Value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal — with sessions that survive disconnection.
+**Core Value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal -- with sessions that survive disconnection.
 
 ## v1 Requirements
 
@@ -84,14 +84,14 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ### Advanced Features
 
-- **ARENA-01**: Arena mode — multiple Claude sessions compete on the same task
+- **ARENA-01**: Arena mode -- multiple Claude sessions compete on the same task
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
 | SSH/RDP/VNC support | claude-plane is Claude CLI-specific, not a generic bastion host |
-| Cloud machine provisioning | Infrastructure management is out of scope — machines are pre-provisioned |
+| Cloud machine provisioning | Infrastructure management is out of scope -- machines are pre-provisioned |
 | Mobile-optimized UI | Desktop-first, team uses workstations |
 | Session recording for compliance | Not a compliance tool, focus on interactive use |
 | Real-time collaboration (shared terminal) | Adds significant complexity, defer indefinitely |
@@ -103,38 +103,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| AUTH-04 | — | Pending |
-| AGNT-01 | — | Pending |
-| AGNT-02 | — | Pending |
-| AGNT-03 | — | Pending |
-| AGNT-04 | — | Pending |
-| SESS-01 | — | Pending |
-| SESS-02 | — | Pending |
-| SESS-03 | — | Pending |
-| SESS-04 | — | Pending |
-| SESS-05 | — | Pending |
-| SESS-06 | — | Pending |
-| TERM-01 | — | Pending |
-| TERM-02 | — | Pending |
-| TERM-03 | — | Pending |
-| TERM-04 | — | Pending |
-| JOBS-01 | — | Pending |
-| JOBS-02 | — | Pending |
-| JOBS-03 | — | Pending |
-| JOBS-04 | — | Pending |
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| INFR-04 | — | Pending |
+| AUTH-01 | Phase 3 | Pending |
+| AUTH-02 | Phase 3 | Pending |
+| AUTH-03 | Phase 3 | Pending |
+| AUTH-04 | Phase 1 | Pending |
+| AGNT-01 | Phase 1 | Pending |
+| AGNT-02 | Phase 2 | Pending |
+| AGNT-03 | Phase 2 | Pending |
+| AGNT-04 | Phase 3 | Pending |
+| SESS-01 | Phase 4 | Pending |
+| SESS-02 | Phase 4 | Pending |
+| SESS-03 | Phase 4 | Pending |
+| SESS-04 | Phase 5 | Pending |
+| SESS-05 | Phase 4 | Pending |
+| SESS-06 | Phase 4 | Pending |
+| TERM-01 | Phase 4 | Pending |
+| TERM-02 | Phase 4 | Pending |
+| TERM-03 | Phase 4 | Pending |
+| TERM-04 | Phase 4 | Pending |
+| JOBS-01 | Phase 6 | Pending |
+| JOBS-02 | Phase 6 | Pending |
+| JOBS-03 | Phase 6 | Pending |
+| JOBS-04 | Phase 6 | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Pending |
+| INFR-03 | Phase 1 | Pending |
+| INFR-04 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 26 total
-- Mapped to phases: 0
-- Unmapped: 26 ⚠️
+- Mapped to phases: 26
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-11 after roadmap creation*
