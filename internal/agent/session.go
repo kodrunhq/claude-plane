@@ -52,6 +52,11 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 		return nil, fmt.Errorf("start pty: %w", err)
 	}
 
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		ptmx.Close()
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf("create data dir: %w", err)
+	}
 	sbPath := filepath.Join(dataDir, id+".cast")
 	sb, err := NewScrollbackWriter(sbPath, uint32(cols), uint32(rows))
 	if err != nil {

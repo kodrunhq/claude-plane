@@ -52,7 +52,7 @@ export function useTerminalSession(
     const token = localStorage.getItem('token') ?? '';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws/terminal/${sessionId}?token=${token}`,
+      `${protocol}//${window.location.host}/ws/terminal/${sessionId}?token=${encodeURIComponent(token)}`,
     );
     ws.binaryType = 'arraybuffer';
 
@@ -114,6 +114,11 @@ export function useTerminalSession(
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
       observer.disconnect();
+      // Clear handlers before closing to prevent post-unmount state updates
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
       ws.close();
       term.dispose();
       termRef.current = null;

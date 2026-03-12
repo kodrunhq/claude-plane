@@ -70,9 +70,11 @@ func TestSessionCRUD(t *testing.T) {
 	if got.Status != "running" {
 		t.Errorf("Status after update = %q, want %q", got.Status, "running")
 	}
-	if got.UpdatedAt.Before(got.CreatedAt) || got.UpdatedAt.Equal(got.CreatedAt) {
-		// UpdatedAt should be >= CreatedAt (may be equal in fast test)
-		// Just check it's not zero
+	if got.UpdatedAt.IsZero() {
+		t.Error("UpdatedAt should not be zero after status update")
+	}
+	if got.UpdatedAt.Before(got.CreatedAt) {
+		t.Errorf("UpdatedAt %v should not be before CreatedAt %v", got.UpdatedAt, got.CreatedAt)
 	}
 
 	// Delete

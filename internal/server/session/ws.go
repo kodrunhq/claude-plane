@@ -41,7 +41,8 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 			http.Error(w, "missing token", http.StatusUnauthorized)
 			return
 		}
-		if _, err := authSvc.ValidateToken(token); err != nil {
+		claims, err := authSvc.ValidateToken(token)
+		if err != nil {
 			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
@@ -53,6 +54,12 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 			return
 		}
 
+		// Authorize: only the session owner or admins can attach
+		if claims.Role != "admin" && claims.UserID != sess.UserID {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
 		// Get agent
 		agent := cm.GetAgent(sess.MachineID)
 		if agent == nil {
@@ -60,10 +67,10 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 			return
 		}
 
-		// Upgrade to WebSocket
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-			InsecureSkipVerify: true, // Allow any origin for development
-		})
+		// Upgrade to WebSocket — allow same-origin only by default.
+		// The coder/websocket library checks the Origin header against the Host
+		// when OriginPatterns is not set (default secure behavior).
+		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
 			logger.Error("websocket upgrade failed", "error", err)
 			return
@@ -76,11 +83,11 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 		ch := reg.Subscribe(sessionID)
 		defer reg.Unsubscribe(sessionID, ch)
 
-		// Request scrollback from agent
+		// Attach session on the agent: replays scrollback and enables live relay.
 		if agent.SendCommand != nil {
 			_ = agent.SendCommand(&pb.ServerCommand{
-				Command: &pb.ServerCommand_RequestScrollback{
-					RequestScrollback: &pb.RequestScrollbackCmd{
+				Command: &pb.ServerCommand_AttachSession{
+					AttachSession: &pb.AttachSessionCmd{
 						SessionId: sessionID,
 					},
 				},
