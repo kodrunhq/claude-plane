@@ -31,8 +31,8 @@ type wsControlMessage struct {
 // authTimeout is the maximum time allowed for the first-message auth handshake.
 const authTimeout = 5 * time.Second
 
-// sessionCookieName must match the cookie name set by auth_handler.go.
-const sessionCookieName = "session_token"
+// sessionCookieName references the canonical cookie name from the auth package.
+const sessionCookieName = auth.SessionCookieName
 
 // HandleTerminalWS returns an http.HandlerFunc that bridges a browser WebSocket
 // to an agent's terminal session via the gRPC command stream.

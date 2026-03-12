@@ -53,7 +53,8 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 
 // NewRouter creates a chi router with all API routes configured.
 // Public routes (register, login) require no authentication.
-// Protected routes (logout, machines, sessions) require a valid JWT Bearer token.
+// Protected routes (logout, machines, sessions) require a valid JWT, checked
+// via httpOnly cookie first, then Authorization: Bearer header as fallback.
 // WebSocket routes support cookie auth (preferred) and first-message auth.
 func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
 	r := chi.NewRouter()

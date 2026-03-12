@@ -85,11 +85,13 @@ func (r *Registry) Publish(sessionID string, data []byte) {
 		default:
 			counter := r.dropped[ch]
 			total := counter.Add(1)
-			r.logger.Warn("dropped terminal data for slow subscriber",
-				"session_id", sessionID,
-				"bytes", len(data),
-				"total_dropped", total,
-			)
+			if shouldLogDrop(total) {
+				r.logger.Warn("dropped terminal data for slow subscriber",
+					"session_id", sessionID,
+					"bytes", len(data),
+					"total_dropped", total,
+				)
+			}
 		}
 	}
 }
@@ -105,11 +107,13 @@ func (r *Registry) PublishControl(sessionID string, msg []byte) {
 		default:
 			counter := r.dropped[ch]
 			total := counter.Add(1)
-			r.logger.Warn("dropped control message for slow subscriber",
-				"session_id", sessionID,
-				"bytes", len(msg),
-				"total_dropped", total,
-			)
+			if shouldLogDrop(total) {
+				r.logger.Warn("dropped control message for slow subscriber",
+					"session_id", sessionID,
+					"bytes", len(msg),
+					"total_dropped", total,
+				)
+			}
 		}
 	}
 }
@@ -119,6 +123,13 @@ func (r *Registry) SubscriberCount(sessionID string) int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.subscribers[sessionID])
+}
+
+// shouldLogDrop returns true if this drop event should be logged.
+// Logs on 1st, 10th, 100th, and then every 100th drop to avoid flooding
+// logs during sustained backpressure while still providing visibility.
+func shouldLogDrop(total int64) bool {
+	return total == 1 || total == 10 || total == 100 || total%100 == 0
 }
 
 // DroppedCount returns the cumulative number of messages dropped for a

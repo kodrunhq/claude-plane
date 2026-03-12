@@ -250,6 +250,12 @@ func applyMigration(db *sql.DB, m Migration) error {
 	}
 	defer conn.Close()
 
+	// Set busy_timeout on this connection — the pragma is per-connection in SQLite,
+	// so the pool-level setting from RunMigrations doesn't carry over.
+	if _, err := conn.ExecContext(context.Background(), "PRAGMA busy_timeout = 5000"); err != nil {
+		return fmt.Errorf("set busy_timeout on migration conn: %w", err)
+	}
+
 	if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
 		return fmt.Errorf("begin immediate: %w", err)
 	}
