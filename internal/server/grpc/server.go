@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -155,14 +154,10 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 
 	// Build a thread-safe SendCommand function using a mutex to protect stream.Send.
 	var sendMu sync.Mutex
-	sendCommand := func(cmd interface{}) error {
-		serverCmd, ok := cmd.(*pb.ServerCommand)
-		if !ok {
-			return fmt.Errorf("expected *pb.ServerCommand, got %T", cmd)
-		}
+	sendCommand := func(cmd *pb.ServerCommand) error {
 		sendMu.Lock()
 		defer sendMu.Unlock()
-		return stream.Send(serverCmd)
+		return stream.Send(cmd)
 	}
 
 	// Register with the DB-backed connection manager if available.
@@ -205,12 +200,22 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	}
 	recvCh := make(chan recvResult, 1)
 
-	for {
-		go func() {
+	// Single goroutine for receiving — exits when stream closes or context cancels
+	go func() {
+		for {
 			event, err := stream.Recv()
-			recvCh <- recvResult{event, err}
-		}()
+			select {
+			case recvCh <- recvResult{event, err}:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
 
+	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -219,6 +224,13 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				return nil
 			}
 			if res.err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				s.logger.Error("stream receive error",
+					"machine_id", machineID,
+					"error", res.err,
+				)
 				return res.err
 			}
 			s.logger.Debug("agent event received", "machine_id", machineID, "event", res.event)

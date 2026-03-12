@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
 	"github.com/claudeplane/claude-plane/internal/server/session"
 	"github.com/claudeplane/claude-plane/internal/server/store"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRecorder, string, string) {
@@ -159,11 +159,7 @@ func TestWebSocketInputRelay(t *testing.T) {
 	lastCmd := recorder.commands[len(recorder.commands)-1]
 	recorder.mu.Unlock()
 
-	serverCmd, ok := lastCmd.(*pb.ServerCommand)
-	if !ok {
-		t.Fatalf("expected *pb.ServerCommand, got %T", lastCmd)
-	}
-	inputCmd := serverCmd.GetInputData()
+	inputCmd := lastCmd.GetInputData()
 	if inputCmd == nil {
 		t.Fatal("expected InputDataCmd")
 	}
@@ -207,11 +203,7 @@ func TestWebSocketResizeMessage(t *testing.T) {
 	lastCmd := recorder.commands[len(recorder.commands)-1]
 	recorder.mu.Unlock()
 
-	serverCmd, ok := lastCmd.(*pb.ServerCommand)
-	if !ok {
-		t.Fatalf("expected *pb.ServerCommand, got %T", lastCmd)
-	}
-	resizeCmd := serverCmd.GetResizeTerminal()
+	resizeCmd := lastCmd.GetResizeTerminal()
 	if resizeCmd == nil {
 		t.Fatal("expected ResizeTerminalCmd")
 	}
@@ -249,11 +241,7 @@ func TestWebSocketCloseDetaches(t *testing.T) {
 	lastCmd := recorder.commands[len(recorder.commands)-1]
 	recorder.mu.Unlock()
 
-	serverCmd, ok := lastCmd.(*pb.ServerCommand)
-	if !ok {
-		t.Fatalf("expected *pb.ServerCommand, got %T", lastCmd)
-	}
-	detachCmd := serverCmd.GetDetachSession()
+	detachCmd := lastCmd.GetDetachSession()
 	if detachCmd == nil {
 		t.Fatal("expected DetachSessionCmd, got different command type")
 	}
@@ -309,4 +297,122 @@ func TestWebSocketFlowControl(t *testing.T) {
 		t.Error("received no messages via WebSocket")
 	}
 	t.Logf("received %d of 300 messages (some may be dropped by flow control)", received)
+}
+
+func TestWebSocketAuthRejection(t *testing.T) {
+	srv, _, _, sessionID, _ := setupWSTest(t)
+
+	// Query-param auth cases: these reject pre-upgrade so plain HTTP GET works.
+	tests := []struct {
+		name       string
+		url        string
+		wantStatus int
+	}{
+		{
+			name:       "invalid token",
+			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID + "?token=bad-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "session not found",
+			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/nonexistent-session?token=bad-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			httpURL := strings.Replace(tc.url, "ws://", "http://", 1)
+			resp, err := http.Get(httpURL)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestWebSocketFirstMessageAuth(t *testing.T) {
+	srv, reg, _, sessionID, token := setupWSTest(t)
+
+	t.Run("valid first-message auth", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Connect without query param token
+		url := strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID
+		conn, _, err := websocket.Dial(ctx, url, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial: %v", err)
+		}
+		defer conn.CloseNow()
+
+		// Send auth as first message
+		authMsg, _ := json.Marshal(map[string]string{"type": "auth", "token": token})
+		if err := conn.Write(ctx, websocket.MessageText, authMsg); err != nil {
+			t.Fatalf("write auth: %v", err)
+		}
+
+		// Give server time to process auth and start relay
+		time.Sleep(100 * time.Millisecond)
+
+		// Publish data and verify we receive it (proves auth succeeded)
+		reg.Publish(sessionID, []byte("auth-ok"))
+		msgType, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if msgType != websocket.MessageBinary {
+			t.Errorf("message type = %v, want Binary", msgType)
+		}
+		if string(data) != "auth-ok" {
+			t.Errorf("data = %q, want %q", data, "auth-ok")
+		}
+	})
+
+	t.Run("invalid first-message auth", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		url := strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID
+		conn, _, err := websocket.Dial(ctx, url, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial: %v", err)
+		}
+		defer conn.CloseNow()
+
+		// Send invalid auth
+		authMsg, _ := json.Marshal(map[string]string{"type": "auth", "token": "bad-token"})
+		if err := conn.Write(ctx, websocket.MessageText, authMsg); err != nil {
+			t.Fatalf("write auth: %v", err)
+		}
+
+		// Server should close the connection
+		_, _, err = conn.Read(ctx)
+		if err == nil {
+			t.Fatal("expected read error after invalid auth, got nil")
+		}
+	})
+
+	t.Run("no auth message sent", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		url := strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID
+		conn, _, err := websocket.Dial(ctx, url, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial: %v", err)
+		}
+		defer conn.CloseNow()
+
+		// Don't send auth — server should close after 5s timeout
+		_, _, err = conn.Read(ctx)
+		if err == nil {
+			t.Fatal("expected read error after auth timeout, got nil")
+		}
+	})
 }

@@ -3,11 +3,43 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrNotFound is returned when a requested resource does not exist.
+var ErrNotFound = errors.New("not found")
+
+// CreateStepParams holds parameters for creating a step.
+type CreateStepParams struct {
+	JobID          string
+	Name           string
+	Prompt         string
+	MachineID      string
+	WorkingDir     string
+	Command        string
+	Args           string
+	TimeoutSeconds int
+	SortOrder      int
+	OnFailure      string
+}
+
+// UpdateStepParams holds parameters for updating a step.
+type UpdateStepParams struct {
+	StepID         string
+	Name           string
+	Prompt         string
+	MachineID      string
+	WorkingDir     string
+	Command        string
+	Args           string
+	TimeoutSeconds int
+	SortOrder      int
+	OnFailure      string
+}
 
 // JobStoreIface defines the interface for job-related database operations.
 // Used by the orchestrator package for dependency injection and testability.
@@ -15,10 +47,11 @@ type JobStoreIface interface {
 	CreateJob(ctx context.Context, name, description, userID string) (*Job, error)
 	GetJob(ctx context.Context, jobID string) (*JobDetail, error)
 	ListJobs(ctx context.Context) ([]Job, error)
+	ListJobsByUser(ctx context.Context, userID string) ([]Job, error)
 	DeleteJob(ctx context.Context, jobID string) error
 	UpdateJob(ctx context.Context, jobID, name, description string) (*Job, error)
-	CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error)
-	UpdateStep(ctx context.Context, stepID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) error
+	CreateStep(ctx context.Context, p CreateStepParams) (*Step, error)
+	UpdateStep(ctx context.Context, p UpdateStepParams) error
 	DeleteStep(ctx context.Context, stepID string) error
 	AddDependency(ctx context.Context, stepID, dependsOn string) error
 	RemoveDependency(ctx context.Context, stepID, dependsOn string) error
@@ -139,7 +172,7 @@ func (s *Store) GetJob(ctx context.Context, jobID string) (*JobDetail, error) {
 		`SELECT job_id, name, description, user_id, created_at, updated_at FROM jobs WHERE job_id = ?`, jobID,
 	).Scan(&job.JobID, &job.Name, &desc, &userID, &job.CreatedAt, &job.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("job not found: %s", jobID)
+		return nil, fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get job: %w", err)
@@ -190,29 +223,63 @@ func (s *Store) ListJobs(ctx context.Context) ([]Job, error) {
 	return jobs, rows.Err()
 }
 
+// ListJobsByUser returns jobs owned by a specific user, ordered by created_at DESC.
+func (s *Store) ListJobsByUser(ctx context.Context, userID string) ([]Job, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT job_id, name, description, user_id, created_at, updated_at FROM jobs WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs by user: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []Job
+	for rows.Next() {
+		var j Job
+		var desc, uid sql.NullString
+		if err := rows.Scan(&j.JobID, &j.Name, &desc, &uid, &j.CreatedAt, &j.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan job: %w", err)
+		}
+		if desc.Valid {
+			j.Description = desc.String
+		}
+		if uid.Valid {
+			j.UserID = uid.String
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, rows.Err()
+}
+
 // DeleteJob removes a job and cascades to steps, dependencies, runs, run_steps.
+// All deletes are wrapped in a transaction to prevent partial cleanup.
 func (s *Store) DeleteJob(ctx context.Context, jobID string) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Delete run_steps via runs
-	_, err := s.writer.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`DELETE FROM run_steps WHERE run_id IN (SELECT run_id FROM runs WHERE job_id = ?)`, jobID)
 	if err != nil {
 		return fmt.Errorf("delete run_steps: %w", err)
 	}
 	// Delete runs
-	_, err = s.writer.ExecContext(ctx, `DELETE FROM runs WHERE job_id = ?`, jobID)
+	_, err = tx.ExecContext(ctx, `DELETE FROM runs WHERE job_id = ?`, jobID)
 	if err != nil {
 		return fmt.Errorf("delete runs: %w", err)
 	}
 	// Delete job (cascades to steps and step_dependencies via ON DELETE CASCADE)
-	result, err := s.writer.ExecContext(ctx, `DELETE FROM jobs WHERE job_id = ?`, jobID)
+	result, err := tx.ExecContext(ctx, `DELETE FROM jobs WHERE job_id = ?`, jobID)
 	if err != nil {
 		return fmt.Errorf("delete job: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("job not found: %s", jobID)
+		return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // UpdateJob updates a job's name and description and returns the updated job.
@@ -226,7 +293,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, name, description string) 
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return nil, fmt.Errorf("job not found: %s", jobID)
+		return nil, fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
 
 	var job Job
@@ -248,44 +315,44 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, name, description string) 
 }
 
 // CreateStep inserts a step for a job and returns it.
-func (s *Store) CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error) {
+func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, error) {
 	id := uuid.New().String()
 	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO steps (step_id, job_id, name, prompt, machine_id, working_dir, command, args, timeout_seconds, sort_order, on_failure)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, jobID, name, prompt, nullIfEmpty(machineID), workingDir, command, args, timeoutSeconds, sortOrder, onFailure,
+		id, p.JobID, p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create step: %w", err)
 	}
 	return &Step{
 		StepID:         id,
-		JobID:          jobID,
-		Name:           name,
-		Prompt:         prompt,
-		MachineID:      machineID,
-		WorkingDir:     workingDir,
-		Command:        command,
-		Args:           args,
-		TimeoutSeconds: timeoutSeconds,
-		SortOrder:      sortOrder,
-		OnFailure:      onFailure,
+		JobID:          p.JobID,
+		Name:           p.Name,
+		Prompt:         p.Prompt,
+		MachineID:      p.MachineID,
+		WorkingDir:     p.WorkingDir,
+		Command:        p.Command,
+		Args:           p.Args,
+		TimeoutSeconds: p.TimeoutSeconds,
+		SortOrder:      p.SortOrder,
+		OnFailure:      p.OnFailure,
 	}, nil
 }
 
 // UpdateStep modifies step fields.
-func (s *Store) UpdateStep(ctx context.Context, stepID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) error {
+func (s *Store) UpdateStep(ctx context.Context, p UpdateStepParams) error {
 	result, err := s.writer.ExecContext(ctx,
 		`UPDATE steps SET name = ?, prompt = ?, machine_id = ?, working_dir = ?, command = ?, args = ?,
 		 timeout_seconds = ?, sort_order = ?, on_failure = ? WHERE step_id = ?`,
-		name, prompt, nullIfEmpty(machineID), workingDir, command, args, timeoutSeconds, sortOrder, onFailure, stepID,
+		p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure, p.StepID,
 	)
 	if err != nil {
 		return fmt.Errorf("update step: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("step not found: %s", stepID)
+		return fmt.Errorf("step %s: %w", p.StepID, ErrNotFound)
 	}
 	return nil
 }
@@ -298,7 +365,7 @@ func (s *Store) DeleteStep(ctx context.Context, stepID string) error {
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("step not found: %s", stepID)
+		return fmt.Errorf("step %s: %w", stepID, ErrNotFound)
 	}
 	return nil
 }
@@ -329,7 +396,7 @@ func (s *Store) RemoveDependency(ctx context.Context, stepID, dependsOn string) 
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("dependency not found: %s -> %s", stepID, dependsOn)
+		return fmt.Errorf("dependency %s -> %s: %w", stepID, dependsOn, ErrNotFound)
 	}
 	return nil
 }
@@ -394,17 +461,24 @@ func (s *Store) CreateRun(ctx context.Context, jobID, triggerType string) (*Run,
 	return &Run{
 		RunID:       id,
 		JobID:       jobID,
-		Status:      "pending",
+		Status:      StatusPending,
 		TriggerType: triggerType,
 		CreatedAt:   now,
 	}, nil
 }
 
 // InsertRunSteps bulk-inserts run_step rows with snapshot fields copied from steps.
+// All inserts are wrapped in a transaction to prevent partial state on failure.
 func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	for _, st := range steps {
 		id := uuid.New().String()
-		_, err := s.writer.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO run_steps (run_step_id, run_id, step_id, status, machine_id,
 			 prompt_snapshot, machine_id_snapshot, working_dir_snapshot, command_snapshot, args_snapshot)
 			 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
@@ -415,7 +489,7 @@ func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) 
 			return fmt.Errorf("insert run step for %s: %w", st.StepID, err)
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // GetRunWithSteps retrieves a run with all its run steps.
@@ -427,7 +501,7 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 		 FROM runs WHERE run_id = ?`, runID,
 	).Scan(&run.RunID, &run.JobID, &run.Status, &run.TriggerType, &startedAt, &completedAt, &run.CreatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("run not found: %s", runID)
+		return nil, fmt.Errorf("run %s: %w", runID, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get run: %w", err)
@@ -485,10 +559,10 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 	var args []interface{}
 
 	switch status {
-	case "running":
+	case StatusRunning:
 		query = `UPDATE run_steps SET status = ?, session_id = ?, started_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
 		args = []interface{}{status, nullIfEmpty(sessionID), runStepID}
-	case "completed", "failed":
+	case StatusCompleted, StatusFailed:
 		query = `UPDATE run_steps SET status = ?, session_id = ?, exit_code = ?, ended_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
 		args = []interface{}{status, nullIfEmpty(sessionID), exitCode, runStepID}
 	default:
@@ -502,7 +576,7 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("run step not found: %s", runStepID)
+		return fmt.Errorf("run step %s: %w", runStepID, ErrNotFound)
 	}
 	return nil
 }
@@ -511,9 +585,9 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error {
 	var query string
 	switch status {
-	case "running":
+	case StatusRunning:
 		query = `UPDATE runs SET status = ?, started_at = CURRENT_TIMESTAMP WHERE run_id = ?`
-	case "completed", "failed", "cancelled":
+	case StatusCompleted, StatusFailed, StatusCancelled:
 		query = `UPDATE runs SET status = ?, ended_at = CURRENT_TIMESTAMP WHERE run_id = ?`
 	default:
 		query = `UPDATE runs SET status = ? WHERE run_id = ?`
@@ -525,7 +599,7 @@ func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("run not found: %s", runID)
+		return fmt.Errorf("run %s: %w", runID, ErrNotFound)
 	}
 	return nil
 }

@@ -48,17 +48,19 @@ export function useTerminalSession(
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // 2. WebSocket connection
-    const token = localStorage.getItem('token') ?? '';
+    // 2. WebSocket connection (first-message auth)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws/terminal/${sessionId}?token=${encodeURIComponent(token)}`,
+      `${protocol}//${window.location.host}/ws/terminal/${sessionId}`,
     );
     ws.binaryType = 'arraybuffer';
 
     setStatus('connecting');
 
     ws.onopen = () => {
+      // Send auth as first message
+      const token = localStorage.getItem('token') ?? '';
+      ws.send(JSON.stringify({ type: 'auth', token }));
       setStatus('replaying');
     };
 

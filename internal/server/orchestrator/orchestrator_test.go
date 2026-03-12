@@ -26,12 +26,12 @@ func TestOrchestrator_CreateRun(t *testing.T) {
 
 	// Set up job with steps and dependencies
 	job, _ := s.CreateJob(ctx, "Test Job", "desc", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "do A", "", "/tmp", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "do B", "", "/tmp", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	run, err := orch.CreateRun(ctx, job.JobID, "manual")
 	if err != nil {
@@ -61,15 +61,15 @@ func TestOrchestrator_CreateRun_CycleRejected(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Cycle Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "p", "", "", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
-	stepC, _ := s.CreateStep(ctx, job.JobID, "C", "p", "", "", "claude", "", 0, 2, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
+	stepC, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "C", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 2, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 	_ = s.AddDependency(ctx, stepC.StepID, stepB.StepID)
 	_ = s.AddDependency(ctx, stepA.StepID, stepC.StepID)
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	_, err := orch.CreateRun(ctx, job.JobID, "manual")
 	if err == nil {
@@ -82,11 +82,11 @@ func TestOrchestrator_CancelRun(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Cancel Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "p", "", "", "claude", "", 0, 0, "fail_run")
-	s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	run, _ := orch.CreateRun(ctx, job.JobID, "manual")
 	mock.waitForStep(stepA.StepID)
@@ -109,12 +109,12 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Retry Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "p", "", "", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	run, _ := orch.CreateRun(ctx, job.JobID, "manual")
 
@@ -139,6 +139,62 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	mock.completeStep(stepB.StepID, 0)
 
 	waitForRunStatus(t, orch, run.RunID, "completed", 5*time.Second)
+}
+
+func TestOrchestrator_OnStepCompleted_ExternalAPI(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Test 1: Calling OnStepCompleted on a nonexistent run is a safe no-op
+	t.Run("nonexistent_run", func(t *testing.T) {
+		mock := newMockExecutor()
+		orch := NewOrchestrator(context.Background(), s, mock)
+		// Should not panic
+		orch.OnStepCompleted("nonexistent-run-id", "nonexistent-step-id", 0)
+	})
+
+	// Test 2: OnStepCompleted routes to the correct active DAGRunner
+	t.Run("routes_to_active_runner", func(t *testing.T) {
+		job, _ := s.CreateJob(ctx, "OnStepCompleted Job", "", "")
+		stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+		stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
+		_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
+
+		mock := newMockExecutor()
+		orch := NewOrchestrator(context.Background(), s, mock)
+
+		run, err := orch.CreateRun(ctx, job.JobID, "manual")
+		if err != nil {
+			t.Fatalf("CreateRun: %v", err)
+		}
+
+		// Verify the run is tracked as active
+		orch.mu.Lock()
+		_, active := orch.activeRuns[run.RunID]
+		orch.mu.Unlock()
+		if !active {
+			t.Fatal("expected run to be active after CreateRun")
+		}
+
+		// Complete steps through the standard mock path
+		mock.waitForStep(stepA.StepID)
+		mock.completeStep(stepA.StepID, 0)
+		mock.waitForStep(stepB.StepID)
+		mock.completeStep(stepB.StepID, 0)
+
+		waitForRunStatus(t, orch, run.RunID, "completed", 5*time.Second)
+
+		// After completion, the run should no longer be active
+		orch.mu.Lock()
+		_, active = orch.activeRuns[run.RunID]
+		orch.mu.Unlock()
+		if active {
+			t.Error("expected run to be removed from activeRuns after completion")
+		}
+
+		// Calling OnStepCompleted on a completed run is a safe no-op
+		orch.OnStepCompleted(run.RunID, stepA.StepID, 0)
+	})
 }
 
 // waitForRunStatus polls the orchestrator until the run reaches the expected status,

@@ -97,8 +97,8 @@ func (c *ServerConfig) Validate() error {
 	if c.TLS.ServerKey == "" {
 		return fmt.Errorf("tls.server_key is required")
 	}
-	if c.Auth.JWTSecret == "" {
-		return fmt.Errorf("auth.jwt_secret is required")
+	if len(c.Auth.JWTSecret) < 32 {
+		return fmt.Errorf("auth.jwt_secret must be at least 32 characters for HS256 security")
 	}
 	return nil
 }

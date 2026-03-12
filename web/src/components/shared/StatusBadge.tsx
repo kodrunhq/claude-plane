@@ -4,8 +4,10 @@ interface StatusBadgeProps {
 }
 
 const statusColors: Record<string, string> = {
+  connected: 'bg-status-success',
   online: 'bg-status-success',
   running: 'bg-status-success',
+  disconnected: 'bg-status-error',
   offline: 'bg-status-error',
   terminated: 'bg-status-error',
   failed: 'bg-status-error',

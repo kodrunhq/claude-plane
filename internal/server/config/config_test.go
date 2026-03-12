@@ -25,7 +25,7 @@ server_key = "/etc/cp/server-key.pem"
 path = "/var/lib/claude-plane/data.db"
 
 [auth]
-jwt_secret = "supersecret"
+jwt_secret = "test-secret-key-32-bytes-long!!!!"
 `
 
 func writeTOML(t *testing.T, content string) string {
@@ -63,8 +63,8 @@ func TestLoadServerConfig_Valid(t *testing.T) {
 	if cfg.Database.Path != "/var/lib/claude-plane/data.db" {
 		t.Errorf("Database.Path = %q, want %q", cfg.Database.Path, "/var/lib/claude-plane/data.db")
 	}
-	if cfg.Auth.JWTSecret != "supersecret" {
-		t.Errorf("Auth.JWTSecret = %q, want %q", cfg.Auth.JWTSecret, "supersecret")
+	if cfg.Auth.JWTSecret != "test-secret-key-32-bytes-long!!!!" {
+		t.Errorf("Auth.JWTSecret = %q, want %q", cfg.Auth.JWTSecret, "test-secret-key-32-bytes-long!!!!")
 	}
 }
 
@@ -155,6 +155,31 @@ jwt_secret = "secret"
 	}
 	if !strings.Contains(err.Error(), "tls.ca_cert") {
 		t.Errorf("error should mention tls.ca_cert, got: %v", err)
+	}
+}
+
+func TestValidate_JWTSecretTooShort(t *testing.T) {
+	toml := `
+[http]
+listen = ":8080"
+[grpc]
+listen = ":9090"
+[tls]
+ca_cert = "/ca.pem"
+server_cert = "/server.pem"
+server_key = "/server-key.pem"
+[database]
+path = "/data.db"
+[auth]
+jwt_secret = "short"
+`
+	path := writeTOML(t, toml)
+	_, err := LoadServerConfig(path)
+	if err == nil {
+		t.Fatal("expected error for short JWT secret")
+	}
+	if !strings.Contains(err.Error(), "at least 32") {
+		t.Errorf("error should mention 'at least 32', got: %v", err)
 	}
 }
 

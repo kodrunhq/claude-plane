@@ -9,13 +9,20 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
+	"github.com/claudeplane/claude-plane/internal/server/httputil"
 	"github.com/claudeplane/claude-plane/internal/server/store"
 	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
+// UserClaims holds the minimal user identity needed for authorization.
+type UserClaims struct {
+	UserID string
+	Role   string
+}
+
 // ClaimsGetter extracts user claims from a request context.
 // This decouples the session handler from the api package to avoid import cycles.
-type ClaimsGetter func(r *http.Request) (userID string)
+type ClaimsGetter func(r *http.Request) *UserClaims
 
 // SessionHandler provides REST handlers for session lifecycle management.
 type SessionHandler struct {
@@ -58,12 +65,12 @@ type terminalSize struct {
 func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var req createSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.MachineID == "" {
-		writeError(w, http.StatusBadRequest, "machine_id is required")
+		httputil.WriteError(w, http.StatusBadRequest, "machine_id is required")
 		return
 	}
 
@@ -79,14 +86,16 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	// Verify agent is connected
 	agent := h.connMgr.GetAgent(req.MachineID)
 	if agent == nil {
-		writeError(w, http.StatusNotFound, "machine not connected")
+		httputil.WriteError(w, http.StatusNotFound, "machine not connected")
 		return
 	}
 
 	sessionID := uuid.New().String()
 	userID := ""
 	if h.getClaims != nil {
-		userID = h.getClaims(r)
+		if claims := h.getClaims(r); claims != nil {
+			userID = claims.UserID
+		}
 	}
 
 	// Persist to store
@@ -100,7 +109,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.CreateSession(sess); err != nil {
 		h.logger.Error("failed to create session", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to create session")
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
@@ -124,12 +133,12 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			h.logger.Error("failed to send create session command", "error", err)
 			// Session was created in DB but command failed; update status
 			_ = h.store.UpdateSessionStatus(sessionID, "failed")
-			writeError(w, http.StatusInternalServerError, "failed to dispatch session to agent")
+			httputil.WriteError(w, http.StatusInternalServerError, "failed to dispatch session to agent")
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"session_id": sessionID,
 		"machine_id": req.MachineID,
 		"status":     "created",
@@ -142,10 +151,24 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	sessions, err := h.store.ListSessions()
 	if err != nil {
 		h.logger.Error("failed to list sessions", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to list sessions")
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
 		return
 	}
-	writeJSON(w, http.StatusOK, sessions)
+
+	// Non-admin users only see their own sessions.
+	if h.getClaims != nil {
+		if claims := h.getClaims(r); claims != nil && claims.Role != "admin" {
+			filtered := make([]store.Session, 0, len(sessions))
+			for _, s := range sessions {
+				if s.UserID == claims.UserID {
+					filtered = append(filtered, s)
+				}
+			}
+			sessions = filtered
+		}
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, sessions)
 }
 
 // GetSession handles GET /api/v1/sessions/{sessionID}.
@@ -153,10 +176,14 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 	sess, err := h.store.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "session not found")
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, sess)
+	if !h.authorizeSession(r, sess) {
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, sess)
 }
 
 // TerminateSession handles DELETE /api/v1/sessions/{sessionID}.
@@ -164,7 +191,11 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 	sessionID := chi.URLParam(r, "sessionID")
 	sess, err := h.store.GetSession(sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "session not found")
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if !h.authorizeSession(r, sess) {
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
 		return
 	}
 
@@ -187,19 +218,20 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 		h.logger.Error("failed to update session status", "error", err)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "terminated"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "terminated"})
 }
 
-// writeJSON writes a JSON response with the given status code.
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
+// authorizeSession returns true if the current user is allowed to access the session.
+// Admins can access any session; regular users can only access their own.
+// Returns true when no claims getter is configured (unauthenticated mode).
+func (h *SessionHandler) authorizeSession(r *http.Request, sess *store.Session) bool {
+	if h.getClaims == nil {
+		return true
 	}
+	claims := h.getClaims(r)
+	if claims == nil {
+		return true
+	}
+	return claims.Role == "admin" || claims.UserID == sess.UserID
 }
 
-// writeError writes a JSON error response.
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
-}
