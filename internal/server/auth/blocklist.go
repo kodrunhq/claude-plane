@@ -39,9 +39,9 @@ func NewBlocklist(tokenStore *store.Store) (*Blocklist, error) {
 
 // Add adds a token JTI to the blocklist with the given expiry time.
 // It updates both the in-memory map and persists to the database.
-func (bl *Blocklist) Add(jti string, expiresAt time.Time) error {
+func (bl *Blocklist) Add(jti, userID string, expiresAt time.Time) error {
 	// Persist to DB first; only update in-memory on success.
-	if err := bl.store.RevokeToken(jti, "", expiresAt); err != nil {
+	if err := bl.store.RevokeToken(jti, userID, expiresAt); err != nil {
 		return fmt.Errorf("persist revocation: %w", err)
 	}
 

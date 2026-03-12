@@ -166,7 +166,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	s.logger.Info("agent stream opened", "machine_id", machineID)
 	defer func() {
 		s.connMgr.RemoveIfToken(machineID, streamToken)
-		if s.agentConnMgr != nil {
+		if s.agentConnMgr != nil && ctx.Err() == nil {
 			s.agentConnMgr.Disconnect(machineID)
 		}
 		cancel()

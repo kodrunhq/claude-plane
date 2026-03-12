@@ -119,7 +119,7 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.authSvc.RevokeToken(claims.ID, claims.ExpiresAt.Time); err != nil {
+	if err := h.authSvc.RevokeToken(claims.ID, claims.UserID, claims.ExpiresAt.Time); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

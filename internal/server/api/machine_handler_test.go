@@ -28,13 +28,12 @@ func TestListMachinesAuthenticated(t *testing.T) {
 	}
 
 	var result []map[string]interface{}
-	json.NewDecoder(machinesResp.Body).Decode(&result)
+	if err := json.NewDecoder(machinesResp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding machines response: %v", err)
+	}
 
-	// Should return an array (possibly empty)
 	if result == nil {
-		// Decode returned nil — which means empty JSON array; that's fine
-		// but let's verify it was actually a valid JSON array
-		t.Log("machines list is empty (expected for fresh DB)")
+		t.Fatal("expected JSON array, got null")
 	}
 }
 

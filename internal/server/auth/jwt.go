@@ -23,7 +23,7 @@ type Claims struct {
 // This decouples the JWT service from the concrete Blocklist implementation.
 type TokenRevoker interface {
 	IsRevoked(jti string) bool
-	Add(jti string, expiresAt time.Time) error
+	Add(jti, userID string, expiresAt time.Time) error
 }
 
 // Service provides JWT token issuance, validation, and revocation.
@@ -93,9 +93,9 @@ func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 }
 
 // RevokeToken adds a token to the blocklist by its JTI.
-func (s *Service) RevokeToken(jti string, expiresAt time.Time) error {
+func (s *Service) RevokeToken(jti, userID string, expiresAt time.Time) error {
 	if s.blocklist == nil {
 		return fmt.Errorf("no blocklist configured")
 	}
-	return s.blocklist.Add(jti, expiresAt)
+	return s.blocklist.Add(jti, userID, expiresAt)
 }
