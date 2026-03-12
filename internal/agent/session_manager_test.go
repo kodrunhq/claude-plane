@@ -179,8 +179,7 @@ func TestSessionManagerConcurrent(t *testing.T) {
 				Command: &pb.ServerCommand_CreateSession{
 					CreateSession: &pb.CreateSessionCmd{
 						SessionId: id,
-						Command:   "/bin/echo",
-						Args:      []string{"test"},
+						Command:   "/bin/cat",
 						TerminalSize: &pb.TerminalSize{
 							Rows: 24,
 							Cols: 80,
@@ -200,13 +199,14 @@ func TestSessionManagerConcurrent(t *testing.T) {
 		}
 	}
 
-	// Drain sendCh.
-	sm.StopRelay()
-
+	// Check states while sessions are still alive (cat blocks on stdin).
 	states := sm.GetStates()
 	if len(states) < 5 {
 		t.Errorf("expected 5 sessions, got %d", len(states))
 	}
+
+	// Drain sendCh.
+	sm.StopRelay()
 }
 
 func TestSessionManagerGetStates(t *testing.T) {
