@@ -19,6 +19,7 @@ type JobStoreIface interface {
 	CreateJob(ctx context.Context, name, description, userID string) (*Job, error)
 	GetJob(ctx context.Context, jobID string) (*JobDetail, error)
 	ListJobs(ctx context.Context) ([]Job, error)
+	ListJobsByUser(ctx context.Context, userID string) ([]Job, error)
 	DeleteJob(ctx context.Context, jobID string) error
 	UpdateJob(ctx context.Context, jobID, name, description string) (*Job, error)
 	CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error)
@@ -188,6 +189,33 @@ func (s *Store) ListJobs(ctx context.Context) ([]Job, error) {
 		}
 		if userID.Valid {
 			j.UserID = userID.String
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, rows.Err()
+}
+
+// ListJobsByUser returns jobs owned by a specific user, ordered by created_at DESC.
+func (s *Store) ListJobsByUser(ctx context.Context, userID string) ([]Job, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT job_id, name, description, user_id, created_at, updated_at FROM jobs WHERE user_id = ? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs by user: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []Job
+	for rows.Next() {
+		var j Job
+		var desc, uid sql.NullString
+		if err := rows.Scan(&j.JobID, &j.Name, &desc, &uid, &j.CreatedAt, &j.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan job: %w", err)
+		}
+		if desc.Valid {
+			j.Description = desc.String
+		}
+		if uid.Valid {
+			j.UserID = uid.String
 		}
 		jobs = append(jobs, j)
 	}

@@ -14,12 +14,49 @@ import (
 
 // JobHandler handles REST endpoints for job and step CRUD.
 type JobHandler struct {
-	store store.JobStoreIface
+	store     store.JobStoreIface
+	getClaims ClaimsGetter
 }
 
 // NewJobHandler creates a new JobHandler.
-func NewJobHandler(s store.JobStoreIface) *JobHandler {
-	return &JobHandler{store: s}
+func NewJobHandler(s store.JobStoreIface, getClaims ClaimsGetter) *JobHandler {
+	return &JobHandler{store: s, getClaims: getClaims}
+}
+
+// claims returns the current user's claims, or nil if no getter is configured.
+func (h *JobHandler) claims(r *http.Request) *UserClaims {
+	if h.getClaims == nil {
+		return nil
+	}
+	return h.getClaims(r)
+}
+
+// authorizeJob checks whether the current user can access the given job.
+func (h *JobHandler) authorizeJob(w http.ResponseWriter, r *http.Request, job *store.Job) bool {
+	c := h.claims(r)
+	if c == nil || c.Role == "admin" || c.UserID == job.UserID {
+		return true
+	}
+	writeError(w, http.StatusNotFound, "job not found")
+	return false
+}
+
+// authorizeJobByID fetches the job and checks authorization in one step.
+func (h *JobHandler) authorizeJobByID(w http.ResponseWriter, r *http.Request) *store.JobDetail {
+	jobID := chi.URLParam(r, "jobID")
+	detail, err := h.store.GetJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return nil
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return nil
+	}
+	if !h.authorizeJob(w, r, &detail.Job) {
+		return nil
+	}
+	return detail
 }
 
 // RegisterJobRoutes mounts all job-related routes on the given router.
@@ -70,7 +107,12 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := h.store.CreateJob(r.Context(), req.Name, req.Description, "")
+	userID := ""
+	if c := h.claims(r); c != nil {
+		userID = c.UserID
+	}
+
+	job, err := h.store.CreateJob(r.Context(), req.Name, req.Description, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -80,7 +122,15 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 
 // ListJobs handles GET /api/v1/jobs.
 func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
-	jobs, err := h.store.ListJobs(r.Context())
+	c := h.claims(r)
+
+	var jobs []store.Job
+	var err error
+	if c != nil && c.Role != "admin" {
+		jobs, err = h.store.ListJobsByUser(r.Context(), c.UserID)
+	} else {
+		jobs, err = h.store.ListJobs(r.Context())
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -93,14 +143,8 @@ func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 
 // GetJob handles GET /api/v1/jobs/{jobID}.
 func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	detail, err := h.store.GetJob(r.Context(), jobID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "job not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal error")
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
@@ -114,14 +158,17 @@ type updateJobRequest struct {
 
 // UpdateJob handles PUT /api/v1/jobs/{jobID}.
 func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
+		return
+	}
 	var req updateJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	job, err := h.store.UpdateJob(r.Context(), jobID, req.Name, req.Description)
+	job, err := h.store.UpdateJob(r.Context(), detail.Job.JobID, req.Name, req.Description)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
@@ -135,8 +182,11 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 
 // DeleteJob handles DELETE /api/v1/jobs/{jobID}.
 func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
-	err := h.store.DeleteJob(r.Context(), jobID)
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
+		return
+	}
+	err := h.store.DeleteJob(r.Context(), detail.Job.JobID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
@@ -163,7 +213,10 @@ type addStepRequest struct {
 
 // AddStep handles POST /api/v1/jobs/{jobID}/steps.
 func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
+		return
+	}
 	var req addStepRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -177,7 +230,7 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		req.Command = "claude"
 	}
 
-	step, err := h.store.CreateStep(r.Context(), jobID, req.Name, req.Prompt, req.MachineID, req.WorkingDir, req.Command, req.Args, req.TimeoutSeconds, req.SortOrder, req.OnFailure)
+	step, err := h.store.CreateStep(r.Context(), detail.Job.JobID, req.Name, req.Prompt, req.MachineID, req.WorkingDir, req.Command, req.Args, req.TimeoutSeconds, req.SortOrder, req.OnFailure)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -200,6 +253,9 @@ type updateStepRequest struct {
 
 // UpdateStep handles PUT /api/v1/jobs/{jobID}/steps/{stepID}.
 func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
+	if d := h.authorizeJobByID(w, r); d == nil {
+		return
+	}
 	stepID := chi.URLParam(r, "stepID")
 	var req updateStepRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -228,6 +284,9 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 // DeleteStep handles DELETE /api/v1/jobs/{jobID}/steps/{stepID}.
 func (h *JobHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
+	if d := h.authorizeJobByID(w, r); d == nil {
+		return
+	}
 	stepID := chi.URLParam(r, "stepID")
 	err := h.store.DeleteStep(r.Context(), stepID)
 	if err != nil {
@@ -250,7 +309,10 @@ type addDependencyRequest struct {
 // After adding the edge, validates the DAG. If a cycle is detected, removes
 // the edge and returns 400.
 func (h *JobHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
-	jobID := chi.URLParam(r, "jobID")
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
+		return
+	}
 	stepID := chi.URLParam(r, "stepID")
 	var req addDependencyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -269,7 +331,7 @@ func (h *JobHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate DAG after adding
-	steps, deps, err := h.store.GetStepsWithDeps(r.Context(), jobID)
+	steps, deps, err := h.store.GetStepsWithDeps(r.Context(), detail.Job.JobID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -290,6 +352,9 @@ func (h *JobHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 
 // RemoveDependency handles DELETE /api/v1/jobs/{jobID}/steps/{stepID}/deps/{depID}.
 func (h *JobHandler) RemoveDependency(w http.ResponseWriter, r *http.Request) {
+	if d := h.authorizeJobByID(w, r); d == nil {
+		return
+	}
 	stepID := chi.URLParam(r, "stepID")
 	depID := chi.URLParam(r, "depID")
 	err := h.store.RemoveDependency(r.Context(), stepID, depID)

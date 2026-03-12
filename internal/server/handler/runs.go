@@ -13,13 +13,14 @@ import (
 
 // RunHandler handles REST endpoints for run management.
 type RunHandler struct {
-	store store.JobStoreIface
-	orch  *orchestrator.Orchestrator
+	store     store.JobStoreIface
+	orch      *orchestrator.Orchestrator
+	getClaims ClaimsGetter
 }
 
 // NewRunHandler creates a new RunHandler.
-func NewRunHandler(s store.JobStoreIface, orch *orchestrator.Orchestrator) *RunHandler {
-	return &RunHandler{store: s, orch: orch}
+func NewRunHandler(s store.JobStoreIface, orch *orchestrator.Orchestrator, getClaims ClaimsGetter) *RunHandler {
+	return &RunHandler{store: s, orch: orch, getClaims: getClaims}
 }
 
 // RegisterRunRoutes mounts all run-related routes on the given router.
@@ -31,6 +32,52 @@ func RegisterRunRoutes(r chi.Router, h *RunHandler) {
 	r.Post("/api/v1/runs/{runID}/steps/{stepID}/retry", h.RetryStep)
 }
 
+// claims returns the current user's claims, or nil if no getter is configured.
+func (h *RunHandler) claims(r *http.Request) *UserClaims {
+	if h.getClaims == nil {
+		return nil
+	}
+	return h.getClaims(r)
+}
+
+// authorizeJobAccess checks whether the current user can access the given job.
+func (h *RunHandler) authorizeJobAccess(w http.ResponseWriter, r *http.Request, jobID string) bool {
+	detail, err := h.store.GetJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return false
+	}
+	c := h.claims(r)
+	if c == nil || c.Role == "admin" || c.UserID == detail.Job.UserID {
+		return true
+	}
+	writeError(w, http.StatusNotFound, "job not found")
+	return false
+}
+
+// authorizeRunAccess checks whether the current user can access the given run
+// (by checking ownership of its parent job).
+func (h *RunHandler) authorizeRunAccess(w http.ResponseWriter, r *http.Request, runDetail *store.RunDetail) bool {
+	c := h.claims(r)
+	if c == nil || c.Role == "admin" {
+		return true
+	}
+	jobDetail, err := h.store.GetJob(r.Context(), runDetail.Run.JobID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "run not found")
+		return false
+	}
+	if c.UserID == jobDetail.Job.UserID {
+		return true
+	}
+	writeError(w, http.StatusNotFound, "run not found")
+	return false
+}
+
 // triggerRunRequest is the JSON body for POST /api/v1/jobs/{jobID}/runs.
 type triggerRunRequest struct {
 	TriggerType string `json:"trigger_type"`
@@ -40,6 +87,10 @@ type triggerRunRequest struct {
 // Creates a new run and starts DAG execution.
 func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
+	if !h.authorizeJobAccess(w, r, jobID) {
+		return
+	}
+
 	var req triggerRunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -62,11 +113,15 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListRuns handles GET /api/v1/runs.
-// Optional query param ?job_id for filtering by job.
+// Required query param ?job_id for filtering by job.
 func (h *RunHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 	jobID := r.URL.Query().Get("job_id")
 	if jobID == "" {
 		writeError(w, http.StatusBadRequest, "job_id query parameter is required")
+		return
+	}
+
+	if !h.authorizeJobAccess(w, r, jobID) {
 		return
 	}
 
@@ -94,12 +149,29 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if !h.authorizeRunAccess(w, r, detail) {
+		return
+	}
 	writeJSON(w, http.StatusOK, detail)
 }
 
 // CancelRun handles POST /api/v1/runs/{runID}/cancel.
 func (h *RunHandler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runID")
+
+	detail, err := h.store.GetRunWithSteps(r.Context(), runID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "run not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if !h.authorizeRunAccess(w, r, detail) {
+		return
+	}
+
 	if err := h.orch.CancelRun(r.Context(), runID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "run not found")
@@ -109,13 +181,12 @@ func (h *RunHandler) CancelRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the updated run
-	detail, err := h.store.GetRunWithSteps(r.Context(), runID)
+	updated, err := h.store.GetRunWithSteps(r.Context(), runID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, detail.Run)
+	writeJSON(w, http.StatusOK, updated.Run)
 }
 
 // RetryStep handles POST /api/v1/runs/{runID}/steps/{stepID}/retry.
@@ -123,7 +194,6 @@ func (h *RunHandler) RetryStep(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runID")
 	stepID := chi.URLParam(r, "stepID")
 
-	// Check that the step is in a failed/skipped/cancelled state before retrying
 	detail, err := h.store.GetRunWithSteps(r.Context(), runID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -133,8 +203,10 @@ func (h *RunHandler) RetryStep(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if !h.authorizeRunAccess(w, r, detail) {
+		return
+	}
 
-	// Find the step and check its status
 	var found bool
 	for _, rs := range detail.RunSteps {
 		if rs.StepID == stepID {
