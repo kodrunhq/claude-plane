@@ -46,7 +46,7 @@ export function JobEditor() {
     if (jobDetail) {
       setJobName(jobDetail.job.name);
       setJobDescription(jobDetail.job.description);
-      setJobId(jobDetail.job.id);
+      setJobId(jobDetail.job.job_id);
     }
   }, [jobDetail]);
 
@@ -58,7 +58,7 @@ export function JobEditor() {
   const effectiveJobId = isNew ? jobId : id;
   const steps = jobDetail?.steps ?? [];
   const dependencies = jobDetail?.dependencies ?? [];
-  const selectedStep = steps.find((s) => s.id === selectedStepId) ?? null;
+  const selectedStep = steps.find((s) => s.step_id === selectedStepId) ?? null;
 
   async function ensureJobCreated(): Promise<string | null> {
     if (effectiveJobId) return effectiveJobId;
@@ -68,9 +68,9 @@ export function JobEditor() {
     }
     try {
       const job = await createJob.mutateAsync({ name: jobName, description: jobDescription });
-      setJobId(job.id);
-      navigate(`/jobs/${job.id}`, { replace: true });
-      return job.id;
+      setJobId(job.job_id);
+      navigate(`/jobs/${job.job_id}`, { replace: true });
+      return job.job_id;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create job');
       return null;
@@ -88,7 +88,7 @@ export function JobEditor() {
           machine_id: machines?.[0]?.machine_id ?? '',
         },
       });
-      selectStep(step.id);
+      selectStep(step.step_id);
       toast.success('Step added');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add step');
@@ -135,7 +135,7 @@ export function JobEditor() {
     try {
       const run = await triggerRun.mutateAsync(effectiveJobId);
       toast.success('Run started');
-      navigate(`/runs/${run.id}`);
+      navigate(`/runs/${run.run_id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to start run');
     }

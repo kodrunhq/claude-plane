@@ -33,7 +33,7 @@ export const useRunStore = create<RunStore>((set) => ({
         });
       } else {
         updated.set(stepId, {
-          id: '',
+          run_step_id: '',
           run_id: '',
           step_id: stepId,
           status: status as RunStep['status'],

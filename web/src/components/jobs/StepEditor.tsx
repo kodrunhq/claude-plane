@@ -29,7 +29,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
       command: form.get('command') as string || 'claude',
       args: (form.get('args') as string).split('\n').filter(Boolean),
     };
-    onSave(step.id, params);
+    onSave(step.step_id, params);
   }
 
   return (
@@ -43,7 +43,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           name="name"
           type="text"
           defaultValue={step.name}
-          key={step.id + '-name'}
+          key={step.step_id + '-name'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary"
         />
       </div>
@@ -55,7 +55,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           name="prompt"
           rows={4}
           defaultValue={step.prompt}
-          key={step.id + '-prompt'}
+          key={step.step_id + '-prompt'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
           placeholder="Enter the prompt for Claude..."
         />
@@ -67,7 +67,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           id="step-machine"
           name="machine_id"
           defaultValue={step.machine_id}
-          key={step.id + '-machine'}
+          key={step.step_id + '-machine'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary"
         >
           <option value="">Select machine...</option>
@@ -86,7 +86,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           name="working_dir"
           type="text"
           defaultValue={step.working_dir}
-          key={step.id + '-workdir'}
+          key={step.step_id + '-workdir'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary font-mono"
           placeholder="/home/user/project"
         />
@@ -99,7 +99,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           name="command"
           type="text"
           defaultValue={step.command || 'claude'}
-          key={step.id + '-command'}
+          key={step.step_id + '-command'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary font-mono"
         />
       </div>
@@ -111,7 +111,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           name="args"
           rows={2}
           defaultValue={(step.args ?? []).join('\n')}
-          key={step.id + '-args'}
+          key={step.step_id + '-args'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
         />
       </div>
@@ -125,7 +125,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
         </button>
         <button
           type="button"
-          onClick={() => onDelete(step.id)}
+          onClick={() => onDelete(step.step_id)}
           className="px-3 py-1.5 text-sm rounded-md bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
         >
           Delete
