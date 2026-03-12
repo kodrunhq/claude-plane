@@ -117,8 +117,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Job store (DB CRUD) + DAGRunner (execution engine) + Orchestrator (run lifecycle)
+- [ ] 06-02-PLAN.md — REST handlers for jobs, steps, runs (full API surface)
+- [ ] 06-03-PLAN.md — Frontend: API client, DAG canvas (ReactFlow), job editor, run detail with live status
 
 ## Progress
 
@@ -133,4 +134,4 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 3. Server Core | 0/3 | Planning complete | - |
 | 4. Terminal Streaming | 0/3 | Planning complete | - |
 | 5. Frontend | 0/3 | Planning complete | - |
-| 6. Job System | 0/2 | Not started | - |
+| 6. Job System | 0/3 | Planning complete | - |
