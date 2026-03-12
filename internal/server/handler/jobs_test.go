@@ -27,7 +27,7 @@ func newTestStore(t *testing.T) *store.Store {
 // newJobRouter creates a chi router with job routes for testing.
 func newJobRouter(t *testing.T, s store.JobStoreIface) (*httptest.Server, store.JobStoreIface) {
 	t.Helper()
-	h := handler.NewJobHandler(s)
+	h := handler.NewJobHandler(s, nil)
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, h)
 	return httptest.NewServer(r), s
