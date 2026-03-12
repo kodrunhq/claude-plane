@@ -40,7 +40,7 @@ export interface Run {
   run_id: string;
   job_id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
-  started_at: string;
+  started_at?: string;
   completed_at?: string;
   created_at: string;
 }
@@ -50,7 +50,7 @@ export interface RunStep {
   run_id: string;
   step_id: string;
   session_id?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled';
   started_at?: string;
   completed_at?: string;
   error?: string;

@@ -169,11 +169,16 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 
 	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, onComplete)
 
-	// Override completed steps' in-degree to prevent re-execution
+	// Pre-process completed steps: count them and pre-decrement in-degrees
+	// of their dependents so pending steps with completed upstream deps can launch.
 	runner.mu.Lock()
 	for _, rs := range detail.RunSteps {
 		if rs.Status == "completed" {
 			runner.completed++
+			// Decrement in-degree for all steps that depend on this completed step
+			for _, depID := range runner.dependents[rs.StepID] {
+				runner.inDegree[depID]--
+			}
 		}
 	}
 	runner.mu.Unlock()
