@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router';
 import { Terminal, Server, Activity, Plus, AlertCircle, RefreshCw } from 'lucide-react';
 import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
-import { useEventStream } from '../hooks/useEventStream.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { MachineCard } from '../components/machines/MachineCard.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
@@ -15,7 +14,6 @@ export function CommandCenter() {
   const { data: sessions, isLoading: sessionsLoading, error: sessionsError, refetch: refetchSessions } = useSessions();
   const { data: machines, isLoading: machinesLoading, error: machinesError, refetch: refetchMachines } = useMachines();
   const terminateSession = useTerminateSession();
-  useEventStream();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [preselectedMachine, setPreselectedMachine] = useState<string | undefined>();

@@ -13,8 +13,8 @@ const BASE_URL = '/api/v1';
 export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('token') ?? '';
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...options?.headers,
   };
 

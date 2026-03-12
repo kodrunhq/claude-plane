@@ -4,7 +4,6 @@ import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
-import { useEventStream } from '../hooks/useEventStream.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
@@ -13,7 +12,6 @@ const STATUS_OPTIONS = ['all', 'running', 'created', 'completed', 'failed', 'ter
 
 export function SessionsPage() {
   const navigate = useNavigate();
-  useEventStream();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [machineFilter, setMachineFilter] = useState<string>('all');
