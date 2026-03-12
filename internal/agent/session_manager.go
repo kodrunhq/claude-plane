@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -61,7 +62,7 @@ func (sm *SessionManager) GetStates() []*pb.SessionState {
 			Status:    sess.Status(),
 			StartedAt: timestamppb.New(sess.StartedAt()),
 		}
-		if sess.Status() != "running" {
+		if sess.Status() != status.Running {
 			ec := int32(sess.ExitCode())
 			state.ExitCode = &ec
 		}
@@ -150,7 +151,7 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 		Event: &pb.AgentEvent_SessionStatus{
 			SessionStatus: &pb.SessionStatusEvent{
 				SessionId: cmd.GetSessionId(),
-				Status:    "running",
+				Status:    status.Running,
 			},
 		},
 	})

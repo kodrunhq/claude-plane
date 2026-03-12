@@ -235,8 +235,8 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 	if run.RunID == "" {
 		t.Fatal("expected non-empty RunID")
 	}
-	if run.Status != "pending" {
-		t.Errorf("Status = %q, want %q", run.Status, "pending")
+	if run.Status != StatusPending {
+		t.Errorf("Status = %q, want %q", run.Status, StatusPending)
 	}
 
 	// Insert run steps with snapshots
@@ -263,34 +263,34 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 		if rs.MachineIDSnapshot == "" {
 			t.Error("MachineIDSnapshot should not be empty")
 		}
-		if rs.Status != "pending" {
-			t.Errorf("RunStep Status = %q, want %q", rs.Status, "pending")
+		if rs.Status != StatusPending {
+			t.Errorf("RunStep Status = %q, want %q", rs.Status, StatusPending)
 		}
 	}
 
 	// Update run step status
-	err = s.UpdateRunStepStatus(ctx, detail.RunSteps[0].RunStepID, "running", "", 0)
+	err = s.UpdateRunStepStatus(ctx, detail.RunSteps[0].RunStepID, StatusRunning, "", 0)
 	if err != nil {
 		t.Fatalf("UpdateRunStepStatus: %v", err)
 	}
-	err = s.UpdateRunStepStatus(ctx, detail.RunSteps[0].RunStepID, "completed", "sess-1", 0)
+	err = s.UpdateRunStepStatus(ctx, detail.RunSteps[0].RunStepID, StatusCompleted, "sess-1", 0)
 	if err != nil {
 		t.Fatalf("UpdateRunStepStatus (completed): %v", err)
 	}
 
 	detail, _ = s.GetRunWithSteps(ctx, run.RunID)
-	if detail.RunSteps[0].Status != "completed" {
-		t.Errorf("RunStep status = %q, want %q", detail.RunSteps[0].Status, "completed")
+	if detail.RunSteps[0].Status != StatusCompleted {
+		t.Errorf("RunStep status = %q, want %q", detail.RunSteps[0].Status, StatusCompleted)
 	}
 
 	// Update run status
-	err = s.UpdateRunStatus(ctx, run.RunID, "completed")
+	err = s.UpdateRunStatus(ctx, run.RunID, StatusCompleted)
 	if err != nil {
 		t.Fatalf("UpdateRunStatus: %v", err)
 	}
 	detail, _ = s.GetRunWithSteps(ctx, run.RunID)
-	if detail.Run.Status != "completed" {
-		t.Errorf("Run status = %q, want %q", detail.Run.Status, "completed")
+	if detail.Run.Status != StatusCompleted {
+		t.Errorf("Run status = %q, want %q", detail.Run.Status, StatusCompleted)
 	}
 }
 
