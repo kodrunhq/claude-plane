@@ -69,6 +69,49 @@ func TestJobStore_ListJobs(t *testing.T) {
 	}
 }
 
+func TestUpdateJob(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	job, err := s.CreateJob(ctx, "Original Name", "Original desc", "")
+	if err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+
+	updated, err := s.UpdateJob(ctx, job.JobID, "New Name", "New desc")
+	if err != nil {
+		t.Fatalf("UpdateJob: %v", err)
+	}
+	if updated.Name != "New Name" {
+		t.Errorf("Name = %q, want %q", updated.Name, "New Name")
+	}
+	if updated.Description != "New desc" {
+		t.Errorf("Description = %q, want %q", updated.Description, "New desc")
+	}
+
+	// Verify via GetJob
+	detail, err := s.GetJob(ctx, job.JobID)
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if detail.Job.Name != "New Name" {
+		t.Errorf("GetJob Name = %q, want %q", detail.Job.Name, "New Name")
+	}
+	if detail.Job.Description != "New desc" {
+		t.Errorf("GetJob Description = %q, want %q", detail.Job.Description, "New desc")
+	}
+}
+
+func TestUpdateJob_NotFound(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	_, err := s.UpdateJob(ctx, "nonexistent-job-id", "Name", "Desc")
+	if err == nil {
+		t.Fatal("expected error for nonexistent job")
+	}
+}
+
 func TestJobStore_DeleteJob(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
@@ -280,10 +323,16 @@ func TestJobStore_DeleteJobCascades(t *testing.T) {
 	run, _ := s.CreateRun(ctx, job.JobID, "manual")
 	_ = s.InsertRunSteps(ctx, run.RunID, []Step{*stepA, *stepB})
 
-	// Delete job -- should cascade
+	// Delete job -- should cascade transactionally
 	err := s.DeleteJob(ctx, job.JobID)
 	if err != nil {
 		t.Fatalf("DeleteJob: %v", err)
+	}
+
+	// Verify job is gone
+	_, err = s.GetJob(ctx, job.JobID)
+	if err == nil {
+		t.Error("expected error fetching deleted job")
 	}
 
 	// Verify steps are gone
@@ -291,6 +340,12 @@ func TestJobStore_DeleteJobCascades(t *testing.T) {
 	s.reader.QueryRow("SELECT COUNT(*) FROM steps WHERE job_id = ?", job.JobID).Scan(&count)
 	if count != 0 {
 		t.Errorf("steps count = %d, want 0", count)
+	}
+
+	// Verify runs are gone
+	s.reader.QueryRow("SELECT COUNT(*) FROM runs WHERE job_id = ?", job.JobID).Scan(&count)
+	if count != 0 {
+		t.Errorf("runs count = %d, want 0", count)
 	}
 
 	// Verify run steps are gone

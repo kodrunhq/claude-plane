@@ -195,20 +195,27 @@ func (s *Store) ListJobs(ctx context.Context) ([]Job, error) {
 }
 
 // DeleteJob removes a job and cascades to steps, dependencies, runs, run_steps.
+// All deletes are wrapped in a transaction to prevent partial cleanup.
 func (s *Store) DeleteJob(ctx context.Context, jobID string) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Delete run_steps via runs
-	_, err := s.writer.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`DELETE FROM run_steps WHERE run_id IN (SELECT run_id FROM runs WHERE job_id = ?)`, jobID)
 	if err != nil {
 		return fmt.Errorf("delete run_steps: %w", err)
 	}
 	// Delete runs
-	_, err = s.writer.ExecContext(ctx, `DELETE FROM runs WHERE job_id = ?`, jobID)
+	_, err = tx.ExecContext(ctx, `DELETE FROM runs WHERE job_id = ?`, jobID)
 	if err != nil {
 		return fmt.Errorf("delete runs: %w", err)
 	}
 	// Delete job (cascades to steps and step_dependencies via ON DELETE CASCADE)
-	result, err := s.writer.ExecContext(ctx, `DELETE FROM jobs WHERE job_id = ?`, jobID)
+	result, err := tx.ExecContext(ctx, `DELETE FROM jobs WHERE job_id = ?`, jobID)
 	if err != nil {
 		return fmt.Errorf("delete job: %w", err)
 	}
@@ -216,7 +223,7 @@ func (s *Store) DeleteJob(ctx context.Context, jobID string) error {
 	if rows == 0 {
 		return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // UpdateJob updates a job's name and description and returns the updated job.
@@ -398,17 +405,24 @@ func (s *Store) CreateRun(ctx context.Context, jobID, triggerType string) (*Run,
 	return &Run{
 		RunID:       id,
 		JobID:       jobID,
-		Status:      "pending",
+		Status:      StatusPending,
 		TriggerType: triggerType,
 		CreatedAt:   now,
 	}, nil
 }
 
 // InsertRunSteps bulk-inserts run_step rows with snapshot fields copied from steps.
+// All inserts are wrapped in a transaction to prevent partial state on failure.
 func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) error {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	for _, st := range steps {
 		id := uuid.New().String()
-		_, err := s.writer.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO run_steps (run_step_id, run_id, step_id, status, machine_id,
 			 prompt_snapshot, machine_id_snapshot, working_dir_snapshot, command_snapshot, args_snapshot)
 			 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
@@ -419,7 +433,7 @@ func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) 
 			return fmt.Errorf("insert run step for %s: %w", st.StepID, err)
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // GetRunWithSteps retrieves a run with all its run steps.
@@ -489,10 +503,10 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 	var args []interface{}
 
 	switch status {
-	case "running":
+	case StatusRunning:
 		query = `UPDATE run_steps SET status = ?, session_id = ?, started_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
 		args = []interface{}{status, nullIfEmpty(sessionID), runStepID}
-	case "completed", "failed":
+	case StatusCompleted, StatusFailed:
 		query = `UPDATE run_steps SET status = ?, session_id = ?, exit_code = ?, ended_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
 		args = []interface{}{status, nullIfEmpty(sessionID), exitCode, runStepID}
 	default:
@@ -515,9 +529,9 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error {
 	var query string
 	switch status {
-	case "running":
+	case StatusRunning:
 		query = `UPDATE runs SET status = ?, started_at = CURRENT_TIMESTAMP WHERE run_id = ?`
-	case "completed", "failed", "cancelled":
+	case StatusCompleted, StatusFailed, StatusCancelled:
 		query = `UPDATE runs SET status = ?, ended_at = CURRENT_TIMESTAMP WHERE run_id = ?`
 	default:
 		query = `UPDATE runs SET status = ? WHERE run_id = ?`
