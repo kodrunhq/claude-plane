@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: completed
+stopped_at: Completed 01-04-PLAN.md (Phase 1 complete -- all CLI stubs wired)
+last_updated: "2026-03-12T07:46:54.562Z"
+last_activity: 2026-03-12 -- Completed 01-04-PLAN.md
+progress:
+  total_phases: 6
+  completed_phases: 1
+  total_plans: 20
+  completed_plans: 4
+  percent: 18
+---
+
 # Project State
 
 ## Project Reference
@@ -9,29 +25,29 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-03-11 -- Roadmap created
+Phase: 1 of 6 (Foundation) -- COMPLETE
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-03-12 -- Completed 01-04-PLAN.md
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 18%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 4
+- Average duration: 3.3min
+- Total execution time: 0.22 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-foundation | 4 | 13min | 3.3min |
 
 **Recent Trend:**
-- Last 5 plans: -
-- Trend: -
+- Last 5 plans: 4min, 4min, 3min, 2min
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -42,7 +58,14 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- None yet.
+- Used STANDARD buf lint category with RPC naming exceptions to keep domain-aligned names from design doc
+- Accepted Go toolchain auto-upgrade to 1.25 for golang.org/x/crypto compatibility
+- Set SQLite pragmas explicitly after sql.Open (modernc.org/sqlite does not support _pragma DSN syntax)
+- Used BEGIN IMMEDIATE with inline SQL for migrations
+- ECDSA P-256 for all mTLS certificates with random 128-bit serials, MinVersion TLS 1.2
+- Agent config defaults: max_sessions=5, claude_cli_path="claude"
+- Kept blank proto import in binaries to prove proto compilation
+- Used slog.Info for all CLI command output
 
 ### Pending Todos
 
@@ -55,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11
-Stopped at: Roadmap created, ready to plan Phase 1
+Last session: 2026-03-12
+Stopped at: Completed 01-04-PLAN.md (Phase 1 complete -- all CLI stubs wired)
 Resume file: None
