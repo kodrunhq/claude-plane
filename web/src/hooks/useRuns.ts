@@ -3,7 +3,7 @@ import { jobsApi } from '../api/jobs.ts';
 
 export function useRuns(jobId: string | undefined) {
   return useQuery({
-    queryKey: ['runs', jobId],
+    queryKey: ['runs', 'list', jobId],
     queryFn: () => jobsApi.listRuns(jobId!),
     enabled: !!jobId,
   });
@@ -11,7 +11,7 @@ export function useRuns(jobId: string | undefined) {
 
 export function useRun(id: string | undefined) {
   return useQuery({
-    queryKey: ['runs', id],
+    queryKey: ['runs', 'detail', id],
     queryFn: () => jobsApi.getRun(id!),
     enabled: !!id,
     refetchInterval: 5_000, // Fallback polling; WebSocket is primary
@@ -22,7 +22,10 @@ export function useCancelRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => jobsApi.cancelRun(id),
-    onSuccess: (_, id) => qc.invalidateQueries({ queryKey: ['runs', id] }),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['runs', 'detail', id] });
+      qc.invalidateQueries({ queryKey: ['runs', 'list'] });
+    },
   });
 }
 
@@ -31,6 +34,9 @@ export function useRetryStep() {
   return useMutation({
     mutationFn: ({ runId, stepId }: { runId: string; stepId: string }) =>
       jobsApi.retryStep(runId, stepId),
-    onSuccess: (_, { runId }) => qc.invalidateQueries({ queryKey: ['runs', runId] }),
+    onSuccess: (_, { runId }) => {
+      qc.invalidateQueries({ queryKey: ['runs', 'detail', runId] });
+      qc.invalidateQueries({ queryKey: ['runs', 'list'] });
+    },
   });
 }

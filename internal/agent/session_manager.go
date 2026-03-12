@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -127,14 +128,15 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 	}
 
 	sm.mu.Lock()
-	if existing, ok := sm.sessions[cmd.GetSessionId()]; ok {
-		sm.mu.Unlock()
-		sm.logger.Warn("duplicate session ID, killing existing session", "session_id", cmd.GetSessionId())
-		_ = existing.Kill("")
-		sm.mu.Lock()
-	}
+	existing, hadExisting := sm.sessions[cmd.GetSessionId()]
 	sm.sessions[cmd.GetSessionId()] = sess
 	sm.mu.Unlock()
+
+	// Kill existing session outside the lock (safe — we already replaced the map entry)
+	if hadExisting {
+		sm.logger.Warn("duplicate session ID, killing existing session", "session_id", cmd.GetSessionId())
+		_ = existing.Kill("")
+	}
 
 	// Mark new sessions as attached by default so live relay works immediately.
 	sm.attachedMu.Lock()
@@ -239,12 +241,15 @@ func (sm *SessionManager) handleDetach(cmd *pb.DetachSessionCmd) {
 
 func (sm *SessionManager) handleRequestScrollback(cmd *pb.RequestScrollbackCmd) {
 	sess := sm.getSession(cmd.GetSessionId())
-	if sess == nil {
-		sm.logger.Warn("scrollback request for unknown session", "session_id", cmd.GetSessionId())
-		return
+	var scrollbackPath string
+	if sess != nil {
+		scrollbackPath = sess.ScrollbackPath()
+	} else {
+		// Session may have been cleaned up after exit. Try the default path.
+		scrollbackPath = filepath.Join(sm.dataDir, cmd.GetSessionId()+".cast")
 	}
 
-	sm.sendScrollbackChunks(cmd.GetSessionId(), sess.ScrollbackPath())
+	sm.sendScrollbackChunks(cmd.GetSessionId(), scrollbackPath)
 }
 
 func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
@@ -316,6 +321,17 @@ func (sm *SessionManager) getSession(id string) *Session {
 	return sm.sessions[id]
 }
 
+// removeSession deletes a session from both the sessions and attached maps.
+func (sm *SessionManager) removeSession(sessionID string) {
+	sm.mu.Lock()
+	delete(sm.sessions, sessionID)
+	sm.mu.Unlock()
+
+	sm.attachedMu.Lock()
+	delete(sm.attached, sessionID)
+	sm.attachedMu.Unlock()
+}
+
 // StartRelay begins sending session output events to sendCh.
 func (sm *SessionManager) StartRelay(sendCh chan<- *pb.AgentEvent) {
 	sm.relayMu.Lock()
@@ -355,6 +371,8 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 							},
 						},
 					})
+					// Clean up maps to prevent leak.
+					sm.removeSession(sessionID)
 					return
 				}
 				// Only relay live output if session is attached.

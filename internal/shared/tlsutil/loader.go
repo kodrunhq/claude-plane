@@ -25,7 +25,7 @@ func ServerTLSConfig(caCertPath, serverCertPath, serverKeyPath string) (*tls.Con
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    caPool,
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 	}, nil
 }
 
@@ -45,7 +45,7 @@ func AgentTLSConfig(caCertPath, agentCertPath, agentKeyPath string) (*tls.Config
 	return &tls.Config{
 		Certificates: []tls.Certificate{agentCert},
 		RootCAs:      caPool,
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 	}, nil
 }
 
