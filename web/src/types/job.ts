@@ -18,11 +18,10 @@ export interface Step {
   machine_id: string;
   working_dir: string;
   command: string;
-  args: string[];
-  position_x?: number;
-  position_y?: number;
-  created_at: string;
-  updated_at: string;
+  args: string;
+  timeout_seconds?: number;
+  sort_order?: number;
+  on_failure?: string;
 }
 
 export interface StepDependency {
@@ -72,7 +71,7 @@ export interface CreateStepParams {
   machine_id: string;
   working_dir?: string;
   command?: string;
-  args?: string[];
+  args?: string;
 }
 
 export interface UpdateStepParams {
@@ -81,5 +80,5 @@ export interface UpdateStepParams {
   machine_id?: string;
   working_dir?: string;
   command?: string;
-  args?: string[];
+  args?: string;
 }
