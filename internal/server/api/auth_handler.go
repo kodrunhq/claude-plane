@@ -15,9 +15,6 @@ import (
 const sessionCookieName = "session_token"
 
 func isSecureRequest(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
 	if r.TLS != nil {
 		return true
 	}

@@ -184,7 +184,7 @@ func TestLoginSessionCookieSecureFlag(t *testing.T) {
 		"password": "password123",
 	})
 
-	t.Run("http request sets non-secure cookie", func(t *testing.T) {
+	t.Run("HTTP request sets non-secure cookie", func(t *testing.T) {
 		loginReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/login", bytes.NewReader(body))
 		loginReq.Header.Set("Content-Type", "application/json")
 		loginResp, err := http.DefaultClient.Do(loginReq)
@@ -208,7 +208,7 @@ func TestLoginSessionCookieSecureFlag(t *testing.T) {
 		}
 	})
 
-	t.Run("forwarded https request sets secure cookie", func(t *testing.T) {
+	t.Run("forwarded HTTPS request sets secure cookie", func(t *testing.T) {
 		loginReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/login", bytes.NewReader(body))
 		loginReq.Header.Set("Content-Type", "application/json")
 		loginReq.Header.Set("X-Forwarded-Proto", "https")

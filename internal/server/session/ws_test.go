@@ -19,6 +19,8 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
+const wsTestAttachCommandPollInterval = 10 * time.Millisecond
+
 func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRecorder, string, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -113,7 +115,7 @@ func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessi
 func waitForAttachCommand(t *testing.T, ctx context.Context, recorder *commandRecorder, sessionID string) {
 	t.Helper()
 
-	ticker := time.NewTicker(10 * time.Millisecond)
+	ticker := time.NewTicker(wsTestAttachCommandPollInterval)
 	defer ticker.Stop()
 
 	for {
