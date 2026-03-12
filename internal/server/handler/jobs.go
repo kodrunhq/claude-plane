@@ -24,20 +24,18 @@ func NewJobHandler(s store.JobStoreIface) *JobHandler {
 
 // RegisterJobRoutes mounts all job-related routes on the given router.
 func RegisterJobRoutes(r chi.Router, h *JobHandler) {
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/jobs", h.CreateJob)
-		r.Get("/jobs", h.ListJobs)
-		r.Get("/jobs/{jobID}", h.GetJob)
-		r.Put("/jobs/{jobID}", h.UpdateJob)
-		r.Delete("/jobs/{jobID}", h.DeleteJob)
+	r.Post("/api/v1/jobs", h.CreateJob)
+	r.Get("/api/v1/jobs", h.ListJobs)
+	r.Get("/api/v1/jobs/{jobID}", h.GetJob)
+	r.Put("/api/v1/jobs/{jobID}", h.UpdateJob)
+	r.Delete("/api/v1/jobs/{jobID}", h.DeleteJob)
 
-		r.Post("/jobs/{jobID}/steps", h.AddStep)
-		r.Put("/jobs/{jobID}/steps/{stepID}", h.UpdateStep)
-		r.Delete("/jobs/{jobID}/steps/{stepID}", h.DeleteStep)
+	r.Post("/api/v1/jobs/{jobID}/steps", h.AddStep)
+	r.Put("/api/v1/jobs/{jobID}/steps/{stepID}", h.UpdateStep)
+	r.Delete("/api/v1/jobs/{jobID}/steps/{stepID}", h.DeleteStep)
 
-		r.Post("/jobs/{jobID}/steps/{stepID}/deps", h.AddDependency)
-		r.Delete("/jobs/{jobID}/steps/{stepID}/deps/{depID}", h.RemoveDependency)
-	})
+	r.Post("/api/v1/jobs/{jobID}/steps/{stepID}/deps", h.AddDependency)
+	r.Delete("/api/v1/jobs/{jobID}/steps/{stepID}/deps/{depID}", h.RemoveDependency)
 }
 
 // writeJSON writes a JSON response with the given status code.
