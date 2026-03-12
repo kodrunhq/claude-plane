@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/claudeplane/claude-plane/internal/server/connmgr"
 	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 
 	"google.golang.org/grpc"
@@ -18,20 +19,24 @@ import (
 // GRPCServer wraps a gRPC server with mTLS, auth interceptors, and agent service.
 type GRPCServer struct {
 	*grpc.Server
-	connMgr *ConnectionManager
-	logger  *slog.Logger
+	connMgr      *ConnectionManager
+	agentConnMgr *connmgr.ConnectionManager
+	logger       *slog.Logger
 }
 
 // agentService implements the AgentServiceServer interface.
 type agentService struct {
 	pb.UnimplementedAgentServiceServer
-	connMgr *ConnectionManager
-	logger  *slog.Logger
+	connMgr      *ConnectionManager
+	agentConnMgr *connmgr.ConnectionManager
+	logger       *slog.Logger
 }
 
 // NewGRPCServer creates a gRPC server configured with mTLS, keepalive, and auth interceptors.
+// The agentConnMgr parameter provides DB-backed connection tracking; it may be nil
+// during tests or when DB-backed tracking is not needed.
 // If logger is nil, slog.Default() is used.
-func NewGRPCServer(tlsCfg *tls.Config, logger *slog.Logger) *GRPCServer {
+func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, logger *slog.Logger) *GRPCServer {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -53,15 +58,17 @@ func NewGRPCServer(tlsCfg *tls.Config, logger *slog.Logger) *GRPCServer {
 	)
 
 	svc := &agentService{
-		connMgr: connMgr,
-		logger:  logger,
+		connMgr:      connMgr,
+		agentConnMgr: agentConnMgr,
+		logger:       logger,
 	}
 	pb.RegisterAgentServiceServer(srv, svc)
 
 	return &GRPCServer{
-		Server:  srv,
-		connMgr: connMgr,
-		logger:  logger,
+		Server:       srv,
+		connMgr:      connMgr,
+		agentConnMgr: agentConnMgr,
+		logger:       logger,
 	}
 }
 
@@ -72,9 +79,16 @@ func (s *GRPCServer) Serve(lis net.Listener) error {
 	return s.Server.Serve(lis)
 }
 
-// ConnectionManager returns the server's connection manager.
+// ConnectionManager returns the server's in-memory connection manager
+// used for stream token tracking.
 func (s *GRPCServer) ConnectionManager() *ConnectionManager {
 	return s.connMgr
+}
+
+// AgentConnectionManager returns the DB-backed connection manager
+// used for agent status tracking.
+func (s *GRPCServer) AgentConnectionManager() *connmgr.ConnectionManager {
+	return s.agentConnMgr
 }
 
 // Register handles an agent registration request.
@@ -108,8 +122,9 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 }
 
 // CommandStream handles the bidirectional streaming RPC.
-// It holds the stream open, receiving agent events and (in a future server-core phase) dispatching server commands.
-// For now, received events are logged; server-side command dispatch is intentionally not implemented yet.
+// It registers the agent with the DB-backed connection manager on stream start
+// and disconnects on stream end. Received events are logged; server-side command
+// dispatch is intentionally not implemented yet.
 func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEvent, pb.ServerCommand]) error {
 	machineID, err := MachineIDFromContext(stream.Context())
 	if err != nil {
@@ -123,14 +138,49 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 		streamToken = agent.StreamToken
 	}
 
+	// Create a cancellable context for this stream so replacement connections
+	// can cancel the old stream's receive loop.
+	ctx, cancel := context.WithCancel(stream.Context())
+
+	// Register with the DB-backed connection manager if available.
+	if s.agentConnMgr != nil {
+		var maxSessions int32
+		if agent, ok := s.connMgr.Get(machineID); ok {
+			maxSessions = agent.MaxSessions
+		}
+		ca := &connmgr.ConnectedAgent{
+			MachineID:    machineID,
+			RegisteredAt: time.Now(),
+			MaxSessions:  maxSessions,
+			Cancel:       cancel,
+			Stream:       stream,
+		}
+		if regErr := s.agentConnMgr.Register(machineID, ca); regErr != nil {
+			cancel()
+			s.logger.Error("failed to register agent with connection manager",
+				"machine_id", machineID, "error", regErr)
+			return regErr
+		}
+	}
+
 	s.logger.Info("agent stream opened", "machine_id", machineID)
 	defer func() {
 		s.connMgr.RemoveIfToken(machineID, streamToken)
+		if s.agentConnMgr != nil {
+			s.agentConnMgr.Disconnect(machineID)
+		}
+		cancel()
 		s.logger.Info("agent stream closed", "machine_id", machineID)
 	}()
 
-	// Receive loop: read events from agent until stream closes or error.
+	// Receive loop: read events from agent until stream closes, error, or
+	// context cancellation (from a replacement connection).
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		event, err := stream.Recv()
 		if err == io.EOF {
 			return nil

@@ -78,7 +78,7 @@ func startServer(t *testing.T, caDir, serverDir string) (addr string, srv *serve
 		t.Fatal(err)
 	}
 
-	srv = servergrpc.NewGRPCServer(tlsCfg, nil)
+	srv = servergrpc.NewGRPCServer(tlsCfg, nil, nil)
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -241,7 +241,7 @@ func TestAgentReconnectsOnDrop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv2 := servergrpc.NewGRPCServer(tlsCfg, nil)
+	srv2 := servergrpc.NewGRPCServer(tlsCfg, nil, nil)
 	go func() {
 		_ = srv2.Serve(lis)
 	}()
