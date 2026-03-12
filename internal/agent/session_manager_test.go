@@ -13,7 +13,7 @@ func TestSessionManagerCreate(t *testing.T) {
 	skipIfNopty(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	sm := NewSessionManager("", logger)
+	sm := NewSessionManager("", t.TempDir(), logger)
 
 	sm.HandleCommand(&pb.ServerCommand{
 		Command: &pb.ServerCommand_CreateSession{
@@ -52,7 +52,7 @@ func TestSessionManagerInput(t *testing.T) {
 	skipIfNopty(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	sm := NewSessionManager("", logger)
+	sm := NewSessionManager("", t.TempDir(), logger)
 
 	sm.HandleCommand(&pb.ServerCommand{
 		Command: &pb.ServerCommand_CreateSession{
@@ -119,7 +119,7 @@ func TestSessionManagerRelay(t *testing.T) {
 	skipIfNopty(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	sm := NewSessionManager("", logger)
+	sm := NewSessionManager("", t.TempDir(), logger)
 
 	sendCh := make(chan *pb.AgentEvent, 64)
 	sm.StartRelay(sendCh)
@@ -166,7 +166,7 @@ func TestSessionManagerConcurrent(t *testing.T) {
 	skipIfNopty(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	sm := NewSessionManager("", logger)
+	sm := NewSessionManager("", t.TempDir(), logger)
 
 	sendCh := make(chan *pb.AgentEvent, 256)
 	sm.StartRelay(sendCh)
@@ -213,7 +213,7 @@ func TestSessionManagerGetStates(t *testing.T) {
 	skipIfNopty(t)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	sm := NewSessionManager("", logger)
+	sm := NewSessionManager("", t.TempDir(), logger)
 
 	for _, id := range []string{"gs1", "gs2"} {
 		sm.HandleCommand(&pb.ServerCommand{
@@ -257,4 +257,201 @@ func TestSessionManagerGetStates(t *testing.T) {
 			},
 		})
 	}
+}
+
+func TestSessionManagerScrollbackReplay(t *testing.T) {
+	skipIfNopty(t)
+
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	sm := NewSessionManager("", dir, logger)
+
+	sendCh := make(chan *pb.AgentEvent, 64)
+	sm.StartRelay(sendCh)
+
+	// Create a session that produces output and exits.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_CreateSession{
+			CreateSession: &pb.CreateSessionCmd{
+				SessionId: "replay-1",
+				Command:   "/bin/echo",
+				Args:      []string{"hello", "world"},
+				TerminalSize: &pb.TerminalSize{
+					Rows: 24,
+					Cols: 80,
+				},
+			},
+		},
+	})
+
+	// Drain events until session exits.
+	timeout := time.After(5 * time.Second)
+	var gotFinalStatus bool
+drainCreate:
+	for {
+		select {
+		case evt := <-sendCh:
+			if st := evt.GetSessionStatus(); st != nil && st.GetSessionId() == "replay-1" && st.GetStatus() != "running" {
+				gotFinalStatus = true
+				break drainCreate
+			}
+		case <-timeout:
+			break drainCreate
+		}
+	}
+	if !gotFinalStatus {
+		// Might have missed it, give extra time.
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Now request scrollback replay.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_RequestScrollback{
+			RequestScrollback: &pb.RequestScrollbackCmd{
+				SessionId: "replay-1",
+			},
+		},
+	})
+
+	// Read scrollback chunk events.
+	var gotScrollback bool
+	var gotFinal bool
+	timeout2 := time.After(5 * time.Second)
+drainScrollback:
+	for {
+		select {
+		case evt := <-sendCh:
+			if chunk := evt.GetScrollbackChunk(); chunk != nil {
+				gotScrollback = true
+				if chunk.GetSessionId() != "replay-1" {
+					t.Errorf("unexpected session_id in scrollback chunk: %s", chunk.GetSessionId())
+				}
+				if chunk.GetIsFinal() {
+					gotFinal = true
+					break drainScrollback
+				}
+			}
+		case <-timeout2:
+			break drainScrollback
+		}
+	}
+
+	if !gotScrollback {
+		t.Error("no scrollback chunk events received")
+	}
+	if !gotFinal {
+		t.Error("did not receive final scrollback chunk")
+	}
+
+	sm.StopRelay()
+}
+
+func TestSessionManagerDetachKeepsPTY(t *testing.T) {
+	skipIfNopty(t)
+
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	sm := NewSessionManager("", dir, logger)
+
+	sendCh := make(chan *pb.AgentEvent, 64)
+	sm.StartRelay(sendCh)
+
+	// Create a long-lived session.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_CreateSession{
+			CreateSession: &pb.CreateSessionCmd{
+				SessionId: "detach-sm-1",
+				Command:   "/bin/cat",
+				TerminalSize: &pb.TerminalSize{
+					Rows: 24,
+					Cols: 80,
+				},
+			},
+		},
+	})
+
+	// Wait for session to be running.
+	time.Sleep(200 * time.Millisecond)
+
+	// Send detach command.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_DetachSession{
+			DetachSession: &pb.DetachSessionCmd{
+				SessionId: "detach-sm-1",
+			},
+		},
+	})
+
+	// Verify PTY still running by sending input and checking for output after re-attach.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_AttachSession{
+			AttachSession: &pb.AttachSessionCmd{
+				SessionId: "detach-sm-1",
+			},
+		},
+	})
+
+	// Drain any scrollback chunks from attach.
+	time.Sleep(100 * time.Millisecond)
+drainAttach:
+	for {
+		select {
+		case <-sendCh:
+		default:
+			break drainAttach
+		}
+	}
+
+	// Send input.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_InputData{
+			InputData: &pb.InputDataCmd{
+				SessionId: "detach-sm-1",
+				Data:      []byte("after-detach\n"),
+			},
+		},
+	})
+
+	// Expect output event with "after-detach".
+	var gotOutput bool
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case evt := <-sendCh:
+			if out := evt.GetSessionOutput(); out != nil && out.GetSessionId() == "detach-sm-1" {
+				gotOutput = true
+			}
+		case <-timeout:
+			break
+		}
+		if gotOutput {
+			break
+		}
+	}
+
+	if !gotOutput {
+		t.Error("no output event after detach+reattach, PTY may have been killed")
+	}
+
+	// Verify session is still running.
+	sm.mu.RLock()
+	sess := sm.sessions["detach-sm-1"]
+	sm.mu.RUnlock()
+	if sess == nil {
+		t.Fatal("session not found after detach")
+	}
+	if sess.Status() != "running" {
+		t.Errorf("expected status 'running', got %q", sess.Status())
+	}
+
+	// Clean up.
+	sm.HandleCommand(&pb.ServerCommand{
+		Command: &pb.ServerCommand_KillSession{
+			KillSession: &pb.KillSessionCmd{
+				SessionId: "detach-sm-1",
+			},
+		},
+	})
+
+	sm.StopRelay()
 }
