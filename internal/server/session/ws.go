@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -15,6 +16,9 @@ import (
 	"github.com/claudeplane/claude-plane/internal/server/store"
 	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
+
+// ErrAgentNotConnected is returned when no agent is available for a machine.
+var ErrAgentNotConnected = errors.New("agent not connected")
 
 // wsControlMessage is a parsed text WebSocket frame (resize, auth, etc.).
 type wsControlMessage struct {
@@ -124,10 +128,11 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 
 // sendToAgent returns the current agent for machineID and sends a command.
 // Re-fetches the agent on each call to handle agent reconnections (B10 fix).
+// Returns ErrAgentNotConnected if the agent is not available.
 func sendToAgent(cm *connmgr.ConnectionManager, machineID string, cmd *pb.ServerCommand) error {
 	agent := cm.GetAgent(machineID)
 	if agent == nil || agent.SendCommand == nil {
-		return nil
+		return ErrAgentNotConnected
 	}
 	return agent.SendCommand(cmd)
 }
