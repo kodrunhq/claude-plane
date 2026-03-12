@@ -90,9 +90,15 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 	if memory > 256*1024 || time > 10 || threads > 16 {
 		return false, fmt.Errorf("argon2 params exceed safe bounds: m=%d t=%d p=%d", memory, time, threads)
 	}
+	if len(salt) != argonSaltLen {
+		return false, fmt.Errorf("invalid salt length: got %d, expected %d", len(salt), argonSaltLen)
+	}
+	if len(expectedHash) != argonKeyLen {
+		return false, fmt.Errorf("invalid hash length: got %d, expected %d", len(expectedHash), argonKeyLen)
+	}
 
 	// Recompute hash with the same parameters
-	computedHash := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(expectedHash)))
+	computedHash := argon2.IDKey([]byte(password), salt, time, memory, threads, argonKeyLen)
 
 	// Constant-time comparison
 	if subtle.ConstantTimeCompare(computedHash, expectedHash) == 1 {
@@ -132,7 +138,7 @@ func (s *Store) SeedAdmin(email, password, displayName string) error {
 		VALUES (?, ?, ?, ?, 'admin')
 	`, userID, email, displayName, hash)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: users.email") {
 			return fmt.Errorf("admin account with email %q already exists", email)
 		}
 		return fmt.Errorf("insert admin user: %w", err)
