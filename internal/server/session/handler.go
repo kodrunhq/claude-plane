@@ -71,9 +71,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	if req.Command == "" {
 		req.Command = "claude"
 	}
-	if req.WorkingDir == "" {
-		req.WorkingDir = "~"
-	}
+	// WorkingDir left empty intentionally — the agent inherits its own cwd.
 	if req.TerminalSize == nil {
 		req.TerminalSize = &terminalSize{Rows: 24, Cols: 80}
 	}

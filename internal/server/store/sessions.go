@@ -92,11 +92,17 @@ func (s *Store) ListSessionsByMachine(machineID string) ([]Session, error) {
 	return scanSessions(rows)
 }
 
-// UpdateSessionStatus updates the status and ended_at timestamp for a session.
+// UpdateSessionStatus updates the status for a session.
+// Sets ended_at only when transitioning to a terminal state.
 func (s *Store) UpdateSessionStatus(id, status string) error {
-	result, err := s.writer.Exec(`
-		UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP
-		WHERE session_id = ?`, status, id)
+	var query string
+	switch status {
+	case "completed", "failed", "terminated":
+		query = `UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP WHERE session_id = ?`
+	default:
+		query = `UPDATE sessions SET status = ? WHERE session_id = ?`
+	}
+	result, err := s.writer.Exec(query, status, id)
 	if err != nil {
 		return fmt.Errorf("update session status: %w", err)
 	}
