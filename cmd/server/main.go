@@ -114,7 +114,7 @@ func newCAIssueServerCmd() *cobra.Command {
 	}
 	cmd.Flags().String("ca-dir", "./ca", "Directory containing CA certificate and key")
 	cmd.Flags().String("out-dir", "./server-cert", "Output directory for server certificate and key")
-	cmd.Flags().StringSlice("hostnames", []string{"localhost", "127.0.0.1"}, "Additional hostnames/IPs for the server certificate")
+	cmd.Flags().StringSlice("hostnames", []string{}, "Additional hostnames/IPs for the server certificate (localhost and 127.0.0.1 are always included)")
 	return cmd
 }
 

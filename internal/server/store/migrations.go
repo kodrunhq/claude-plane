@@ -146,9 +146,18 @@ CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(timestamp DESC);
 // database connection. Uses BEGIN IMMEDIATE to acquire the write lock upfront.
 // All statements use IF NOT EXISTS, making this safe to call multiple times.
 func RunMigrations(db *sql.DB) error {
-	_, err := db.Exec("BEGIN IMMEDIATE;" + schema + "COMMIT;")
-	if err != nil {
-		return fmt.Errorf("run migrations: %w", err)
+	if _, err := db.Exec("BEGIN IMMEDIATE;"); err != nil {
+		return fmt.Errorf("run migrations (begin): %w", err)
+	}
+
+	if _, err := db.Exec(schema); err != nil {
+		db.Exec("ROLLBACK;")
+		return fmt.Errorf("run migrations (schema): %w", err)
+	}
+
+	if _, err := db.Exec("COMMIT;"); err != nil {
+		db.Exec("ROLLBACK;")
+		return fmt.Errorf("run migrations (commit): %w", err)
 	}
 	return nil
 }
