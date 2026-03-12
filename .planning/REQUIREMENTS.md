@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication
 
-- [ ] **AUTH-01**: User can create account with email and password
+- [x] **AUTH-01**: User can create account with email and password
 - [x] **AUTH-02**: User can log in and receive a JWT session token
 - [x] **AUTH-03**: User can log out and invalidate their session
 - [x] **AUTH-04**: Admin account can be seeded via server CLI on first run
@@ -103,7 +103,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 3 | Pending |
+| AUTH-01 | Phase 3 | Complete |
 | AUTH-02 | Phase 3 | Complete |
 | AUTH-03 | Phase 3 | Complete |
 | AUTH-04 | Phase 1 | Complete |
