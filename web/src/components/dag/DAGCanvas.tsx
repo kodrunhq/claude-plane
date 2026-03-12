@@ -93,7 +93,7 @@ export function DAGCanvas({
           label: step.name,
           status: rs?.status ?? 'pending',
           machineId: step.machine_id,
-          selected: step.step_id === selectedStepId,
+          selected: false,
         },
       };
     });
@@ -113,16 +113,26 @@ export function DAGCanvas({
 
     const layouted = getLayoutedElements(nodes, edges);
     return { initialNodes: layouted.nodes, initialEdges: layouted.edges };
-  }, [steps, dependencies, runStepMap, selectedStepId]);
+  }, [steps, dependencies, runStepMap]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Sync external changes
+  // Sync external layout changes (steps, dependencies, run status)
   useEffect(() => {
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  // Update selected property without re-laying out the graph
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        data: { ...node.data, selected: node.id === selectedStepId },
+      })),
+    );
+  }, [selectedStepId, setNodes]);
 
   const handleConnect = useCallback(
     (connection: Connection) => {
