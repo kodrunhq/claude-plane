@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-12T12:24:37Z"
-last_activity: 2026-03-12 -- Completed 06-01-PLAN.md
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-12T12:37:26Z"
+last_activity: 2026-03-12 -- Completed 06-02-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 20
-  completed_plans: 18
-  percent: 90
+  completed_plans: 19
+  percent: 95
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 6 of 6 (Job System)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-12 -- Completed 06-01-PLAN.md
+Last activity: 2026-03-12 -- Completed 06-02-PLAN.md
 
-Progress: [█████████░] 90%
+Progress: [█████████░] 95%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 90%
 | Phase 05-frontend P03 | 4min | 2 tasks | 11 files |
 | Phase 05-frontend P04 | 2min | 1 tasks | 3 files |
 | Phase 06-job-system P01 | 12min | 2 tasks | 8 files |
+| Phase 06-job-system P02 | 8min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,10 @@ Recent decisions affecting current work:
 - [Phase 06-job-system]: DAGRunner uses context cancellation for run failure/cancellation propagation
 - [Phase 06-job-system]: RunStep.OnFailure populated from original Steps at runtime (not stored in DB snapshot)
 - [Phase 06-job-system]: Mock executor with channels for deterministic concurrent test control
+- [Phase 06-job-system]: Separate handler package for job system (not api package) due to different dependency types
+- [Phase 06-job-system]: Flat route registration to avoid Chi mount conflicts on shared /api/v1 prefix
+- [Phase 06-job-system]: AddDependency handler adds edge then validates DAG, rollback on cycle
+- [Phase 06-job-system]: RetryStep pre-validates step state before delegating to orchestrator
 
 ### Pending Todos
 
@@ -124,6 +129,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T12:24:37Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-03-12T12:37:26Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
