@@ -1,9 +1,10 @@
 package orchestrator
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 func TestValidateDAG_Linear(t *testing.T) {
@@ -175,8 +176,8 @@ func TestDAGRunner_StepFailure(t *testing.T) {
 
 	runner.waitForDone()
 
-	if runner.finalStatus != "failed" {
-		t.Errorf("final status = %q, want %q", runner.finalStatus, "failed")
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
 	}
 }
 
@@ -224,10 +225,59 @@ func TestDAGRunner_ConcurrentCompletions(t *testing.T) {
 	}
 }
 
+func TestDAGRunner_DeepLinearChainSkipPropagation(t *testing.T) {
+	// Build a deep linear chain: step-0 -> step-1 -> step-2 -> ... -> step-199
+	// step-0 fails, all 199 dependents should be skipped transitively.
+	// With a recursive implementation this would risk a stack overflow.
+	const chainLen = 200
+
+	steps := make([]testStep, chainLen)
+	for i := 0; i < chainLen; i++ {
+		steps[i] = testStep{
+			id:        fmt.Sprintf("step-%d", i),
+			onFailure: "continue",
+		}
+	}
+
+	deps := make([]store.StepDependency, chainLen-1)
+	for i := 1; i < chainLen; i++ {
+		deps[i-1] = store.StepDependency{
+			StepID:    fmt.Sprintf("step-%d", i),
+			DependsOn: fmt.Sprintf("step-%d", i-1),
+		}
+	}
+
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-deep", steps, deps, mock)
+
+	runner.Start(t)
+
+	// Only step-0 should start (it's the root)
+	mock.waitForStep("step-0")
+
+	// Fail step-0 — all dependents should be skipped transitively
+	mock.completeStep("step-0", 1)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// Verify all downstream steps were skipped
+	for i := 1; i < chainLen; i++ {
+		stepID := fmt.Sprintf("step-%d", i)
+		rs := runner.dag.steps[stepID]
+		if rs.Status != store.StatusSkipped {
+			t.Errorf("step %s status = %q, want %q", stepID, rs.Status, store.StatusSkipped)
+		}
+	}
+}
+
 func TestDAGRunner_CancelBeforeStart(t *testing.T) {
 	runner := NewDAGRunner(
 		"run-1",
-		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: "pending"}},
+		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: store.StatusPending}},
 		nil,
 		nil,
 		nil,

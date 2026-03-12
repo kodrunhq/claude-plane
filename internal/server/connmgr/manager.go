@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 // MachineStore is the subset of store operations needed by ConnectionManager.

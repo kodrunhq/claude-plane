@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // mockExecutor is a test double for StepExecutor that allows test control

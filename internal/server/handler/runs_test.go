@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/handler"
-	"github.com/claudeplane/claude-plane/internal/server/orchestrator"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/handler"
+	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // mockExecutor records step executions and completes them via channel.

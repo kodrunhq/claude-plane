@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/handler"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/handler"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // newTestStore creates an in-memory Store for testing.

@@ -4,17 +4,56 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/mail"
+	"strings"
 
 	"github.com/google/uuid"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// sessionCookieName references the canonical cookie name from the auth package.
+const sessionCookieName = auth.SessionCookieName
+
+func isSecureRequest(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// setSessionCookie sets an httpOnly, SameSite=Strict cookie with the JWT.
+func (h *Handlers) setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   isSecureRequest(r),
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   int(h.authSvc.TokenTTL().Seconds()),
+	})
+}
+
+// clearSessionCookie removes the session cookie by setting MaxAge=-1.
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   isSecureRequest(r),
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
+}
 
 // registerRequest is the JSON body for POST /api/v1/auth/register.
 type registerRequest struct {
 	Email       string `json:"email"`
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name"`
+	InviteCode  string `json:"invite_code,omitempty"`
 }
 
 // loginRequest is the JSON body for POST /api/v1/auth/login.
@@ -25,11 +64,34 @@ type loginRequest struct {
 
 // Register handles POST /api/v1/auth/register.
 // Creates a new user account with hashed password.
+// Respects the registration_mode setting: "open" allows anyone, "invite" requires
+// a valid invite code, "closed" (default) rejects all self-registration.
 func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
+	switch h.registrationMode {
+	case "closed":
+		writeError(w, http.StatusForbidden, "registration is closed")
+		return
+	case "invite":
+		// Parse body first, then check invite code below after decoding
+	case "open":
+		// Allow registration
+	default:
+		writeError(w, http.StatusForbidden, "registration is closed")
+		return
+	}
+
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	// Check invite code when in invite mode
+	if h.registrationMode == "invite" {
+		if req.InviteCode == "" || req.InviteCode != h.inviteCode {
+			writeError(w, http.StatusForbidden, "invalid invite code")
+			return
+		}
 	}
 
 	// Validate input
@@ -118,6 +180,10 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Set httpOnly cookie with the JWT (primary auth mechanism).
+	// The token is also returned in the JSON response for backwards compatibility.
+	h.setSessionCookie(w, r, token)
+
 	writeJSON(w, http.StatusOK, map[string]string{
 		"token":   token,
 		"user_id": user.UserID,
@@ -139,6 +205,8 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	clearSessionCookie(w, r)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "logged out",

@@ -8,8 +8,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// SessionCookieName is the name of the httpOnly cookie used for JWT auth.
+// Shared across api and session packages to prevent accidental drift.
+const SessionCookieName = "session_token"
 
 // Claims represents the JWT claims issued by the claude-plane server.
 type Claims struct {
@@ -40,6 +44,11 @@ func NewService(signingKey []byte, tokenTTL time.Duration, blocklist TokenRevoke
 		tokenTTL:   tokenTTL,
 		blocklist:  blocklist,
 	}
+}
+
+// TokenTTL returns the configured token time-to-live duration.
+func (s *Service) TokenTTL() time.Duration {
+	return s.tokenTTL
 }
 
 // IssueToken creates a signed HS256 JWT for the given user.

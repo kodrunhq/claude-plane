@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/agent/config"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
-	"github.com/claudeplane/claude-plane/internal/shared/tlsutil"
+	"github.com/kodrunhq/claude-plane/internal/agent/config"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

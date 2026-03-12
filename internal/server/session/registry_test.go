@@ -1,7 +1,10 @@
 package session
 
 import (
+	"bytes"
+	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -60,6 +63,116 @@ func TestRegistrySlowSubscriber(t *testing.T) {
 	}
 	if count != 256 {
 		t.Errorf("received %d messages, want 256", count)
+	}
+}
+
+func TestRegistryDroppedCountPublish(t *testing.T) {
+	r := NewRegistry(slog.Default())
+	ch := r.Subscribe("s1")
+
+	// Initially zero drops
+	if got := r.DroppedCount(ch); got != 0 {
+		t.Errorf("initial DroppedCount = %d, want 0", got)
+	}
+
+	// Fill the channel to capacity
+	for i := range 256 {
+		r.Publish("s1", []byte{byte(i)})
+	}
+
+	// Publish 5 more messages that will be dropped
+	for i := range 5 {
+		r.Publish("s1", []byte(fmt.Sprintf("drop-%d", i)))
+	}
+
+	if got := r.DroppedCount(ch); got != 5 {
+		t.Errorf("DroppedCount after 5 drops = %d, want 5", got)
+	}
+}
+
+func TestRegistryDroppedCountPublishControl(t *testing.T) {
+	r := NewRegistry(slog.Default())
+	ch := r.Subscribe("s1")
+
+	// Fill the channel to capacity
+	for i := range 256 {
+		r.Publish("s1", []byte{byte(i)})
+	}
+
+	// Drop 3 control messages
+	for i := range 3 {
+		r.PublishControl("s1", []byte(fmt.Sprintf(`{"seq":%d}`, i)))
+	}
+
+	// DroppedCount should include both Publish and PublishControl drops
+	if got := r.DroppedCount(ch); got != 3 {
+		t.Errorf("DroppedCount after 3 control drops = %d, want 3", got)
+	}
+}
+
+func TestRegistryDroppedCountUnknownChannel(t *testing.T) {
+	r := NewRegistry(slog.Default())
+	unknownCh := make(chan SubscriberMessage)
+	if got := r.DroppedCount(unknownCh); got != 0 {
+		t.Errorf("DroppedCount for unknown channel = %d, want 0", got)
+	}
+}
+
+func TestRegistryDropWarnLogging(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	r := NewRegistry(logger)
+	r.Subscribe("s1")
+
+	// Fill channel, then drop one message
+	for i := range 256 {
+		r.Publish("s1", []byte{byte(i)})
+	}
+	r.Publish("s1", []byte("dropped-data"))
+
+	logOutput := buf.String()
+	if !strings.Contains(logOutput, "dropped terminal data for slow subscriber") {
+		t.Errorf("expected warn log for dropped terminal data, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "bytes=12") {
+		t.Errorf("expected byte count in log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "total_dropped=1") {
+		t.Errorf("expected total_dropped=1 in log, got: %s", logOutput)
+	}
+
+	// Drop control messages until total reaches 10 (next sampled log point).
+	// Drops 2-9 are terminal data counter + control counter sharing the same per-channel
+	// counter, so we need to reach total=10 for the next log entry.
+	for i := 0; i < 8; i++ {
+		r.PublishControl("s1", []byte(`{"x":1}`))
+	}
+	// total_dropped is now 9; one more control drop brings it to 10 (logged).
+	r.PublishControl("s1", []byte(`{"x":1}`))
+	logOutput = buf.String()
+	if !strings.Contains(logOutput, "dropped control message for slow subscriber") {
+		t.Errorf("expected warn log for dropped control message at total=10, got: %s", logOutput)
+	}
+}
+
+func TestRegistryDropCounterCumulativeAcrossMethods(t *testing.T) {
+	r := NewRegistry(slog.Default())
+	ch := r.Subscribe("s1")
+
+	// Fill channel
+	for i := range 256 {
+		r.Publish("s1", []byte{byte(i)})
+	}
+
+	// Drop 2 via Publish, 3 via PublishControl = 5 total
+	r.Publish("s1", []byte("a"))
+	r.Publish("s1", []byte("b"))
+	r.PublishControl("s1", []byte("c"))
+	r.PublishControl("s1", []byte("d"))
+	r.PublishControl("s1", []byte("e"))
+
+	if got := r.DroppedCount(ch); got != 5 {
+		t.Errorf("cumulative DroppedCount = %d, want 5", got)
 	}
 }
 

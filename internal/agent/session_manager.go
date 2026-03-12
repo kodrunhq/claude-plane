@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -9,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -61,7 +63,7 @@ func (sm *SessionManager) GetStates() []*pb.SessionState {
 			Status:    sess.Status(),
 			StartedAt: timestamppb.New(sess.StartedAt()),
 		}
-		if sess.Status() != "running" {
+		if sess.Status() != status.Running {
 			ec := int32(sess.ExitCode())
 			state.ExitCode = &ec
 		}
@@ -150,7 +152,7 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 		Event: &pb.AgentEvent_SessionStatus{
 			SessionStatus: &pb.SessionStatusEvent{
 				SessionId: cmd.GetSessionId(),
-				Status:    "running",
+				Status:    status.Running,
 			},
 		},
 	})
@@ -405,7 +407,28 @@ func (sm *SessionManager) sendEvent(evt *pb.AgentEvent) {
 	select {
 	case ch <- evt:
 	default:
-		sm.logger.Warn("send channel full, dropping event")
+		// Log event type for debugging which events are being lost.
+		var eventType string
+		switch e := evt.GetEvent().(type) {
+		case *pb.AgentEvent_SessionOutput:
+			eventType = "session_output"
+			sm.logger.Warn("send channel full, dropping event",
+				"event_type", eventType,
+				"session_id", e.SessionOutput.GetSessionId(),
+				"bytes", len(e.SessionOutput.GetData()),
+			)
+		case *pb.AgentEvent_SessionStatus:
+			eventType = "session_status"
+			sm.logger.Warn("send channel full, dropping event",
+				"event_type", eventType,
+				"session_id", e.SessionStatus.GetSessionId(),
+				"status", e.SessionStatus.GetStatus(),
+			)
+		default:
+			sm.logger.Warn("send channel full, dropping event",
+				"event_type", fmt.Sprintf("%T", evt.GetEvent()),
+			)
+		}
 	}
 }
 
