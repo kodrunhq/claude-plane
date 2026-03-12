@@ -46,9 +46,9 @@ export function useEventStream() {
               queryClient.invalidateQueries({ queryKey: ['machines'] });
               break;
             case 'run.step.status': {
-              const p = msg.payload as { stepId?: string; status?: string; sessionId?: string };
-              if (p.stepId && p.status) {
-                useRunStore.getState().updateStepStatus(p.stepId, p.status, p.sessionId);
+              const p = msg.payload as { runId?: string; stepId?: string; status?: string; sessionId?: string };
+              if (p.runId && p.stepId && p.status) {
+                useRunStore.getState().updateStepStatus(p.runId, p.stepId, p.status, p.sessionId);
               }
               queryClient.invalidateQueries({ queryKey: ['runs'] });
               break;

@@ -103,30 +103,41 @@ func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDepen
 // Uses a background context since runs outlive the triggering HTTP request.
 func (d *DAGRunner) Start(_ context.Context) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-
 	d.ctx, d.cancel = context.WithCancel(context.Background())
 
+	var toLaunch []store.RunStep
 	for stepID, deg := range d.inDegree {
 		if deg == 0 {
 			rs := d.steps[stepID]
 			if rs.Status == "pending" {
-				d.launchStep(rs)
+				rs.Status = "running"
+				d.updateRunStepInDB(rs.RunStepID, "running", "", 0)
+				toLaunch = append(toLaunch, *rs)
 			}
 		}
+	}
+	ctx := d.ctx
+	d.mu.Unlock()
+
+	for _, step := range toLaunch {
+		d.executor.ExecuteStep(ctx, step, d.OnStepCompleted)
 	}
 }
 
 // OnStepCompleted is called when a step finishes execution.
 // Thread-safe: uses mutex to serialize state mutations.
+// Executor calls are made outside the lock to prevent deadlocks.
 func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 
 	rs, ok := d.steps[stepID]
 	if !ok {
+		d.mu.Unlock()
 		return
 	}
+
+	var toLaunch []store.RunStep
+	var runComplete func()
 
 	if exitCode != 0 {
 		rs.Status = "failed"
@@ -145,7 +156,13 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 			}
 			d.cancel()
 			if d.onRunComplete != nil {
-				d.onRunComplete(d.runID, "failed")
+				cb := d.onRunComplete
+				runID := d.runID
+				runComplete = func() { cb(runID, "failed") }
+			}
+			d.mu.Unlock()
+			if runComplete != nil {
+				runComplete()
 			}
 			return
 		}
@@ -161,34 +178,41 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	// Check if all steps are done
 	if d.completed == d.total {
 		if d.onRunComplete != nil {
-			d.onRunComplete(d.runID, "completed")
+			cb := d.onRunComplete
+			runID := d.runID
+			runComplete = func() { cb(runID, "completed") }
+		}
+		d.mu.Unlock()
+		if runComplete != nil {
+			runComplete()
 		}
 		return
 	}
 
-	// Unlock dependents
+	// Collect ready dependents
+	ctx := d.ctx
 	for _, depID := range d.dependents[stepID] {
 		d.inDegree[depID]--
 		if d.inDegree[depID] == 0 {
 			depRS := d.steps[depID]
 			if depRS != nil && depRS.Status == "pending" {
-				d.launchStep(depRS)
+				depRS.Status = "running"
+				d.updateRunStepInDB(depRS.RunStepID, "running", "", 0)
+				toLaunch = append(toLaunch, *depRS)
 			}
 		}
+	}
+	d.mu.Unlock()
+
+	// Launch outside the lock to prevent deadlocks
+	for _, step := range toLaunch {
+		d.executor.ExecuteStep(ctx, step, d.OnStepCompleted)
 	}
 }
 
 // Cancel stops the DAGRunner context.
 func (d *DAGRunner) Cancel() {
 	d.cancel()
-}
-
-// launchStep marks a step as running and executes it. Must be called with mu held.
-func (d *DAGRunner) launchStep(rs *store.RunStep) {
-	rs.Status = "running"
-	d.updateRunStepInDB(rs.RunStepID, "running", "", 0)
-	stepCopy := *rs
-	d.executor.ExecuteStep(d.ctx, stepCopy, d.OnStepCompleted)
 }
 
 // updateRunStepInDB persists run step status changes. No-op if store is nil (unit tests).

@@ -92,7 +92,7 @@ type RunStep struct {
 	WorkingDirSnapshot string     `json:"working_dir_snapshot"`
 	CommandSnapshot    string     `json:"command_snapshot"`
 	ArgsSnapshot       string     `json:"args_snapshot"`
-	OnFailure          string     `json:"on_failure"`
+	OnFailure          string     `json:"on_failure,omitempty"`
 }
 
 // JobDetail is a job with its steps and dependency edges.
