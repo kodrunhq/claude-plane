@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useParams } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
@@ -8,7 +9,9 @@ import { MachinesPage } from './views/MachinesPage.tsx'
 import { JobsPage } from './views/JobsPage.tsx'
 import { JobEditor } from './views/JobEditor.tsx'
 import { RunDetail } from './views/RunDetail.tsx'
+import { LoginPage } from './views/LoginPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
+import { useAuthStore } from './stores/auth.ts'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +28,31 @@ function TerminalRoute() {
 }
 
 function App() {
+  const user = useAuthStore((s) => s.user)
+  const loading = useAuthStore((s) => s.loading)
+  const checkSession = useAuthStore((s) => s.checkSession)
+
+  useEffect(() => {
+    checkSession()
+  }, [checkSession])
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-bg-primary">
+        <span className="text-text-secondary text-sm font-mono">Loading...</span>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <>
+        <LoginPage />
+        <Toaster theme="dark" />
+      </>
+    )
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

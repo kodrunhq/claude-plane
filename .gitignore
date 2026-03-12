@@ -37,3 +37,13 @@ go.work.sum
 # Frontend build output (embedded into server binary)
 internal/server/frontend/dist/*
 !internal/server/frontend/dist/.gitkeep
+
+# Runtime data (quickstart, local dev)
+data/
+ca/
+server-cert/
+agent-cert/
+agent-data/
+*.toml
+*.db
+*.db-journal
