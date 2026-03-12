@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -406,7 +407,28 @@ func (sm *SessionManager) sendEvent(evt *pb.AgentEvent) {
 	select {
 	case ch <- evt:
 	default:
-		sm.logger.Warn("send channel full, dropping event")
+		// Log event type for debugging which events are being lost.
+		var eventType string
+		switch e := evt.GetEvent().(type) {
+		case *pb.AgentEvent_SessionOutput:
+			eventType = "session_output"
+			sm.logger.Warn("send channel full, dropping event",
+				"event_type", eventType,
+				"session_id", e.SessionOutput.GetSessionId(),
+				"bytes", len(e.SessionOutput.GetData()),
+			)
+		case *pb.AgentEvent_SessionStatus:
+			eventType = "session_status"
+			sm.logger.Warn("send channel full, dropping event",
+				"event_type", eventType,
+				"session_id", e.SessionStatus.GetSessionId(),
+				"status", e.SessionStatus.GetStatus(),
+			)
+		default:
+			sm.logger.Warn("send channel full, dropping event",
+				"event_type", fmt.Sprintf("%T", evt.GetEvent()),
+			)
+		}
 	}
 }
 
