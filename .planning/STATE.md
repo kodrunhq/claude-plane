@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 3 of 6 (Server Core)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-12 -- Completed 03-01-PLAN.md
+Last activity: 2026-03-12 -- Completed 03-02-PLAN.md
 
-Progress: [████░░░░░░] 35%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 4.3min
-- Total execution time: 0.50 hours
+- Total plans completed: 8
+- Average duration: 4.5min
+- Total execution time: 0.60 hours
 
 **By Phase:**
 
@@ -45,14 +45,14 @@ Progress: [████░░░░░░] 35%
 |-------|-------|-------|----------|
 | 01-foundation | 4 | 13min | 3.3min |
 | 02-agent-core | 2 | 14min | 7.0min |
-| 03-server-core | 1 | 4min | 4.0min |
+| 03-server-core | 2 | 10min | 5.0min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 2min, 7min, 8min, 4min
+- Last 5 plans: 2min, 7min, 8min, 4min, 6min
 - Trend: Stable
 
 *Updated after each plan completion*
-| Phase 03 P01 | 4min | 2 tasks | 8 files |
+| Phase 03 P02 | 6min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -74,6 +74,8 @@ Recent decisions affecting current work:
 - [Phase 02]: readLoop signals readDone, waitForExit closes outputCh after status set
 - [Phase 03-server-core]: TokenRevoker interface decouples JWT service from concrete Blocklist for testability
 - [Phase 03-server-core]: Blocklist uses RWMutex with in-memory map backed by SQLite for fast lookups with persistence
+- [Phase 03-server-core]: MachineStore interface in connmgr for testable store dependency via mock
+- [Phase 03-server-core]: Connection manager performs DB operations outside mutex lock to prevent lock contention
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:45:48Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-12T09:47:13Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
