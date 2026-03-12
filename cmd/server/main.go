@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -168,8 +169,8 @@ func newSeedAdminCmd() *cobra.Command {
 					return fmt.Errorf("reading password file: %w", err)
 				}
 				password = strings.TrimSpace(string(data))
-			} else {
-				// Read from stdin without echo
+			} else if term.IsTerminal(int(os.Stdin.Fd())) {
+				// Interactive TTY: read without echo
 				fmt.Fprint(os.Stderr, "Enter admin password: ")
 				pwBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Fprintln(os.Stderr) // newline after hidden input
@@ -177,6 +178,13 @@ func newSeedAdminCmd() *cobra.Command {
 					return fmt.Errorf("reading password from stdin: %w", err)
 				}
 				password = strings.TrimSpace(string(pwBytes))
+			} else {
+				// Non-TTY (piped/redirected): read from stdin
+				data, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return fmt.Errorf("reading password from stdin: %w", err)
+				}
+				password = strings.TrimSpace(string(data))
 			}
 
 			if len(password) < 8 {
