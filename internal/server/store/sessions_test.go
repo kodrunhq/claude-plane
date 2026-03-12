@@ -13,10 +13,15 @@ func TestSessionCRUD(t *testing.T) {
 	}
 	defer s.Close()
 
+	// Create machine for foreign key constraint
+	if err := s.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+
 	sess := &Session{
 		SessionID:  "sess-001",
 		MachineID:  "machine-a",
-		UserID:     "user-1",
+		UserID:     "",
 		Command:    "claude",
 		WorkingDir: "/tmp",
 		Status:     "created",
@@ -38,8 +43,8 @@ func TestSessionCRUD(t *testing.T) {
 	if got.MachineID != "machine-a" {
 		t.Errorf("MachineID = %q, want %q", got.MachineID, "machine-a")
 	}
-	if got.UserID != "user-1" {
-		t.Errorf("UserID = %q, want %q", got.UserID, "user-1")
+	if got.UserID != "" {
+		t.Errorf("UserID = %q, want %q", got.UserID, "")
 	}
 	if got.Command != "claude" {
 		t.Errorf("Command = %q, want %q", got.Command, "claude")
@@ -97,7 +102,7 @@ func TestListSessions(t *testing.T) {
 		sess := &Session{
 			SessionID:  "sess-" + string(rune('a'+i)),
 			MachineID:  "machine-a",
-			UserID:     "user-1",
+			UserID:     "",
 			Command:    "claude",
 			WorkingDir: "/tmp",
 			Status:     "created",
@@ -137,7 +142,7 @@ func TestListSessionsByMachine(t *testing.T) {
 		sess := &Session{
 			SessionID:  "sess-" + string(rune('a'+i)),
 			MachineID:  mid,
-			UserID:     "user-1",
+			UserID:     "",
 			Command:    "claude",
 			WorkingDir: "/tmp",
 			Status:     "created",
