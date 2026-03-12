@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/claudeplane/claude-plane/internal/server/httputil"
 	"github.com/claudeplane/claude-plane/internal/server/orchestrator"
 	"github.com/claudeplane/claude-plane/internal/server/store"
 )
@@ -75,18 +76,14 @@ func RegisterJobRoutes(r chi.Router, h *JobHandler) {
 	r.Delete("/api/v1/jobs/{jobID}/steps/{stepID}/deps/{depID}", h.RemoveDependency)
 }
 
-// writeJSON writes a JSON response with the given status code.
+// writeJSON delegates to the shared httputil.WriteJSON helper.
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
-	}
+	httputil.WriteJSON(w, status, data)
 }
 
-// writeError writes a JSON error response.
+// writeError delegates to the shared httputil.WriteError helper.
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	httputil.WriteError(w, status, message)
 }
 
 // createJobRequest is the JSON body for POST /api/v1/jobs.
@@ -230,7 +227,13 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		req.Command = "claude"
 	}
 
-	step, err := h.store.CreateStep(r.Context(), detail.Job.JobID, req.Name, req.Prompt, req.MachineID, req.WorkingDir, req.Command, req.Args, req.TimeoutSeconds, req.SortOrder, req.OnFailure)
+	step, err := h.store.CreateStep(r.Context(), store.CreateStepParams{
+		JobID: detail.Job.JobID, Name: req.Name, Prompt: req.Prompt,
+		MachineID: req.MachineID, WorkingDir: req.WorkingDir,
+		Command: req.Command, Args: req.Args,
+		TimeoutSeconds: req.TimeoutSeconds, SortOrder: req.SortOrder,
+		OnFailure: req.OnFailure,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -270,7 +273,13 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		req.Command = "claude"
 	}
 
-	err := h.store.UpdateStep(r.Context(), stepID, req.Name, req.Prompt, req.MachineID, req.WorkingDir, req.Command, req.Args, req.TimeoutSeconds, req.SortOrder, req.OnFailure)
+	err := h.store.UpdateStep(r.Context(), store.UpdateStepParams{
+		StepID: stepID, Name: req.Name, Prompt: req.Prompt,
+		MachineID: req.MachineID, WorkingDir: req.WorkingDir,
+		Command: req.Command, Args: req.Args,
+		TimeoutSeconds: req.TimeoutSeconds, SortOrder: req.SortOrder,
+		OnFailure: req.OnFailure,
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "step not found")

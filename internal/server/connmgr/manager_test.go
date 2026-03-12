@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 // mockStore records calls for assertions.
@@ -225,7 +227,7 @@ func TestRegister_DBFailureDoesNotDeleteNewerConnection(t *testing.T) {
 	agent1 := &ConnectedAgent{
 		MachineID:   "m1",
 		Cancel:      func() {},
-		SendCommand: func(cmd interface{}) error { return nil },
+		SendCommand: func(cmd *pb.ServerCommand) error { return nil },
 	}
 	if err := cm.Register("m1", agent1); err != nil {
 		t.Fatalf("Register agent1: %v", err)
@@ -235,7 +237,7 @@ func TestRegister_DBFailureDoesNotDeleteNewerConnection(t *testing.T) {
 	agent2 := &ConnectedAgent{
 		MachineID:   "m1",
 		Cancel:      func() {},
-		SendCommand: func(cmd interface{}) error { return fmt.Errorf("agent2") },
+		SendCommand: func(cmd *pb.ServerCommand) error { return fmt.Errorf("agent2") },
 	}
 	if err := cm.Register("m1", agent2); err == nil {
 		t.Fatal("expected error from Register agent2")

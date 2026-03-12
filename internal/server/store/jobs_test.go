@@ -132,7 +132,7 @@ func TestJobStore_StepCRUD(t *testing.T) {
 
 	job, _ := s.CreateJob(ctx, "Job", "", "")
 
-	step, err := s.CreateStep(ctx, job.JobID, "Step 1", "Do something", "", "/tmp", "claude", "", 0, 0, "fail_run")
+	step, err := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "Step 1", Prompt: "Do something", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	if err != nil {
 		t.Fatalf("CreateStep: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestJobStore_StepCRUD(t *testing.T) {
 	}
 
 	// Update step
-	err = s.UpdateStep(ctx, step.StepID, "Step 1 Updated", "New prompt", "", "/home", "claude", "--flag", 0, 0, "fail_run")
+	err = s.UpdateStep(ctx, UpdateStepParams{StepID: step.StepID, Name: "Step 1 Updated", Prompt: "New prompt", MachineID: "", WorkingDir: "/home", Command: "claude", Args: "--flag", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	if err != nil {
 		t.Fatalf("UpdateStep: %v", err)
 	}
@@ -173,8 +173,8 @@ func TestJobStore_Dependencies(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "prompt", "", "", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "prompt", "", "", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
 	// Add dependency: B depends on A
 	err := s.AddDependency(ctx, stepB.StepID, stepA.StepID)
@@ -224,8 +224,8 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 	}
 
 	job, _ := s.CreateJob(ctx, "Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "do A", "machine-a", "/work", "claude", "--verbose", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "do B", "machine-a", "/work2", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "machine-a", WorkingDir: "/work", Command: "claude", Args: "--verbose", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "machine-a", WorkingDir: "/work2", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
 	// Create run
 	run, err := s.CreateRun(ctx, job.JobID, "manual")
@@ -316,8 +316,8 @@ func TestJobStore_DeleteJobCascades(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "prompt", "", "", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "prompt", "", "", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	run, _ := s.CreateRun(ctx, job.JobID, "manual")

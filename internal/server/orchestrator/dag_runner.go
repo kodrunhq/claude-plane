@@ -204,15 +204,15 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		d.inDegree[depID]--
 		if d.inDegree[depID] == 0 {
 			depRS := d.steps[depID]
-			if depRS != nil && depRS.Status == "pending" {
+			if depRS != nil && depRS.Status == store.StatusPending {
 				if stepFailed {
 					// Skip dependents of failed steps
-					depRS.Status = "skipped"
-					d.updateRunStepInDB(depRS.RunStepID, "skipped", "", 0)
+					depRS.Status = store.StatusSkipped
+					d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
 					d.completed++
 				} else {
-					depRS.Status = "running"
-					d.updateRunStepInDB(depRS.RunStepID, "running", "", 0)
+					depRS.Status = store.StatusRunning
+					d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
 					toLaunch = append(toLaunch, *depRS)
 				}
 			}

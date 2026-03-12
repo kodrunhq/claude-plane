@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 // MachineStore is the subset of store operations needed by ConnectionManager.
@@ -30,7 +32,7 @@ type ConnectedAgent struct {
 	// SendCommand sends a server command to the agent via the gRPC stream.
 	// Set by the gRPC service when registering the agent. Callers (e.g.,
 	// session handlers) use this to dispatch commands without knowing gRPC internals.
-	SendCommand func(cmd interface{}) error
+	SendCommand func(cmd *pb.ServerCommand) error
 }
 
 // AgentInfo is a public DTO for REST API responses.

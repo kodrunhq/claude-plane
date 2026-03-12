@@ -26,8 +26,8 @@ func TestOrchestrator_CreateRun(t *testing.T) {
 
 	// Set up job with steps and dependencies
 	job, _ := s.CreateJob(ctx, "Test Job", "desc", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "do A", "", "/tmp", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "do B", "", "/tmp", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	mock := newMockExecutor()
@@ -61,9 +61,9 @@ func TestOrchestrator_CreateRun_CycleRejected(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Cycle Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "p", "", "", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
-	stepC, _ := s.CreateStep(ctx, job.JobID, "C", "p", "", "", "claude", "", 0, 2, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
+	stepC, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "C", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 2, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 	_ = s.AddDependency(ctx, stepC.StepID, stepB.StepID)
 	_ = s.AddDependency(ctx, stepA.StepID, stepC.StepID)
@@ -82,8 +82,8 @@ func TestOrchestrator_CancelRun(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Cancel Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "p", "", "", "claude", "", 0, 0, "fail_run")
-	s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
 	mock := newMockExecutor()
 	orch := NewOrchestrator(context.Background(), s, mock)
@@ -109,8 +109,8 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	ctx := context.Background()
 
 	job, _ := s.CreateJob(ctx, "Retry Job", "", "")
-	stepA, _ := s.CreateStep(ctx, job.JobID, "A", "p", "", "", "claude", "", 0, 0, "fail_run")
-	stepB, _ := s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
+	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	mock := newMockExecutor()
@@ -156,8 +156,8 @@ func TestOrchestrator_OnStepCompleted_ExternalAPI(t *testing.T) {
 	// Test 2: OnStepCompleted routes to the correct active DAGRunner
 	t.Run("routes_to_active_runner", func(t *testing.T) {
 		job, _ := s.CreateJob(ctx, "OnStepCompleted Job", "", "")
-		stepA, _ := s.CreateStep(ctx, job.JobID, "A", "do A", "", "/tmp", "claude", "", 0, 0, "fail_run")
-		stepB, _ := s.CreateStep(ctx, job.JobID, "B", "do B", "", "/tmp", "claude", "", 0, 1, "fail_run")
+		stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+		stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 		_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 		mock := newMockExecutor()

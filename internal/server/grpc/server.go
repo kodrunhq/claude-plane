@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -155,14 +154,10 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 
 	// Build a thread-safe SendCommand function using a mutex to protect stream.Send.
 	var sendMu sync.Mutex
-	sendCommand := func(cmd interface{}) error {
-		serverCmd, ok := cmd.(*pb.ServerCommand)
-		if !ok {
-			return fmt.Errorf("expected *pb.ServerCommand, got %T", cmd)
-		}
+	sendCommand := func(cmd *pb.ServerCommand) error {
 		sendMu.Lock()
 		defer sendMu.Unlock()
-		return stream.Send(serverCmd)
+		return stream.Send(cmd)
 	}
 
 	// Register with the DB-backed connection manager if available.

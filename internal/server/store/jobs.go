@@ -13,6 +13,34 @@ import (
 // ErrNotFound is returned when a requested resource does not exist.
 var ErrNotFound = errors.New("not found")
 
+// CreateStepParams holds parameters for creating a step.
+type CreateStepParams struct {
+	JobID          string
+	Name           string
+	Prompt         string
+	MachineID      string
+	WorkingDir     string
+	Command        string
+	Args           string
+	TimeoutSeconds int
+	SortOrder      int
+	OnFailure      string
+}
+
+// UpdateStepParams holds parameters for updating a step.
+type UpdateStepParams struct {
+	StepID         string
+	Name           string
+	Prompt         string
+	MachineID      string
+	WorkingDir     string
+	Command        string
+	Args           string
+	TimeoutSeconds int
+	SortOrder      int
+	OnFailure      string
+}
+
 // JobStoreIface defines the interface for job-related database operations.
 // Used by the orchestrator package for dependency injection and testability.
 type JobStoreIface interface {
@@ -22,8 +50,8 @@ type JobStoreIface interface {
 	ListJobsByUser(ctx context.Context, userID string) ([]Job, error)
 	DeleteJob(ctx context.Context, jobID string) error
 	UpdateJob(ctx context.Context, jobID, name, description string) (*Job, error)
-	CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error)
-	UpdateStep(ctx context.Context, stepID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) error
+	CreateStep(ctx context.Context, p CreateStepParams) (*Step, error)
+	UpdateStep(ctx context.Context, p UpdateStepParams) error
 	DeleteStep(ctx context.Context, stepID string) error
 	AddDependency(ctx context.Context, stepID, dependsOn string) error
 	RemoveDependency(ctx context.Context, stepID, dependsOn string) error
@@ -287,44 +315,44 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, name, description string) 
 }
 
 // CreateStep inserts a step for a job and returns it.
-func (s *Store) CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error) {
+func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, error) {
 	id := uuid.New().String()
 	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO steps (step_id, job_id, name, prompt, machine_id, working_dir, command, args, timeout_seconds, sort_order, on_failure)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, jobID, name, prompt, nullIfEmpty(machineID), workingDir, command, args, timeoutSeconds, sortOrder, onFailure,
+		id, p.JobID, p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create step: %w", err)
 	}
 	return &Step{
 		StepID:         id,
-		JobID:          jobID,
-		Name:           name,
-		Prompt:         prompt,
-		MachineID:      machineID,
-		WorkingDir:     workingDir,
-		Command:        command,
-		Args:           args,
-		TimeoutSeconds: timeoutSeconds,
-		SortOrder:      sortOrder,
-		OnFailure:      onFailure,
+		JobID:          p.JobID,
+		Name:           p.Name,
+		Prompt:         p.Prompt,
+		MachineID:      p.MachineID,
+		WorkingDir:     p.WorkingDir,
+		Command:        p.Command,
+		Args:           p.Args,
+		TimeoutSeconds: p.TimeoutSeconds,
+		SortOrder:      p.SortOrder,
+		OnFailure:      p.OnFailure,
 	}, nil
 }
 
 // UpdateStep modifies step fields.
-func (s *Store) UpdateStep(ctx context.Context, stepID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) error {
+func (s *Store) UpdateStep(ctx context.Context, p UpdateStepParams) error {
 	result, err := s.writer.ExecContext(ctx,
 		`UPDATE steps SET name = ?, prompt = ?, machine_id = ?, working_dir = ?, command = ?, args = ?,
 		 timeout_seconds = ?, sort_order = ?, on_failure = ? WHERE step_id = ?`,
-		name, prompt, nullIfEmpty(machineID), workingDir, command, args, timeoutSeconds, sortOrder, onFailure, stepID,
+		p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure, p.StepID,
 	)
 	if err != nil {
 		return fmt.Errorf("update step: %w", err)
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("step %s: %w", stepID, ErrNotFound)
+		return fmt.Errorf("step %s: %w", p.StepID, ErrNotFound)
 	}
 	return nil
 }

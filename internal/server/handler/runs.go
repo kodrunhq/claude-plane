@@ -211,7 +211,7 @@ func (h *RunHandler) RetryStep(w http.ResponseWriter, r *http.Request) {
 	for _, rs := range detail.RunSteps {
 		if rs.StepID == stepID {
 			found = true
-			if rs.Status != "failed" && rs.Status != "skipped" && rs.Status != "cancelled" {
+			if rs.Status != store.StatusFailed && rs.Status != store.StatusSkipped && rs.Status != store.StatusCancelled {
 				writeError(w, http.StatusBadRequest, "step is not in a retryable state (must be failed, skipped, or cancelled)")
 				return
 			}
