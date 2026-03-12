@@ -45,7 +45,7 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 // NewRouter creates a chi router with all API routes configured.
 // Public routes (register, login) require no authentication.
 // Protected routes (logout, machines, sessions) require a valid JWT Bearer token.
-// The WebSocket route uses query-param authentication (WebSocket can't send headers).
+// WebSocket routes support first-message auth (preferred) and query-param auth (deprecated).
 func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
 	r := chi.NewRouter()
 
@@ -57,7 +57,7 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeadersMiddleware)
 
-	// WebSocket routes — use query param auth, not JWT middleware
+	// WebSocket routes — auth handled inside handlers (first-message or query param)
 	if wsHandler != nil {
 		r.Get("/ws/terminal/{sessionID}", wsHandler)
 	}

@@ -147,13 +147,15 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 	defer reg.Unsubscribe(sessionID, ch)
 
 	// Attach session on the agent: replays scrollback and enables live relay.
-	_ = sendToAgent(cm, machineID, &pb.ServerCommand{
+	if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 		Command: &pb.ServerCommand_AttachSession{
 			AttachSession: &pb.AttachSessionCmd{
 				SessionId: sessionID,
 			},
 		},
-	})
+	}); err != nil {
+		logger.Warn("failed to attach session on agent", "session_id", sessionID, "machine_id", machineID, "error", err)
+	}
 
 	// Writer goroutine: reads from subscriber channel and writes to WebSocket.
 	go func() {
