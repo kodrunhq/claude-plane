@@ -54,7 +54,7 @@ Detailed architecture specs live in `docs/internal/product/`:
 # Backend
 go build -o claude-plane-server ./cmd/server
 go build -o claude-plane-agent ./cmd/agent
-go test ./...
+go test -race ./...
 
 # Frontend (inside web/ directory)
 npm install
