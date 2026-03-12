@@ -108,8 +108,8 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 }
 
 // CommandStream handles the bidirectional streaming RPC.
-// It holds the stream open, receiving agent events and dispatching server commands.
-// For now, received events are logged. Command dispatch will be wired in Plan 02.
+// It holds the stream open, receiving agent events and (in a future server-core phase) dispatching server commands.
+// For now, received events are logged; server-side command dispatch is intentionally not implemented yet.
 func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEvent, pb.ServerCommand]) error {
 	machineID, err := MachineIDFromContext(stream.Context())
 	if err != nil {
