@@ -15,8 +15,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 )
+
+// validMachineID matches alphanumeric IDs with hyphens/underscores, 1-64 chars,
+// starting with an alphanumeric character.
+var validMachineID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
 // GenerateCA creates a self-signed CA certificate and private key in outDir.
 // Files written: ca.pem (certificate), ca-key.pem (ECDSA P-256 private key).
@@ -113,6 +118,10 @@ func IssueServerCert(caDir, outDir string, hostnames []string) error {
 // The cert has CN=machineID for agent identity. Validity is 2 years.
 // ExtKeyUsage is ClientAuth.
 func IssueAgentCert(caDir, outDir, machineID string) error {
+	if !validMachineID.MatchString(machineID) {
+		return fmt.Errorf("invalid machineID %q: must match %s", machineID, validMachineID.String())
+	}
+
 	caCert, caKey, err := loadCA(caDir)
 	if err != nil {
 		return err

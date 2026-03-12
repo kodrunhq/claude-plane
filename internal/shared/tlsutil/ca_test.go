@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -193,6 +194,47 @@ func TestIssueAgentCert(t *testing.T) {
 
 	if cert.SerialNumber.Cmp(big.NewInt(1)) <= 0 {
 		t.Error("serial number should be random")
+	}
+}
+
+func TestIssueAgentCert_MachineIDValidation(t *testing.T) {
+	caDir := t.TempDir()
+	if err := GenerateCA(caDir); err != nil {
+		t.Fatalf("GenerateCA failed: %v", err)
+	}
+
+	longID := strings.Repeat("a", 65) // 65 chars exceeds 64 limit
+
+	tests := []struct {
+		name      string
+		machineID string
+		wantErr   bool
+	}{
+		{"valid simple", "worker-node-42", false},
+		{"valid with underscores", "my_worker_01", false},
+		{"valid single char", "a", false},
+		{"valid max length 64", strings.Repeat("a", 64), false},
+		{"path traversal", "../etc/passwd", true},
+		{"empty", "", true},
+		{"too long 65 chars", longID, true},
+		{"special chars", "worker@node!#", true},
+		{"starts with hyphen", "-worker", true},
+		{"starts with underscore", "_worker", true},
+		{"contains spaces", "worker node", true},
+		{"contains slash", "worker/node", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outDir := t.TempDir()
+			err := IssueAgentCert(caDir, outDir, tt.machineID)
+			if tt.wantErr && err == nil {
+				t.Errorf("expected error for machineID %q, got nil", tt.machineID)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error for machineID %q: %v", tt.machineID, err)
+			}
+		})
 	}
 }
 
