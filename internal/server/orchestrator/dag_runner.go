@@ -3,9 +3,10 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // StepExecutor launches a step and calls onComplete when it finishes.
@@ -219,23 +220,36 @@ func (d *DAGRunner) Cancel() {
 // updateRunStepInDB persists run step status changes. No-op if store is nil (unit tests).
 // processReadyDependents decrements in-degree for dependents of stepID.
 // If stepFailed, skips ready dependents and propagates transitively.
+// Uses an iterative work queue to avoid stack overflow on deep chains.
 // Must be called with d.mu held.
 func (d *DAGRunner) processReadyDependents(stepID string, stepFailed bool, toLaunch *[]store.RunStep) {
-	for _, depID := range d.dependents[stepID] {
-		d.inDegree[depID]--
-		if d.inDegree[depID] == 0 {
-			depRS := d.steps[depID]
-			if depRS != nil && depRS.Status == store.StatusPending {
-				if stepFailed {
-					depRS.Status = store.StatusSkipped
-					d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
-					d.completed++
-					// Propagate skip transitively to this step's dependents
-					d.processReadyDependents(depID, true, toLaunch)
-				} else {
-					depRS.Status = store.StatusRunning
-					d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
-					*toLaunch = append(*toLaunch, *depRS)
+	type workItem struct {
+		stepID string
+		failed bool
+	}
+
+	queue := []workItem{{stepID: stepID, failed: stepFailed}}
+
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+
+		for _, depID := range d.dependents[item.stepID] {
+			d.inDegree[depID]--
+			if d.inDegree[depID] == 0 {
+				depRS := d.steps[depID]
+				if depRS != nil && depRS.Status == store.StatusPending {
+					if item.failed {
+						depRS.Status = store.StatusSkipped
+						d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
+						d.completed++
+						// Enqueue to propagate skip transitively
+						queue = append(queue, workItem{stepID: depID, failed: true})
+					} else {
+						depRS.Status = store.StatusRunning
+						d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
+						*toLaunch = append(*toLaunch, *depRS)
+					}
 				}
 			}
 		}
@@ -246,5 +260,7 @@ func (d *DAGRunner) updateRunStepInDB(runStepID, status, sessionID string, exitC
 	if d.store == nil {
 		return
 	}
-	_ = d.store.UpdateRunStepStatus(d.ctx, runStepID, status, sessionID, exitCode)
+	if err := d.store.UpdateRunStepStatus(d.ctx, runStepID, status, sessionID, exitCode); err != nil {
+		slog.Warn("failed to update run step status", "error", err, "run_step_id", runStepID, "status", status)
+	}
 }

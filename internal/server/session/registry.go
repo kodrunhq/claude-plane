@@ -5,6 +5,7 @@ package session
 import (
 	"log/slog"
 	"sync"
+	"sync/atomic"
 )
 
 // SubscriberMessage wraps data sent to WebSocket subscribers.
@@ -16,10 +17,19 @@ type SubscriberMessage struct {
 
 // Registry routes terminal output from agents to browser WebSocket subscribers.
 // Multiple subscribers per session are supported (e.g., multiple browser tabs).
-// Flow control uses buffered channels with a drop policy for slow consumers.
+//
+// Design trade-off: Flow control uses buffered channels with a non-blocking drop
+// policy for slow consumers. This prevents a single slow subscriber (e.g. a
+// browser tab on a congested network) from blocking output delivery to all other
+// subscribers and, critically, from back-pressuring the agent PTY read loop.
+// The cost is that a slow consumer may miss terminal data, leading to corrupted
+// terminal state in that tab. Drops are logged at Warn level with byte counts
+// and cumulative drop counters so operators can detect the problem and
+// investigate the slow consumer.
 type Registry struct {
 	mu          sync.RWMutex
 	subscribers map[string]map[chan SubscriberMessage]struct{}
+	dropped     map[chan SubscriberMessage]*atomic.Int64
 	logger      *slog.Logger
 }
 
@@ -30,6 +40,7 @@ func NewRegistry(logger *slog.Logger) *Registry {
 	}
 	return &Registry{
 		subscribers: make(map[string]map[chan SubscriberMessage]struct{}),
+		dropped:     make(map[chan SubscriberMessage]*atomic.Int64),
 		logger:      logger,
 	}
 }
@@ -44,6 +55,7 @@ func (r *Registry) Subscribe(sessionID string) chan SubscriberMessage {
 		r.subscribers[sessionID] = make(map[chan SubscriberMessage]struct{})
 	}
 	r.subscribers[sessionID][ch] = struct{}{}
+	r.dropped[ch] = &atomic.Int64{}
 	return ch
 }
 
@@ -57,6 +69,7 @@ func (r *Registry) Unsubscribe(sessionID string, ch chan SubscriberMessage) {
 			delete(r.subscribers, sessionID)
 		}
 	}
+	delete(r.dropped, ch)
 	close(ch)
 }
 
@@ -70,7 +83,13 @@ func (r *Registry) Publish(sessionID string, data []byte) {
 		select {
 		case ch <- SubscriberMessage{Data: data, IsControl: false}:
 		default:
-			r.logger.Debug("dropped message for slow subscriber", "session_id", sessionID)
+			counter := r.dropped[ch]
+			total := counter.Add(1)
+			r.logger.Warn("dropped terminal data for slow subscriber",
+				"session_id", sessionID,
+				"bytes", len(data),
+				"total_dropped", total,
+			)
 		}
 	}
 }
@@ -84,7 +103,13 @@ func (r *Registry) PublishControl(sessionID string, msg []byte) {
 		select {
 		case ch <- SubscriberMessage{Data: msg, IsControl: true}:
 		default:
-			r.logger.Debug("dropped control message for slow subscriber", "session_id", sessionID)
+			counter := r.dropped[ch]
+			total := counter.Add(1)
+			r.logger.Warn("dropped control message for slow subscriber",
+				"session_id", sessionID,
+				"bytes", len(msg),
+				"total_dropped", total,
+			)
 		}
 	}
 }
@@ -94,4 +119,15 @@ func (r *Registry) SubscriberCount(sessionID string) int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.subscribers[sessionID])
+}
+
+// DroppedCount returns the cumulative number of messages dropped for a
+// subscriber channel. Returns 0 if the channel is not registered.
+func (r *Registry) DroppedCount(ch chan SubscriberMessage) int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if counter, ok := r.dropped[ch]; ok {
+		return counter.Load()
+	}
+	return 0
 }

@@ -3,15 +3,35 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
 
 // AgentConfig is the top-level configuration for the claude-plane agent.
 type AgentConfig struct {
-	Server ServerConnConfig `toml:"server"`
-	TLS    TLSConfig        `toml:"tls"`
-	Agent  AgentSettings    `toml:"agent"`
+	Server   ServerConnConfig `toml:"server"`
+	TLS      TLSConfig        `toml:"tls"`
+	Agent    AgentSettings    `toml:"agent"`
+	Shutdown ShutdownConfig   `toml:"shutdown"`
+}
+
+// ShutdownConfig controls graceful shutdown behavior.
+type ShutdownConfig struct {
+	Timeout string `toml:"timeout"`
+}
+
+// ParseTimeout parses the Timeout string as a time.Duration.
+// Returns 15 seconds as the default if Timeout is empty.
+func (s *ShutdownConfig) ParseTimeout() (time.Duration, error) {
+	if s.Timeout == "" {
+		return 15 * time.Second, nil
+	}
+	d, err := time.ParseDuration(s.Timeout)
+	if err != nil {
+		return 0, fmt.Errorf("parse shutdown.timeout %q: %w", s.Timeout, err)
+	}
+	return d, nil
 }
 
 // ServerConnConfig holds the server connection address.

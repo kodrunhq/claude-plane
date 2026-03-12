@@ -4,7 +4,7 @@ package claudeplane.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1;claudeplanev1";
+option go_package = "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1;claudeplanev1";
 
 // AgentService defines the gRPC interface between agents and the server.
 // Agents dial in to the server; the server never dials out.

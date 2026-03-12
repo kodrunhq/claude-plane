@@ -8,7 +8,7 @@ claude-plane is a self-hosted control plane for managing interactive Claude CLI 
 
 - **`claude-plane-server`** — Control plane. Serves the frontend, manages sessions, orchestrates jobs, accepts inbound gRPC connections from agents. Uses SQLite for storage.
 - **`claude-plane-agent`** — Runs on worker machines. Manages Claude CLI processes in PTYs, buffers terminal output, maintains persistent gRPC connection to the server.
-- **Frontend** — React 18 + TypeScript SPA served by the server binary (embedded via `go:embed`). Two modes: Command Center (dashboard) and Workbench (IDE-like terminal view).
+- **Frontend** — React 19 + TypeScript SPA served by the server binary (embedded via `go:embed`). Two modes: Command Center (dashboard) and Workbench (IDE-like terminal view).
 
 ## Architecture Principles
 
@@ -20,7 +20,7 @@ claude-plane is a self-hosted control plane for managing interactive Claude CLI 
 ## Tech Stack
 
 - **Backend:** Go, gRPC (agent↔server), REST+WebSocket (frontend↔server), SQLite (via `modernc.org/sqlite`), mTLS for agent auth
-- **Frontend:** React 18, TypeScript, Vite, xterm.js (terminal), Zustand (state), TanStack Query (data fetching), Tailwind CSS
+- **Frontend:** React 19, TypeScript, Vite, xterm.js (terminal), Zustand (state), TanStack Query (data fetching), Tailwind CSS
 - **Protocol:** Agent↔Server uses gRPC with bidirectional streaming. Frontend↔Server uses REST for CRUD + WebSocket for real-time terminal I/O and events.
 
 ## Key Communication Patterns

@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/session"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
-	"github.com/claudeplane/claude-plane/internal/shared/tlsutil"
+	"github.com/kodrunhq/claude-plane/internal/server/session"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
-	servergrpc "github.com/claudeplane/claude-plane/internal/server/grpc"
+	servergrpc "github.com/kodrunhq/claude-plane/internal/server/grpc"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -147,39 +147,39 @@ func TestExtractMachineID_InvalidCN(t *testing.T) {
 	}
 }
 
-func TestConnectionManager_AddRemoveList(t *testing.T) {
-	cm := servergrpc.NewConnectionManager()
+func TestStreamRegistry_AddRemoveList(t *testing.T) {
+	sr := servergrpc.NewStreamRegistry()
 
-	cm.Add("nuc-01", &servergrpc.ConnectedAgent{
+	sr.Add("nuc-01", &servergrpc.StreamEntry{
 		MachineID:   "nuc-01",
 		MaxSessions: 5,
 		ConnectedAt: time.Now(),
 	})
-	cm.Add("nuc-02", &servergrpc.ConnectedAgent{
+	sr.Add("nuc-02", &servergrpc.StreamEntry{
 		MachineID:   "nuc-02",
 		MaxSessions: 3,
 		ConnectedAt: time.Now(),
 	})
 
-	agents := cm.List()
-	if len(agents) != 2 {
-		t.Fatalf("expected 2 agents, got %d", len(agents))
+	entries := sr.List()
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
 
-	a, ok := cm.Get("nuc-01")
-	if !ok || a.MachineID != "nuc-01" {
+	e, ok := sr.Get("nuc-01")
+	if !ok || e.MachineID != "nuc-01" {
 		t.Fatal("expected to find nuc-01")
 	}
 
-	_, ok = cm.Get("nuc-99")
+	_, ok = sr.Get("nuc-99")
 	if ok {
 		t.Fatal("expected not to find nuc-99")
 	}
 
-	cm.Remove("nuc-01")
-	agents = cm.List()
-	if len(agents) != 1 {
-		t.Fatalf("expected 1 agent after remove, got %d", len(agents))
+	sr.Remove("nuc-01")
+	entries = sr.List()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after remove, got %d", len(entries))
 	}
 
 	// Concurrent access safety
@@ -189,12 +189,12 @@ func TestConnectionManager_AddRemoveList(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			id := "concurrent-" + string(rune('a'+i%26))
-			cm.Add(id, &servergrpc.ConnectedAgent{
+			sr.Add(id, &servergrpc.StreamEntry{
 				MachineID:   id,
 				ConnectedAt: time.Now(),
 			})
-			cm.List()
-			cm.Remove(id)
+			sr.List()
+			sr.Remove(id)
 		}(i)
 	}
 	wg.Wait()

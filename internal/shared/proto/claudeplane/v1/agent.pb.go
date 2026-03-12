@@ -1460,7 +1460,7 @@ const file_claudeplane_v1_agent_proto_rawDesc = "" +
 	"\bRegister\x12\x1f.claudeplane.v1.RegisterRequest\x1a .claudeplane.v1.RegisterResponse\x12N\n" +
 	"\rCommandStream\x12\x1a.claudeplane.v1.AgentEvent\x1a\x1d.claudeplane.v1.ServerCommand(\x010\x01B\xd1\x01\n" +
 	"\x12com.claudeplane.v1B\n" +
-	"AgentProtoP\x01ZVgithub.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1;claudeplanev1\xa2\x02\x03CXX\xaa\x02\x0eClaudeplane.V1\xca\x02\x0eClaudeplane\\V1\xe2\x02\x1aClaudeplane\\V1\\GPBMetadata\xea\x02\x0fClaudeplane::V1b\x06proto3"
+	"AgentProtoP\x01ZVgithub.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1;claudeplanev1\xa2\x02\x03CXX\xaa\x02\x0eClaudeplane.V1\xca\x02\x0eClaudeplane\\V1\xe2\x02\x1aClaudeplane\\V1\\GPBMetadata\xea\x02\x0fClaudeplane::V1b\x06proto3"
 
 var (
 	file_claudeplane_v1_agent_proto_rawDescOnce sync.Once
