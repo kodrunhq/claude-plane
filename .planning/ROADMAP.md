@@ -131,7 +131,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete | 2026-03-12 |
-| 2. Agent Core | 0/2 | Planning complete | - |
+| 2. Agent Core | 1/2 | In Progress|  |
 | 3. Server Core | 0/3 | Planning complete | - |
 | 4. Terminal Streaming | 0/3 | Planning complete | - |
 | 5. Frontend | 0/3 | Planning complete | - |

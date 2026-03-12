@@ -17,8 +17,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Agent Management
 
 - [x] **AGNT-01**: Server provides CA tooling to generate root CA, server certs, and agent certs
-- [ ] **AGNT-02**: Agent authenticates to server using mTLS with its issued certificate
-- [ ] **AGNT-03**: Agent registers with server and maintains persistent gRPC bidirectional stream
+- [x] **AGNT-02**: Agent authenticates to server using mTLS with its issued certificate
+- [x] **AGNT-03**: Agent registers with server and maintains persistent gRPC bidirectional stream
 - [ ] **AGNT-04**: Server displays list of connected agents with online/offline status
 
 ### Session Management
@@ -108,8 +108,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-03 | Phase 3 | Pending |
 | AUTH-04 | Phase 1 | Complete |
 | AGNT-01 | Phase 1 | Complete |
-| AGNT-02 | Phase 2 | Pending |
-| AGNT-03 | Phase 2 | Pending |
+| AGNT-02 | Phase 2 | Complete |
+| AGNT-03 | Phase 2 | Complete |
 | AGNT-04 | Phase 3 | Pending |
 | SESS-01 | Phase 4 | Pending |
 | SESS-02 | Phase 4 | Pending |
