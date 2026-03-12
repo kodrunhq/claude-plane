@@ -63,19 +63,31 @@ func NewConnectionManager(store MachineStore, logger *slog.Logger) *ConnectionMa
 // If an agent with the same machineID is already registered, its Cancel function
 // is called before replacement.
 func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) error {
+	// Capture old cancel under lock, but call it after unlock to avoid deadlock.
+	var oldCancel context.CancelFunc
 	cm.mu.Lock()
 	if old, exists := cm.agents[machineID]; exists {
-		old.Cancel()
+		oldCancel = old.Cancel
 		cm.logger.Info("replacing existing agent connection", "machine_id", machineID)
 	}
 	cm.agents[machineID] = agent
 	cm.mu.Unlock()
 
-	// Persist to DB outside the lock
+	if oldCancel != nil {
+		oldCancel()
+	}
+
+	// Persist to DB outside the lock. On failure, roll back the in-memory state.
 	if err := cm.store.UpsertMachine(machineID, agent.MaxSessions); err != nil {
+		cm.mu.Lock()
+		delete(cm.agents, machineID)
+		cm.mu.Unlock()
 		return fmt.Errorf("upsert machine on register: %w", err)
 	}
 	if err := cm.store.UpdateMachineStatus(machineID, "connected", time.Now()); err != nil {
+		cm.mu.Lock()
+		delete(cm.agents, machineID)
+		cm.mu.Unlock()
 		return fmt.Errorf("update status on register: %w", err)
 	}
 

@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// ErrMachineNotFound is returned when a machine lookup finds no matching row.
+var ErrMachineNotFound = errors.New("machine not found")
+
 // Machine represents a row in the machines table.
 type Machine struct {
 	MachineID    string
@@ -102,7 +105,7 @@ func (s *Store) GetMachine(machineID string) (*Machine, error) {
 		&lastHealth, &lastSeenAt, &certExpires, &m.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("machine %q not found", machineID)
+		return nil, ErrMachineNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get machine %q: %w", machineID, err)
