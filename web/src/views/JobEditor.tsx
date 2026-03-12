@@ -1,0 +1,267 @@
+import { useState, useCallback, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router';
+import { Plus, Save, Play, ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+import { DAGCanvas } from '../components/dag/DAGCanvas.tsx';
+import { StepEditor } from '../components/jobs/StepEditor.tsx';
+import { JobMetaForm } from '../components/jobs/JobMetaForm.tsx';
+import {
+  useJob,
+  useCreateJob,
+  useUpdateJob,
+  useAddStep,
+  useUpdateStep,
+  useDeleteStep,
+  useAddDependency,
+  useTriggerRun,
+} from '../hooks/useJobs.ts';
+import { useMachines } from '../hooks/useMachines.ts';
+import { useJobEditorStore } from '../stores/jobs.ts';
+import type { UpdateStepParams } from '../types/job.ts';
+
+export function JobEditor() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const isNew = !id || id === 'new';
+
+  const { data: jobDetail, isLoading } = useJob(isNew ? undefined : id);
+  const { data: machines } = useMachines();
+  const createJob = useCreateJob();
+  const updateJob = useUpdateJob();
+  const addStep = useAddStep();
+  const updateStep = useUpdateStep();
+  const deleteStep = useDeleteStep();
+  const addDependency = useAddDependency();
+  const triggerRun = useTriggerRun();
+
+  const selectedStepId = useJobEditorStore((s) => s.selectedStepId);
+  const selectStep = useJobEditorStore((s) => s.selectStep);
+
+  const [jobName, setJobName] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  // Sync job data when loaded
+  useEffect(() => {
+    if (jobDetail) {
+      setJobName(jobDetail.job.name);
+      setJobDescription(jobDetail.job.description);
+      setJobId(jobDetail.job.id);
+    }
+  }, [jobDetail]);
+
+  // Cleanup selection on unmount
+  useEffect(() => {
+    return () => selectStep(null);
+  }, [selectStep]);
+
+  const effectiveJobId = isNew ? jobId : id;
+  const steps = jobDetail?.steps ?? [];
+  const dependencies = jobDetail?.dependencies ?? [];
+  const selectedStep = steps.find((s) => s.id === selectedStepId) ?? null;
+
+  async function ensureJobCreated(): Promise<string | null> {
+    if (effectiveJobId) return effectiveJobId;
+    if (!jobName.trim()) {
+      toast.error('Enter a job name first');
+      return null;
+    }
+    try {
+      const job = await createJob.mutateAsync({ name: jobName, description: jobDescription });
+      setJobId(job.id);
+      navigate(`/jobs/${job.id}`, { replace: true });
+      return job.id;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create job');
+      return null;
+    }
+  }
+
+  async function handleAddStep() {
+    const jid = await ensureJobCreated();
+    if (!jid) return;
+    try {
+      const step = await addStep.mutateAsync({
+        jobId: jid,
+        params: {
+          name: `Step ${steps.length + 1}`,
+          machine_id: machines?.[0]?.machine_id ?? '',
+        },
+      });
+      selectStep(step.id);
+      toast.success('Step added');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add step');
+    }
+  }
+
+  const handleConnect = useCallback(
+    async (sourceStepId: string, targetStepId: string) => {
+      if (!effectiveJobId) return;
+      try {
+        await addDependency.mutateAsync({
+          jobId: effectiveJobId,
+          stepId: targetStepId,
+          dependsOnStepId: sourceStepId,
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Invalid dependency (possible cycle)');
+      }
+    },
+    [effectiveJobId, addDependency],
+  );
+
+  async function handleSave() {
+    if (!effectiveJobId) {
+      await ensureJobCreated();
+      return;
+    }
+    try {
+      await updateJob.mutateAsync({
+        id: effectiveJobId,
+        params: { name: jobName, description: jobDescription },
+      });
+      toast.success('Job saved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save job');
+    }
+  }
+
+  async function handleRun() {
+    if (!effectiveJobId) {
+      toast.error('Save the job first');
+      return;
+    }
+    try {
+      const run = await triggerRun.mutateAsync(effectiveJobId);
+      toast.success('Run started');
+      navigate(`/runs/${run.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start run');
+    }
+  }
+
+  function handleStepSave(stepId: string, params: UpdateStepParams) {
+    if (!effectiveJobId) return;
+    updateStep.mutate(
+      { jobId: effectiveJobId, stepId, params },
+      {
+        onSuccess: () => toast.success('Step updated'),
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to update step'),
+      },
+    );
+  }
+
+  function handleStepDelete(stepId: string) {
+    if (!effectiveJobId) return;
+    deleteStep.mutate(
+      { jobId: effectiveJobId, stepId },
+      {
+        onSuccess: () => {
+          selectStep(null);
+          toast.success('Step deleted');
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete step'),
+      },
+    );
+  }
+
+  function handleMetaChange(field: 'name' | 'description', value: string) {
+    if (field === 'name') setJobName(value);
+    else setJobDescription(value);
+  }
+
+  if (!isNew && isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full text-text-secondary">
+        Loading job...
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-gray-700">
+        <button
+          onClick={() => navigate('/jobs')}
+          className="text-text-secondary hover:text-text-primary transition-colors"
+          title="Back to jobs"
+        >
+          <ArrowLeft size={18} />
+        </button>
+
+        <input
+          type="text"
+          value={jobName}
+          onChange={(e) => setJobName(e.target.value)}
+          className="bg-transparent text-text-primary text-sm font-medium focus:outline-none border-b border-transparent focus:border-accent-primary flex-1 min-w-0"
+          placeholder="Job name..."
+        />
+
+        <button
+          onClick={handleAddStep}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <Plus size={14} />
+          Add Step
+        </button>
+        <button
+          onClick={handleSave}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+        >
+          <Save size={14} />
+          Save
+        </button>
+        <button
+          onClick={handleRun}
+          disabled={!effectiveJobId || steps.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600 hover:bg-green-600/80 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Play size={14} />
+          Run
+        </button>
+      </div>
+
+      {/* Main content */}
+      <div className="flex flex-1 min-h-0">
+        {/* DAG Canvas (left) */}
+        <div className="flex-1 min-w-0">
+          {steps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
+              <p>No steps yet. Click "Add Step" to begin.</p>
+              {isNew && !jobId && (
+                <div className="mt-4 w-64">
+                  <JobMetaForm
+                    name={jobName}
+                    description={jobDescription}
+                    onChange={handleMetaChange}
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <DAGCanvas
+              steps={steps}
+              dependencies={dependencies}
+              editable
+              selectedStepId={selectedStepId}
+              onNodeClick={selectStep}
+              onConnect={handleConnect}
+            />
+          )}
+        </div>
+
+        {/* Step Editor (right panel) */}
+        <div className="w-80 border-l border-gray-700 bg-bg-secondary shrink-0">
+          <StepEditor
+            step={selectedStep}
+            machines={machines ?? []}
+            onSave={handleStepSave}
+            onDelete={handleStepDelete}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

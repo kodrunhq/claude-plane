@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router';
-import { LayoutDashboard, Terminal, Server, Settings } from 'lucide-react';
+import { LayoutDashboard, Terminal, Server, Workflow, Settings } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 
 const navItems = [
   { to: '/', label: 'Command Center', icon: LayoutDashboard },
   { to: '/sessions', label: 'Sessions', icon: Terminal },
   { to: '/machines', label: 'Machines', icon: Server },
+  { to: '/jobs', label: 'Jobs', icon: Workflow },
 ] as const;
 
 export function Sidebar() {
