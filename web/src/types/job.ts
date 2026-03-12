@@ -1,7 +1,7 @@
 // Job system types -- matches server REST responses
 
 export interface Job {
-  id: string;
+  job_id: string;
   name: string;
   description: string;
   created_at: string;
@@ -11,7 +11,7 @@ export interface Job {
 }
 
 export interface Step {
-  id: string;
+  step_id: string;
   job_id: string;
   name: string;
   prompt: string;
@@ -26,9 +26,8 @@ export interface Step {
 }
 
 export interface StepDependency {
-  id: string;
   step_id: string;
-  depends_on_step_id: string;
+  depends_on: string;
 }
 
 export interface JobDetail {
@@ -38,22 +37,22 @@ export interface JobDetail {
 }
 
 export interface Run {
-  id: string;
+  run_id: string;
   job_id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   started_at: string;
-  finished_at?: string;
+  completed_at?: string;
   created_at: string;
 }
 
 export interface RunStep {
-  id: string;
+  run_step_id: string;
   run_id: string;
   step_id: string;
   session_id?: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
   started_at?: string;
-  finished_at?: string;
+  completed_at?: string;
   error?: string;
 }
 

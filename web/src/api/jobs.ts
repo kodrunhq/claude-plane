@@ -47,7 +47,7 @@ export const jobsApi = {
   addDependency: (jobId: string, stepId: string, dependsOnStepId: string) =>
     request<StepDependency>(
       `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(stepId)}/deps`,
-      { method: 'POST', body: JSON.stringify({ depends_on_step_id: dependsOnStepId }) },
+      { method: 'POST', body: JSON.stringify({ depends_on: dependsOnStepId }) },
     ),
   removeDependency: (jobId: string, stepId: string, depId: string) =>
     request<void>(
