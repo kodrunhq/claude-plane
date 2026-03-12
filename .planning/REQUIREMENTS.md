@@ -46,8 +46,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFR-01**: Server is a single Go binary with embedded frontend assets
-- [ ] **INFR-02**: Agent is a single Go binary with no external dependencies
+- [x] **INFR-01**: Server is a single Go binary with embedded frontend assets
+- [x] **INFR-02**: Agent is a single Go binary with no external dependencies
 - [ ] **INFR-03**: Server uses SQLite with WAL mode for all persistent storage
 - [ ] **INFR-04**: Server and agent support TOML configuration files
 
@@ -125,8 +125,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOBS-02 | Phase 6 | Pending |
 | JOBS-03 | Phase 6 | Pending |
 | JOBS-04 | Phase 6 | Pending |
-| INFR-01 | Phase 1 | Pending |
-| INFR-02 | Phase 1 | Pending |
+| INFR-01 | Phase 1 | Complete |
+| INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Pending |
 | INFR-04 | Phase 1 | Pending |
 
