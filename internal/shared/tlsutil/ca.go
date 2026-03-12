@@ -94,7 +94,7 @@ func IssueServerCert(caDir, outDir string, hostnames []string) error {
 		},
 		NotBefore:   now,
 		NotAfter:    now.Add(2 * 365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:    dnsNames,
 		IPAddresses: ipAddrs,
@@ -136,7 +136,7 @@ func IssueAgentCert(caDir, outDir, machineID string) error {
 		},
 		NotBefore:   now,
 		NotAfter:    now.Add(2 * 365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 

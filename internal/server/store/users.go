@@ -86,6 +86,11 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		return false, fmt.Errorf("decode hash: %w", err)
 	}
 
+	// Bound parameters to prevent DoS via crafted hashes
+	if memory > 256*1024 || time > 10 || threads > 16 {
+		return false, fmt.Errorf("argon2 params exceed safe bounds: m=%d t=%d p=%d", memory, time, threads)
+	}
+
 	// Recompute hash with the same parameters
 	computedHash := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(expectedHash)))
 
