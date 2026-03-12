@@ -147,6 +147,27 @@ func (s *Store) SeedAdmin(email, password, displayName string) error {
 	return nil
 }
 
+// CreateUser inserts a new user into the database.
+// Returns an error if the email already exists (UNIQUE constraint violation).
+func (s *Store) CreateUser(user *User) error {
+	_, err := s.writer.Exec(`
+		INSERT INTO users (user_id, email, display_name, password_hash, role)
+		VALUES (?, ?, ?, ?, ?)
+	`, user.UserID, user.Email, user.DisplayName, user.PasswordHash, user.Role)
+	if err != nil {
+		return fmt.Errorf("create user %q: %w", user.Email, err)
+	}
+	return nil
+}
+
+// IsUniqueViolation returns true if the error is a SQLite UNIQUE constraint violation.
+func IsUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
 // GetUserByEmail retrieves a user by email address from the reader pool.
 // Returns nil if the user is not found.
 func (s *Store) GetUserByEmail(email string) (*User, error) {

@@ -67,7 +67,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — JWT auth service, token blocklist, revoked token store
+- [x] 03-01-PLAN.md — JWT auth service, token blocklist, revoked token store
 - [ ] 03-02-PLAN.md — Machine store CRUD, connection manager with DB-backed status
 - [ ] 03-03-PLAN.md — Chi REST API: router, JWT middleware, auth + machine handlers
 
@@ -132,7 +132,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete | 2026-03-12 |
 | 2. Agent Core | 1/2 | In Progress|  |
-| 3. Server Core | 0/3 | Planning complete | - |
+| 3. Server Core | 2/3 | In Progress|  |
 | 4. Terminal Streaming | 0/3 | Planning complete | - |
 | 5. Frontend | 0/3 | Planning complete | - |
 | 6. Job System | 0/3 | Planning complete | - |

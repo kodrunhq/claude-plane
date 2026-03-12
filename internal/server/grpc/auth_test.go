@@ -59,7 +59,7 @@ func startTestGRPCServer(t *testing.T, caDir, serverDir string) (addr string, st
 		t.Fatal(err)
 	}
 
-	srv := servergrpc.NewGRPCServer(tlsCfg, nil)
+	srv := servergrpc.NewGRPCServer(tlsCfg, nil, nil)
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
