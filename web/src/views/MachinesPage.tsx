@@ -1,13 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Server, AlertCircle, RefreshCw } from 'lucide-react';
 import { useMachines } from '../hooks/useMachines.ts';
-import { useEventStream } from '../hooks/useEventStream.ts';
 import { MachineCard } from '../components/machines/MachineCard.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 
 export function MachinesPage() {
-  useEventStream();
   const { data: machines, isLoading, error, refetch } = useMachines();
 
   const [modalOpen, setModalOpen] = useState(false);
