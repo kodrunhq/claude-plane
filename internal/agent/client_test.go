@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/agent"
-	"github.com/claudeplane/claude-plane/internal/agent/config"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
-	"github.com/claudeplane/claude-plane/internal/shared/tlsutil"
+	"github.com/kodrunhq/claude-plane/internal/agent"
+	"github.com/kodrunhq/claude-plane/internal/agent/config"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
-	servergrpc "github.com/claudeplane/claude-plane/internal/server/grpc"
+	servergrpc "github.com/kodrunhq/claude-plane/internal/server/grpc"
 )
 
 // noopSessionProvider is a no-op SessionProvider for tests.
@@ -117,7 +117,7 @@ func TestAgentConnectsAndRegisters(t *testing.T) {
 	// Wait a bit for registration to complete, then verify.
 	time.Sleep(500 * time.Millisecond)
 
-	agents := srv.ConnectionManager().List()
+	agents := srv.StreamRegistry().List()
 	if len(agents) == 0 {
 		t.Fatal("expected agent to be registered, got 0 connected agents")
 	}
@@ -180,7 +180,7 @@ func TestAgentMTLSRejection(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Verify the rogue agent was never registered on the server.
-	agents := srv.ConnectionManager().List()
+	agents := srv.StreamRegistry().List()
 	if len(agents) != 0 {
 		t.Errorf("expected 0 registered agents, got %d", len(agents))
 	}
@@ -258,7 +258,7 @@ func TestAgentReconnectsOnDrop(t *testing.T) {
 		case <-deadline:
 			t.Fatal("agent did not reconnect within 8 seconds")
 		case <-ticker.C:
-			agents := srv2.ConnectionManager().List()
+			agents := srv2.StreamRegistry().List()
 			if len(agents) > 0 {
 				reconnected = true
 			}

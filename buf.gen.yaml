@@ -3,7 +3,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/claudeplane/claude-plane/internal/shared/proto
+      value: github.com/kodrunhq/claude-plane/internal/shared/proto
 plugins:
   - remote: buf.build/protocolbuffers/go
     out: internal/shared/proto

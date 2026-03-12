@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 func TestSessionManagerCreate(t *testing.T) {

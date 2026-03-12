@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/api"
-	"github.com/claudeplane/claude-plane/internal/server/auth"
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/api"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // setupTestAPI creates a full test API server with in-memory SQLite,
@@ -36,7 +36,7 @@ func setupTestAPI(t *testing.T) *httptest.Server {
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
 
-	handlers := api.NewHandlers(s, authSvc, cm)
+	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
 	router := api.NewRouter(handlers, nil, nil, nil, nil, nil)
 	return httptest.NewServer(router)
 }
@@ -256,6 +256,111 @@ func TestLogoutRevokesToken(t *testing.T) {
 
 	if machinesResp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("revoked token: expected 401, got %d", machinesResp.StatusCode)
+	}
+}
+
+// setupTestAPIWithMode creates a test API server with the given registration mode.
+func setupTestAPIWithMode(t *testing.T, mode, inviteCode string) *httptest.Server {
+	t.Helper()
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	s, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	blocklist, err := auth.NewBlocklist(s)
+	if err != nil {
+		t.Fatalf("create blocklist: %v", err)
+	}
+
+	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
+	cm := connmgr.NewConnectionManager(s, nil)
+
+	handlers := api.NewHandlers(s, authSvc, cm, mode, inviteCode)
+	router := api.NewRouter(handlers, nil, nil, nil, nil, nil)
+	return httptest.NewServer(router)
+}
+
+func TestRegisterClosedMode(t *testing.T) {
+	srv := setupTestAPIWithMode(t, "closed", "")
+	defer srv.Close()
+
+	resp := registerUser(t, srv, "test@example.com", "password123", "Test User")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for closed registration, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterDefaultMode(t *testing.T) {
+	// Default (empty string) should behave as "closed"
+	srv := setupTestAPIWithMode(t, "", "")
+	defer srv.Close()
+
+	resp := registerUser(t, srv, "test@example.com", "password123", "Test User")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for default (closed) registration, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterInviteModeValid(t *testing.T) {
+	srv := setupTestAPIWithMode(t, "invite", "secret-invite-code")
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{
+		"email":        "invited@example.com",
+		"password":     "password123",
+		"display_name": "Invited User",
+		"invite_code":  "secret-invite-code",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/auth/register", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("register request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("expected 201 with valid invite code, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterInviteModeInvalidCode(t *testing.T) {
+	srv := setupTestAPIWithMode(t, "invite", "secret-invite-code")
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{
+		"email":        "bad@example.com",
+		"password":     "password123",
+		"display_name": "Bad User",
+		"invite_code":  "wrong-code",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/auth/register", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("register request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 with invalid invite code, got %d", resp.StatusCode)
+	}
+}
+
+func TestRegisterInviteModeMissingCode(t *testing.T) {
+	srv := setupTestAPIWithMode(t, "invite", "secret-invite-code")
+	defer srv.Close()
+
+	// No invite_code in request body
+	resp := registerUser(t, srv, "no-code@example.com", "password123", "No Code User")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 with missing invite code, got %d", resp.StatusCode)
 	}
 }
 

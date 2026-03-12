@@ -3,10 +3,11 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // Blocklist maintains an in-memory set of revoked JWT token IDs backed by
@@ -90,5 +91,7 @@ func (bl *Blocklist) cleanExpired() {
 	bl.mu.Unlock()
 
 	// Best-effort DB cleanup; errors are not critical
-	_ = bl.store.CleanExpired(now)
+	if err := bl.store.CleanExpired(now); err != nil {
+		slog.Warn("failed to clean expired blocklist entries from database", "error", err)
+	}
 }

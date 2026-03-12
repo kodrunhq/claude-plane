@@ -97,7 +97,7 @@ func (s *Store) ListSessionsByMachine(machineID string) ([]Session, error) {
 func (s *Store) UpdateSessionStatus(id, status string) error {
 	var query string
 	switch status {
-	case "completed", "failed", "terminated":
+	case StatusCompleted, StatusFailed, StatusTerminated:
 		query = `UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP WHERE session_id = ?`
 	default:
 		query = `UPDATE sessions SET status = ? WHERE session_id = ?`

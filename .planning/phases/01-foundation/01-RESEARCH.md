@@ -67,7 +67,7 @@ All technologies in this phase are mature, well-documented, and have standard pa
 **Installation:**
 ```bash
 # Initialize Go module
-go mod init github.com/claudeplane/claude-plane
+go mod init github.com/kodrunhq/claude-plane
 
 # Phase 1 dependencies
 go get modernc.org/sqlite@latest
@@ -345,7 +345,7 @@ func (c *ServerConfig) Validate() error {
 
 **What goes wrong:** Generated Go code lands in the wrong package path, imports fail, or `buf generate` produces files that do not compile because `go_package` option is mismatched with the project's module path.
 **Why it happens:** Protobuf's `option go_package` must align with the Go module path, and `buf.gen.yaml` managed mode can override it. Mismatches between these three (proto file option, buf.gen.yaml, go.mod) cause import errors.
-**How to avoid:** Use buf managed mode in `buf.gen.yaml` to set `go_package_prefix` to match the Go module path. Set `option go_package` in the `.proto` file to the generated output path relative to the module root (e.g., `"github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"`).
+**How to avoid:** Use buf managed mode in `buf.gen.yaml` to set `go_package_prefix` to match the Go module path. Set `option go_package` in the `.proto` file to the generated output path relative to the module root (e.g., `"github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"`).
 **Warning signs:** `go build` fails with import cycle errors or "package not found" after `buf generate`.
 
 ## Code Examples
@@ -521,7 +521,7 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: github.com/claudeplane/claude-plane/internal/shared/proto
+      value: github.com/kodrunhq/claude-plane/internal/shared/proto
 plugins:
   - remote: buf.build/protocolbuffers/go
     out: internal/shared/proto
@@ -641,8 +641,8 @@ report_interval = "10s"
 
 1. **Go module path**
    - What we know: CLAUDE.md shows `go build -o claude-plane-server ./cmd/server` but does not specify the module path.
-   - What's unclear: Whether to use `github.com/claudeplane/claude-plane`, `github.com/joseibanez/claude-plane`, or a shorter path.
-   - Recommendation: Use whatever matches the actual GitHub repository path. If undecided, use `github.com/claudeplane/claude-plane`.
+   - What's unclear: Whether to use `github.com/kodrunhq/claude-plane`, `github.com/joseibanez/claude-plane`, or a shorter path.
+   - Recommendation: Use whatever matches the actual GitHub repository path. If undecided, use `github.com/kodrunhq/claude-plane`.
 
 2. **Users table scope in Phase 1**
    - What we know: The design doc does not define a users table. AUTH-04 requires admin seeding. AUTH-01/02/03 in Phase 3 require user accounts.

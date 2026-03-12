@@ -3,11 +3,26 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"time"
 )
 
-// schema contains all CREATE TABLE and CREATE INDEX statements for the
-// claude-plane database. All statements use IF NOT EXISTS for idempotency.
-const schema = `
+// Migration represents a single schema migration with a version number and
+// the SQL to execute. Migrations are applied in order and each runs inside
+// its own transaction.
+type Migration struct {
+	Version     int
+	Description string
+	SQL         string
+}
+
+// migrations is the ordered list of all schema migrations. New migrations
+// should be appended to the end with the next sequential version number.
+// Existing migrations must never be modified once released.
+var migrations = []Migration{
+	{
+		Version:     1,
+		Description: "initial schema",
+		SQL: `
 -- Users (needed for AUTH-04 admin seeding, expanded in Phase 3)
 CREATE TABLE IF NOT EXISTS users (
     user_id        TEXT PRIMARY KEY,
@@ -147,35 +162,97 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_log(timestamp DESC);
-`
 
-// RunMigrations executes all schema creation statements on the provided
-// database connection. Uses BEGIN IMMEDIATE to acquire the write lock upfront.
-// All statements use IF NOT EXISTS, making this safe to call multiple times.
+-- Revoked tokens
+CREATE TABLE IF NOT EXISTS revoked_tokens (
+    jti        TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    revoked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expires_at);
+`,
+	},
+}
+
+// ensureVersionTable creates the schema_version table if it does not exist.
+// This table is outside the migration system itself since it must exist before
+// any migrations can be tracked.
+func ensureVersionTable(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_version (
+			version    INTEGER PRIMARY KEY,
+			applied_at TEXT NOT NULL
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create schema_version table: %w", err)
+	}
+	return nil
+}
+
+// currentVersion returns the highest migration version that has been applied,
+// or 0 if no migrations have been run.
+func currentVersion(db *sql.DB) (int, error) {
+	var version int
+	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&version)
+	if err != nil {
+		return 0, fmt.Errorf("query current version: %w", err)
+	}
+	return version, nil
+}
+
+// RunMigrations applies all pending schema migrations to the database.
+// Each migration runs in its own transaction. The schema_version table is
+// used to track which migrations have already been applied, making this
+// safe to call on every startup.
 func RunMigrations(db *sql.DB) error {
-	if _, err := db.Exec("BEGIN IMMEDIATE;"); err != nil {
-		return fmt.Errorf("run migrations (begin): %w", err)
+	if err := ensureVersionTable(db); err != nil {
+		return err
 	}
 
-	if _, err := db.Exec(schema); err != nil {
-		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
-			return fmt.Errorf("run migrations (schema): %w (rollback failed: %v)", err, rbErr)
-		}
-		return fmt.Errorf("run migrations (schema): %w", err)
+	current, err := currentVersion(db)
+	if err != nil {
+		return err
 	}
 
-	if _, err := db.Exec(revokedTokensSchema); err != nil {
-		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
-			return fmt.Errorf("run migrations (schema): %w (rollback failed: %v)", err, rbErr)
+	for _, m := range migrations {
+		if m.Version <= current {
+			continue
 		}
-		return fmt.Errorf("run migrations (schema): %w", err)
+
+		if err := applyMigration(db, m); err != nil {
+			return fmt.Errorf("migration %d (%s): %w", m.Version, m.Description, err)
+		}
 	}
 
-	if _, err := db.Exec("COMMIT;"); err != nil {
-		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
-			return fmt.Errorf("run migrations (commit): %w (rollback failed: %v)", err, rbErr)
-		}
-		return fmt.Errorf("run migrations (commit): %w", err)
+	return nil
+}
+
+// applyMigration runs a single migration inside a transaction and records
+// its version in the schema_version table.
+func applyMigration(db *sql.DB, m Migration) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
 	}
+	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+
+	if _, err := tx.Exec(m.SQL); err != nil {
+		return fmt.Errorf("exec: %w", err)
+	}
+
+	if _, err := tx.Exec(
+		"INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+		m.Version, time.Now().UTC().Format(time.RFC3339),
+	); err != nil {
+		return fmt.Errorf("record version: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -14,10 +13,10 @@ import (
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/auth"
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/session"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/session"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRecorder, string, string) {
@@ -89,8 +88,25 @@ func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRec
 	return srv, reg, recorder, sessionID, token
 }
 
-func wsURL(srv *httptest.Server, sessionID, token string) string {
-	return strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID + "?token=" + token
+func wsURL(srv *httptest.Server, sessionID string) string {
+	return strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID
+}
+
+// dialWithAuth connects to the WebSocket and performs first-message auth.
+func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessionID, token string) *websocket.Conn {
+	t.Helper()
+	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID), nil)
+	if err != nil {
+		t.Fatalf("websocket.Dial: %v", err)
+	}
+	authMsg, _ := json.Marshal(map[string]string{"type": "auth", "token": token})
+	if err := conn.Write(ctx, websocket.MessageText, authMsg); err != nil {
+		conn.CloseNow()
+		t.Fatalf("write auth: %v", err)
+	}
+	// Give server time to process auth
+	time.Sleep(50 * time.Millisecond)
+	return conn
 }
 
 func TestWebSocketBinaryRelay(t *testing.T) {
@@ -99,10 +115,7 @@ func TestWebSocketBinaryRelay(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID, token), nil)
-	if err != nil {
-		t.Fatalf("websocket.Dial: %v", err)
-	}
+	conn := dialWithAuth(t, ctx, srv, sessionID, token)
 	defer conn.CloseNow()
 
 	// Give writer goroutine time to start
@@ -131,10 +144,7 @@ func TestWebSocketInputRelay(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID, token), nil)
-	if err != nil {
-		t.Fatalf("websocket.Dial: %v", err)
-	}
+	conn := dialWithAuth(t, ctx, srv, sessionID, token)
 	defer conn.CloseNow()
 
 	// Give time for scrollback request to be sent
@@ -174,10 +184,7 @@ func TestWebSocketResizeMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID, token), nil)
-	if err != nil {
-		t.Fatalf("websocket.Dial: %v", err)
-	}
+	conn := dialWithAuth(t, ctx, srv, sessionID, token)
 	defer conn.CloseNow()
 
 	time.Sleep(50 * time.Millisecond)
@@ -218,10 +225,7 @@ func TestWebSocketCloseDetaches(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID, token), nil)
-	if err != nil {
-		t.Fatalf("websocket.Dial: %v", err)
-	}
+	conn := dialWithAuth(t, ctx, srv, sessionID, token)
 
 	time.Sleep(50 * time.Millisecond)
 	initialCount := recorder.count()
@@ -256,10 +260,7 @@ func TestWebSocketFlowControl(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID, token), nil)
-	if err != nil {
-		t.Fatalf("websocket.Dial: %v", err)
-	}
+	conn := dialWithAuth(t, ctx, srv, sessionID, token)
 	defer conn.CloseNow()
 
 	time.Sleep(50 * time.Millisecond)
@@ -302,38 +303,49 @@ func TestWebSocketFlowControl(t *testing.T) {
 func TestWebSocketAuthRejection(t *testing.T) {
 	srv, _, _, sessionID, _ := setupWSTest(t)
 
-	// Query-param auth cases: these reject pre-upgrade so plain HTTP GET works.
-	tests := []struct {
-		name       string
-		url        string
-		wantStatus int
-	}{
-		{
-			name:       "invalid token",
-			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID + "?token=bad-token",
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name:       "session not found",
-			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/nonexistent-session?token=bad-token",
-			wantStatus: http.StatusUnauthorized,
-		},
-	}
+	t.Run("invalid token via first-message", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			httpURL := strings.Replace(tc.url, "ws://", "http://", 1)
-			resp, err := http.Get(httpURL)
-			if err != nil {
-				t.Fatalf("request: %v", err)
-			}
-			defer resp.Body.Close()
+		conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID), nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial: %v", err)
+		}
+		defer conn.CloseNow()
 
-			if resp.StatusCode != tc.wantStatus {
-				t.Errorf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
-			}
-		})
-	}
+		authMsg, _ := json.Marshal(map[string]string{"type": "auth", "token": "bad-token"})
+		if err := conn.Write(ctx, websocket.MessageText, authMsg); err != nil {
+			t.Fatalf("write auth: %v", err)
+		}
+
+		_, _, err = conn.Read(ctx)
+		if err == nil {
+			t.Fatal("expected read error after invalid auth, got nil")
+		}
+	})
+
+	t.Run("nonexistent session via first-message", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		url := strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/nonexistent-session"
+		conn, _, err := websocket.Dial(ctx, url, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial: %v", err)
+		}
+		defer conn.CloseNow()
+
+		// Even with a valid-format token, session doesn't exist
+		authMsg, _ := json.Marshal(map[string]string{"type": "auth", "token": "bad-token"})
+		if err := conn.Write(ctx, websocket.MessageText, authMsg); err != nil {
+			t.Fatalf("write auth: %v", err)
+		}
+
+		_, _, err = conn.Read(ctx)
+		if err == nil {
+			t.Fatal("expected read error for nonexistent session, got nil")
+		}
+	})
 }
 
 func TestWebSocketFirstMessageAuth(t *testing.T) {
@@ -343,7 +355,6 @@ func TestWebSocketFirstMessageAuth(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// Connect without query param token
 		url := strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID
 		conn, _, err := websocket.Dial(ctx, url, nil)
 		if err != nil {

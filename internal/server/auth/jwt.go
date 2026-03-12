@@ -8,7 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // Claims represents the JWT claims issued by the claude-plane server.
@@ -40,6 +40,11 @@ func NewService(signingKey []byte, tokenTTL time.Duration, blocklist TokenRevoke
 		tokenTTL:   tokenTTL,
 		blocklist:  blocklist,
 	}
+}
+
+// TokenTTL returns the configured token time-to-live duration.
+func (s *Service) TokenTTL() time.Duration {
+	return s.tokenTTL
 }
 
 // IssueToken creates a signed HS256 JWT for the given user.

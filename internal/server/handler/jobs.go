@@ -4,13 +4,14 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/httputil"
-	"github.com/claudeplane/claude-plane/internal/server/orchestrator"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/httputil"
+	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // JobHandler handles REST endpoints for job and step CRUD.
@@ -373,7 +374,9 @@ func (h *JobHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 
 	if err := orchestrator.ValidateDAG(steps, deps); err != nil {
 		// Cycle detected: roll back the edge
-		_ = h.store.RemoveDependency(r.Context(), stepID, req.DependsOn)
+		if err := h.store.RemoveDependency(r.Context(), stepID, req.DependsOn); err != nil {
+			slog.Warn("failed to roll back dependency after cycle detection", "error", err, "step_id", stepID, "depends_on", req.DependsOn)
+		}
 		writeError(w, http.StatusBadRequest, "cycle detected in job DAG")
 		return
 	}

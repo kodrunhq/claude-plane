@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

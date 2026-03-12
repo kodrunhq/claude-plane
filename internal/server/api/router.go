@@ -7,26 +7,35 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"golang.org/x/time/rate"
 
-	"github.com/claudeplane/claude-plane/internal/server/auth"
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/handler"
-	"github.com/claudeplane/claude-plane/internal/server/session"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/handler"
+	"github.com/kodrunhq/claude-plane/internal/server/session"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // Handlers holds the dependencies required by all HTTP handlers.
 type Handlers struct {
-	store   *store.Store
-	authSvc *auth.Service
-	connMgr *connmgr.ConnectionManager
+	store            *store.Store
+	authSvc          *auth.Service
+	connMgr          *connmgr.ConnectionManager
+	registrationMode string
+	inviteCode       string
 }
 
 // NewHandlers creates a new Handlers instance with the given dependencies.
-func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.ConnectionManager) *Handlers {
+// registrationMode controls self-registration: "open" (anyone), "invite" (requires code), "closed" (disabled).
+// Defaults to "closed" if empty.
+func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.ConnectionManager, registrationMode, inviteCode string) *Handlers {
+	if registrationMode == "" {
+		registrationMode = "closed"
+	}
 	return &Handlers{
-		store:   s,
-		authSvc: authSvc,
-		connMgr: connMgr,
+		store:            s,
+		authSvc:          authSvc,
+		connMgr:          connMgr,
+		registrationMode: registrationMode,
+		inviteCode:       inviteCode,
 	}
 }
 
@@ -45,7 +54,7 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 // NewRouter creates a chi router with all API routes configured.
 // Public routes (register, login) require no authentication.
 // Protected routes (logout, machines, sessions) require a valid JWT Bearer token.
-// WebSocket routes support first-message auth (preferred) and query-param auth (deprecated).
+// WebSocket routes support cookie auth (preferred) and first-message auth.
 func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
 	r := chi.NewRouter()
 
@@ -57,7 +66,7 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeadersMiddleware)
 
-	// WebSocket routes — auth handled inside handlers (first-message or query param)
+	// WebSocket routes — auth handled inside handlers (cookie or first-message)
 	if wsHandler != nil {
 		r.Get("/ws/terminal/{sessionID}", wsHandler)
 	}

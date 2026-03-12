@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 	"github.com/go-chi/chi/v5"
 )
 
