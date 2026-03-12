@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -42,7 +43,22 @@ type DatabaseConfig struct {
 
 // AuthConfig holds authentication settings.
 type AuthConfig struct {
-	JWTSecret string `toml:"jwt_secret"`
+	JWTSecret    string `toml:"jwt_secret"`
+	JWTSecretFile string `toml:"jwt_secret_file"`
+	TokenTTL     string `toml:"token_ttl"`
+}
+
+// ParseTokenTTL parses the TokenTTL string as a time.Duration.
+// Returns 60 minutes as the default if TokenTTL is empty.
+func (a *AuthConfig) ParseTokenTTL() (time.Duration, error) {
+	if a.TokenTTL == "" {
+		return 60 * time.Minute, nil
+	}
+	d, err := time.ParseDuration(a.TokenTTL)
+	if err != nil {
+		return 0, fmt.Errorf("parse token_ttl %q: %w", a.TokenTTL, err)
+	}
+	return d, nil
 }
 
 // LoadServerConfig reads a TOML config file, parses it into a ServerConfig,
