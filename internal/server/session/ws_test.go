@@ -72,7 +72,7 @@ func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRec
 		UserID:     "test-user",
 		Command:    "claude",
 		WorkingDir: "/tmp",
-		Status:     "created",
+		Status:     store.StatusCreated,
 	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -93,7 +93,7 @@ func wsURL(srv *httptest.Server, sessionID string) string {
 }
 
 // dialWithAuth connects to the WebSocket and performs first-message auth.
-func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessionID, token string) *websocket.Conn {
+func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessionID string, recorder *commandRecorder, token string) *websocket.Conn {
 	t.Helper()
 	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID), nil)
 	if err != nil {
@@ -104,18 +104,44 @@ func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessi
 		conn.CloseNow()
 		t.Fatalf("write auth: %v", err)
 	}
-	// Give server time to process auth
-	time.Sleep(50 * time.Millisecond)
+	if recorder != nil {
+		waitForAttachCommand(t, ctx, recorder, sessionID)
+	}
 	return conn
 }
 
+func waitForAttachCommand(t *testing.T, ctx context.Context, recorder *commandRecorder, sessionID string) {
+	t.Helper()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		recorder.mu.Lock()
+		for _, cmd := range recorder.commands {
+			attach := cmd.GetAttachSession()
+			if attach != nil && attach.GetSessionId() == sessionID {
+				recorder.mu.Unlock()
+				return
+			}
+		}
+		recorder.mu.Unlock()
+
+		select {
+		case <-ctx.Done():
+			t.Fatalf("timed out waiting for AttachSessionCmd for session %s", sessionID)
+		case <-ticker.C:
+		}
+	}
+}
+
 func TestWebSocketBinaryRelay(t *testing.T) {
-	srv, reg, _, sessionID, token := setupWSTest(t)
+	srv, reg, recorder, sessionID, token := setupWSTest(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn := dialWithAuth(t, ctx, srv, sessionID, token)
+	conn := dialWithAuth(t, ctx, srv, sessionID, recorder, token)
 	defer conn.CloseNow()
 
 	// Give writer goroutine time to start
@@ -144,7 +170,7 @@ func TestWebSocketInputRelay(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn := dialWithAuth(t, ctx, srv, sessionID, token)
+	conn := dialWithAuth(t, ctx, srv, sessionID, recorder, token)
 	defer conn.CloseNow()
 
 	// Give time for scrollback request to be sent
@@ -184,7 +210,7 @@ func TestWebSocketResizeMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn := dialWithAuth(t, ctx, srv, sessionID, token)
+	conn := dialWithAuth(t, ctx, srv, sessionID, recorder, token)
 	defer conn.CloseNow()
 
 	time.Sleep(50 * time.Millisecond)
@@ -225,7 +251,7 @@ func TestWebSocketCloseDetaches(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn := dialWithAuth(t, ctx, srv, sessionID, token)
+	conn := dialWithAuth(t, ctx, srv, sessionID, recorder, token)
 
 	time.Sleep(50 * time.Millisecond)
 	initialCount := recorder.count()
@@ -255,12 +281,12 @@ func TestWebSocketCloseDetaches(t *testing.T) {
 }
 
 func TestWebSocketFlowControl(t *testing.T) {
-	srv, reg, _, sessionID, token := setupWSTest(t)
+	srv, reg, recorder, sessionID, token := setupWSTest(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn := dialWithAuth(t, ctx, srv, sessionID, token)
+	conn := dialWithAuth(t, ctx, srv, sessionID, recorder, token)
 	defer conn.CloseNow()
 
 	time.Sleep(50 * time.Millisecond)

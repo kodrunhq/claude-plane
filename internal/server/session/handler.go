@@ -26,11 +26,11 @@ type ClaimsGetter func(r *http.Request) *UserClaims
 
 // SessionHandler provides REST handlers for session lifecycle management.
 type SessionHandler struct {
-	store       *store.Store
-	connMgr     *connmgr.ConnectionManager
-	registry    *Registry
-	getClaims   ClaimsGetter
-	logger      *slog.Logger
+	store     *store.Store
+	connMgr   *connmgr.ConnectionManager
+	registry  *Registry
+	getClaims ClaimsGetter
+	logger    *slog.Logger
 }
 
 // NewSessionHandler creates a new SessionHandler.
@@ -132,7 +132,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		if err := agent.SendCommand(cmd); err != nil {
 			h.logger.Error("failed to send create session command", "error", err)
 			// Session was created in DB but command failed; update status
-			if err := h.store.UpdateSessionStatus(sessionID, "failed"); err != nil {
+			if err := h.store.UpdateSessionStatus(sessionID, store.StatusFailed); err != nil {
 				h.logger.Warn("failed to update session status after command dispatch failure", "error", err, "session_id", sessionID)
 			}
 			httputil.WriteError(w, http.StatusInternalServerError, "failed to dispatch session to agent")
@@ -244,4 +244,3 @@ func (h *SessionHandler) authorizeSession(r *http.Request, sess *store.Session) 
 	}
 	return claims.Role == "admin" || claims.UserID == sess.UserID
 }
-

@@ -176,8 +176,8 @@ func TestDAGRunner_StepFailure(t *testing.T) {
 
 	runner.waitForDone()
 
-	if runner.finalStatus != "failed" {
-		t.Errorf("final status = %q, want %q", runner.finalStatus, "failed")
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
 	}
 }
 

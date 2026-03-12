@@ -208,6 +208,10 @@ func currentVersion(db *sql.DB) (int, error) {
 // used to track which migrations have already been applied, making this
 // safe to call on every startup.
 func RunMigrations(db *sql.DB) error {
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		return fmt.Errorf("set busy_timeout pragma: %w", err)
+	}
+
 	if err := ensureVersionTable(db); err != nil {
 		return err
 	}
@@ -244,7 +248,7 @@ func applyMigration(db *sql.DB, m Migration) error {
 	}
 
 	if _, err := tx.Exec(
-		"INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+		"INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)",
 		m.Version, time.Now().UTC().Format(time.RFC3339),
 	); err != nil {
 		return fmt.Errorf("record version: %w", err)
