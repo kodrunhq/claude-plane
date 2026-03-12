@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication
 
-- [ ] **AUTH-01**: User can create account with email and password
-- [ ] **AUTH-02**: User can log in and receive a JWT session token
-- [ ] **AUTH-03**: User can log out and invalidate their session
+- [x] **AUTH-01**: User can create account with email and password
+- [x] **AUTH-02**: User can log in and receive a JWT session token
+- [x] **AUTH-03**: User can log out and invalidate their session
 - [x] **AUTH-04**: Admin account can be seeded via server CLI on first run
 
 ### Agent Management
@@ -19,7 +19,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **AGNT-01**: Server provides CA tooling to generate root CA, server certs, and agent certs
 - [x] **AGNT-02**: Agent authenticates to server using mTLS with its issued certificate
 - [x] **AGNT-03**: Agent registers with server and maintains persistent gRPC bidirectional stream
-- [ ] **AGNT-04**: Server displays list of connected agents with online/offline status
+- [x] **AGNT-04**: Server displays list of connected agents with online/offline status
 
 ### Session Management
 
@@ -103,14 +103,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 3 | Pending |
-| AUTH-02 | Phase 3 | Pending |
-| AUTH-03 | Phase 3 | Pending |
+| AUTH-01 | Phase 3 | Complete |
+| AUTH-02 | Phase 3 | Complete |
+| AUTH-03 | Phase 3 | Complete |
 | AUTH-04 | Phase 1 | Complete |
 | AGNT-01 | Phase 1 | Complete |
 | AGNT-02 | Phase 2 | Complete |
 | AGNT-03 | Phase 2 | Complete |
-| AGNT-04 | Phase 3 | Pending |
+| AGNT-04 | Phase 3 | Complete |
 | SESS-01 | Phase 4 | Pending |
 | SESS-02 | Phase 4 | Pending |
 | SESS-03 | Phase 4 | Pending |
