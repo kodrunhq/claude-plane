@@ -32,4 +32,5 @@ go.work.sum
 # .vscode/
 
 # Frontend build output (embedded into server binary)
-internal/server/frontend/dist/
+internal/server/frontend/dist/*
+!internal/server/frontend/dist/.gitkeep
