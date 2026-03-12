@@ -85,7 +85,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	o.mu.Unlock()
 
 	// Mark run as running
-	_ = o.store.UpdateRunStatus(ctx, run.RunID, "running")
+	_ = o.store.UpdateRunStatus(ctx, run.RunID, store.StatusRunning)
 
 	runner.Start(o.rootCtx)
 
@@ -129,15 +129,15 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 
 	// Reset target and downstream skipped/cancelled/failed steps to pending
 	for _, rs := range detail.RunSteps {
-		if toReset[rs.StepID] && (rs.Status == "failed" || rs.Status == "skipped" || rs.Status == "cancelled") {
-			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, "pending", "", 0); err != nil {
+		if toReset[rs.StepID] && (rs.Status == store.StatusFailed || rs.Status == store.StatusSkipped || rs.Status == store.StatusCancelled) {
+			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusPending, "", 0); err != nil {
 				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
 			}
 		}
 	}
 
 	// Update run status back to running
-	if err := o.store.UpdateRunStatus(ctx, runID, "running"); err != nil {
+	if err := o.store.UpdateRunStatus(ctx, runID, store.StatusRunning); err != nil {
 		return fmt.Errorf("update run status: %w", err)
 	}
 
@@ -176,7 +176,7 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 	// of their dependents so pending steps with completed upstream deps can launch.
 	runner.mu.Lock()
 	for _, rs := range detail.RunSteps {
-		if rs.Status == "completed" {
+		if rs.Status == store.StatusCompleted {
 			runner.completed++
 			// Decrement in-degree for all steps that depend on this completed step
 			for _, depID := range runner.dependents[rs.StepID] {
@@ -217,15 +217,15 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 	}
 
 	for _, rs := range detail.RunSteps {
-		if rs.Status == "pending" || rs.Status == "running" {
-			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, "cancelled", "", 0); err != nil {
+		if rs.Status == store.StatusPending || rs.Status == store.StatusRunning {
+			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusCancelled, "", 0); err != nil {
 				return fmt.Errorf("cancel step %s: %w", rs.StepID, err)
 			}
 		}
 	}
 
 	// Mark run as cancelled
-	return o.store.UpdateRunStatus(ctx, runID, "cancelled")
+	return o.store.UpdateRunStatus(ctx, runID, store.StatusCancelled)
 }
 
 // OnStepCompleted routes step completion to the correct DAGRunner.

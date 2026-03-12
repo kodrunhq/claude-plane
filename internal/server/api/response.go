@@ -2,20 +2,17 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/claudeplane/claude-plane/internal/server/httputil"
 )
 
-// writeJSON writes a JSON response with the given status code and data.
+// writeJSON delegates to the shared httputil.WriteJSON helper.
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if data != nil {
-		_ = json.NewEncoder(w).Encode(data)
-	}
+	httputil.WriteJSON(w, status, data)
 }
 
-// writeError writes a JSON error response with the given status code and message.
+// writeError delegates to the shared httputil.WriteError helper.
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	httputil.WriteError(w, status, message)
 }

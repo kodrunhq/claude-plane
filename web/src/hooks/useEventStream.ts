@@ -18,10 +18,9 @@ export function useEventStream() {
     function connect() {
       if (!mountedRef.current) return;
 
-      const token = localStorage.getItem('token') ?? '';
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(
-        `${protocol}//${window.location.host}/ws/events?token=${encodeURIComponent(token)}`,
+        `${protocol}//${window.location.host}/ws/events`,
       );
 
       ws.onopen = () => {
@@ -29,6 +28,9 @@ export function useEventStream() {
           ws.close();
           return;
         }
+        // Send auth as first message
+        const token = localStorage.getItem('token') ?? '';
+        ws.send(JSON.stringify({ type: 'auth', token }));
         attemptRef.current = 0;
         setConnected(true);
       };
