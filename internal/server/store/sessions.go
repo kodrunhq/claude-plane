@@ -115,9 +115,13 @@ func (s *Store) UpdateSessionStatus(id, status string) error {
 
 // DeleteSession removes a session from the table.
 func (s *Store) DeleteSession(id string) error {
-	_, err := s.writer.Exec(`DELETE FROM sessions WHERE session_id = ?`, id)
+	result, err := s.writer.Exec(`DELETE FROM sessions WHERE session_id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete session: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("session not found: %s", id)
 	}
 	return nil
 }
