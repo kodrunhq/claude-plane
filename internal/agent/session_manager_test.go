@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 )
 
 func TestSessionManagerCreate(t *testing.T) {
@@ -138,7 +139,7 @@ func TestSessionManagerRelay(t *testing.T) {
 		},
 	})
 
-	// Expect status event ("running") and output event.
+	// Expect status event (status.Running) and output event.
 	var gotOutput, gotStatus bool
 	timeout := time.After(5 * time.Second)
 
@@ -291,7 +292,7 @@ drainCreate:
 	for {
 		select {
 		case evt := <-sendCh:
-			if st := evt.GetSessionStatus(); st != nil && st.GetSessionId() == "replay-1" && st.GetStatus() != "running" {
+			if st := evt.GetSessionStatus(); st != nil && st.GetSessionId() == "replay-1" && st.GetStatus() != status.Running {
 				gotFinalStatus = true
 				break drainCreate
 			}
@@ -440,8 +441,8 @@ drainAttach:
 	if sess == nil {
 		t.Fatal("session not found after detach")
 	}
-	if sess.Status() != "running" {
-		t.Errorf("expected status 'running', got %q", sess.Status())
+	if sess.Status() != status.Running {
+		t.Errorf("expected status %q, got %q", status.Running, sess.Status())
 	}
 
 	// Clean up.

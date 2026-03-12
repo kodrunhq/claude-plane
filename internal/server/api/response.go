@@ -4,7 +4,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/claudeplane/claude-plane/internal/server/httputil"
+	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 )
 
 // writeJSON delegates to the shared httputil.WriteJSON helper.

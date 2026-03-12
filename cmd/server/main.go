@@ -1,21 +1,24 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/claudeplane/claude-plane/internal/server/config"
-	"github.com/claudeplane/claude-plane/internal/server/store"
-	"github.com/claudeplane/claude-plane/internal/shared/tlsutil"
+	"github.com/kodrunhq/claude-plane/internal/server/config"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
 	// Prove generated proto package compiles.
-	_ "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	_ "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 var version = "0.1.0-dev"
@@ -51,14 +54,48 @@ func newServeCmd() *cobra.Command {
 				return fmt.Errorf("load config: %w", err)
 			}
 
+			shutdownTimeout, err := cfg.Shutdown.ParseTimeout()
+			if err != nil {
+				return fmt.Errorf("parse shutdown timeout: %w", err)
+			}
+
+			// Root context cancelled on SIGINT or SIGTERM.
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+
 			s, err := store.NewStore(cfg.Database.Path)
 			if err != nil {
 				return fmt.Errorf("initialize database: %w", err)
 			}
-			defer s.Close()
 
-			slog.Info("Server initialized with database", "path", cfg.Database.Path)
-			slog.Info("Server ready (full serve loop not yet implemented — Phase 2+)")
+			slog.Info("Server initialized",
+				"database", cfg.Database.Path,
+				"shutdown_timeout", shutdownTimeout,
+			)
+
+			// TODO: Start HTTP server (REST + WebSocket) here.
+			// TODO: Start gRPC server (agent connections) here.
+
+			// Block until shutdown signal.
+			<-ctx.Done()
+			slog.Info("Shutdown signal received, starting graceful shutdown",
+				"timeout", shutdownTimeout,
+			)
+
+			// Create a timeout context for the shutdown sequence.
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			defer shutdownCancel()
+			_ = shutdownCtx // used by shutdown calls below
+
+			// TODO: httpServer.Shutdown(shutdownCtx)
+			// TODO: grpcServer.GracefulStop() (with shutdownCtx deadline for forced stop)
+
+			// Close the database as the final cleanup step.
+			if err := s.Close(); err != nil {
+				slog.Error("Error closing database", "error", err)
+			}
+
+			slog.Info("Shutdown complete")
 			return nil
 		},
 	}

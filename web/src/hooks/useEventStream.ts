@@ -28,9 +28,8 @@ export function useEventStream() {
           ws.close();
           return;
         }
-        // Send auth as first message
-        const token = localStorage.getItem('token') ?? '';
-        ws.send(JSON.stringify({ type: 'auth', token }));
+        // Cookie-based auth: the session_token cookie is sent automatically
+        // on the WebSocket upgrade request, so no first-message auth is needed.
         attemptRef.current = 0;
         setConnected(true);
       };

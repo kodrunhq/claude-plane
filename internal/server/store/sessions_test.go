@@ -24,7 +24,7 @@ func TestSessionCRUD(t *testing.T) {
 		UserID:     "",
 		Command:    "claude",
 		WorkingDir: "/tmp",
-		Status:     "created",
+		Status:     StatusCreated,
 	}
 
 	// Create
@@ -52,23 +52,23 @@ func TestSessionCRUD(t *testing.T) {
 	if got.WorkingDir != "/tmp" {
 		t.Errorf("WorkingDir = %q, want %q", got.WorkingDir, "/tmp")
 	}
-	if got.Status != "created" {
-		t.Errorf("Status = %q, want %q", got.Status, "created")
+	if got.Status != StatusCreated {
+		t.Errorf("Status = %q, want %q", got.Status, StatusCreated)
 	}
 	if got.CreatedAt.IsZero() {
 		t.Error("CreatedAt should not be zero")
 	}
 
 	// Update status
-	if err := s.UpdateSessionStatus("sess-001", "running"); err != nil {
+	if err := s.UpdateSessionStatus("sess-001", StatusRunning); err != nil {
 		t.Fatalf("UpdateSessionStatus: %v", err)
 	}
 	got, err = s.GetSession("sess-001")
 	if err != nil {
 		t.Fatalf("GetSession after update: %v", err)
 	}
-	if got.Status != "running" {
-		t.Errorf("Status after update = %q, want %q", got.Status, "running")
+	if got.Status != StatusRunning {
+		t.Errorf("Status after update = %q, want %q", got.Status, StatusRunning)
 	}
 	if got.UpdatedAt.IsZero() {
 		t.Error("UpdatedAt should not be zero after status update")
@@ -107,7 +107,7 @@ func TestListSessions(t *testing.T) {
 			UserID:     "",
 			Command:    "claude",
 			WorkingDir: "/tmp",
-			Status:     "created",
+			Status:     StatusCreated,
 		}
 		if err := s.CreateSession(sess); err != nil {
 			t.Fatalf("CreateSession %d: %v", i, err)
@@ -147,7 +147,7 @@ func TestListSessionsByMachine(t *testing.T) {
 			UserID:     "",
 			Command:    "claude",
 			WorkingDir: "/tmp",
-			Status:     "created",
+			Status:     StatusCreated,
 		}
 		if err := s.CreateSession(sess); err != nil {
 			t.Fatalf("CreateSession %d: %v", i, err)

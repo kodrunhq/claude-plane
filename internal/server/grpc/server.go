@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/session"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/session"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -21,7 +21,7 @@ import (
 // GRPCServer wraps a gRPC server with mTLS, auth interceptors, and agent service.
 type GRPCServer struct {
 	*grpc.Server
-	connMgr      *ConnectionManager
+	streams      *StreamRegistry
 	agentConnMgr *connmgr.ConnectionManager
 	agentSvc     *agentService
 	logger       *slog.Logger
@@ -30,7 +30,7 @@ type GRPCServer struct {
 // agentService implements the AgentServiceServer interface.
 type agentService struct {
 	pb.UnimplementedAgentServiceServer
-	connMgr      *ConnectionManager
+	streams      *StreamRegistry
 	agentConnMgr *connmgr.ConnectionManager
 	registry     *session.Registry
 	logger       *slog.Logger
@@ -45,7 +45,7 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 		logger = slog.Default()
 	}
 
-	connMgr := NewConnectionManager()
+	streams := NewStreamRegistry()
 
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(tlsCfg)),
@@ -62,7 +62,7 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 	)
 
 	svc := &agentService{
-		connMgr:      connMgr,
+		streams:      streams,
 		agentConnMgr: agentConnMgr,
 		logger:       logger,
 	}
@@ -70,7 +70,7 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 
 	return &GRPCServer{
 		Server:       srv,
-		connMgr:      connMgr,
+		streams:      streams,
 		agentConnMgr: agentConnMgr,
 		agentSvc:     svc,
 		logger:       logger,
@@ -89,10 +89,10 @@ func (s *GRPCServer) Serve(lis net.Listener) error {
 	return s.Server.Serve(lis)
 }
 
-// ConnectionManager returns the server's in-memory connection manager
-// used for stream token tracking.
-func (s *GRPCServer) ConnectionManager() *ConnectionManager {
-	return s.connMgr
+// StreamRegistry returns the server's in-memory stream registry
+// used for tracking active gRPC streams and their tokens.
+func (s *GRPCServer) StreamRegistry() *StreamRegistry {
+	return s.streams
 }
 
 // AgentConnectionManager returns the DB-backed connection manager
@@ -117,7 +117,7 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 	)
 
 	token := NextStreamToken()
-	s.connMgr.Add(machineID, &ConnectedAgent{
+	s.streams.Add(machineID, &StreamEntry{
 		MachineID:     machineID,
 		StreamToken:   token,
 		MaxSessions:   req.GetMaxSessions(),
@@ -144,8 +144,8 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	// Capture the current stream token so we only remove our own entry on close,
 	// not a newer connection from the same agent that reconnected.
 	var streamToken uint64
-	if agent, ok := s.connMgr.Get(machineID); ok {
-		streamToken = agent.StreamToken
+	if entry, ok := s.streams.Get(machineID); ok {
+		streamToken = entry.StreamToken
 	}
 
 	// Create a cancellable context for this stream so replacement connections
@@ -163,8 +163,8 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	// Register with the DB-backed connection manager if available.
 	if s.agentConnMgr != nil {
 		var maxSessions int32
-		if agent, ok := s.connMgr.Get(machineID); ok {
-			maxSessions = agent.MaxSessions
+		if entry, ok := s.streams.Get(machineID); ok {
+			maxSessions = entry.MaxSessions
 		}
 		ca := &connmgr.ConnectedAgent{
 			MachineID:    machineID,
@@ -184,7 +184,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 
 	s.logger.Info("agent stream opened", "machine_id", machineID)
 	defer func() {
-		s.connMgr.RemoveIfToken(machineID, streamToken)
+		s.streams.RemoveIfToken(machineID, streamToken)
 		if s.agentConnMgr != nil && ctx.Err() == nil {
 			s.agentConnMgr.Disconnect(machineID)
 		}

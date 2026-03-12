@@ -3,6 +3,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -15,6 +17,25 @@ type ServerConfig struct {
 	TLS      TLSConfig      `toml:"tls"`
 	Database DatabaseConfig `toml:"database"`
 	Auth     AuthConfig     `toml:"auth"`
+	Shutdown ShutdownConfig `toml:"shutdown"`
+}
+
+// ShutdownConfig controls graceful shutdown behavior.
+type ShutdownConfig struct {
+	Timeout string `toml:"timeout"`
+}
+
+// ParseTimeout parses the Timeout string as a time.Duration.
+// Returns 30 seconds as the default if Timeout is empty.
+func (s *ShutdownConfig) ParseTimeout() (time.Duration, error) {
+	if s.Timeout == "" {
+		return 30 * time.Second, nil
+	}
+	d, err := time.ParseDuration(s.Timeout)
+	if err != nil {
+		return 0, fmt.Errorf("parse shutdown.timeout %q: %w", s.Timeout, err)
+	}
+	return d, nil
 }
 
 // HTTPConfig configures the HTTP/WebSocket listener.
@@ -43,9 +64,36 @@ type DatabaseConfig struct {
 
 // AuthConfig holds authentication settings.
 type AuthConfig struct {
-	JWTSecret    string `toml:"jwt_secret"`
-	JWTSecretFile string `toml:"jwt_secret_file"`
-	TokenTTL     string `toml:"token_ttl"`
+	JWTSecret        string `toml:"jwt_secret"`
+	JWTSecretFile    string `toml:"jwt_secret_file"`
+	TokenTTL         string `toml:"token_ttl"`
+	RegistrationMode string `toml:"registration_mode"`
+	InviteCode       string `toml:"invite_code"`
+}
+
+// GetRegistrationMode returns the configured registration mode, defaulting to "closed".
+// Valid values are "open", "invite", and "closed".
+func (a *AuthConfig) GetRegistrationMode() string {
+	if a.RegistrationMode == "" {
+		return "closed"
+	}
+	return a.RegistrationMode
+}
+
+// validateRegistrationMode checks that RegistrationMode is a valid value
+// and that InviteCode is set when mode is "invite".
+func (a *AuthConfig) validateRegistrationMode() error {
+	mode := a.GetRegistrationMode()
+	switch mode {
+	case "open", "invite", "closed":
+		// valid
+	default:
+		return fmt.Errorf("auth.registration_mode must be one of: open, invite, closed; got %q", mode)
+	}
+	if mode == "invite" && a.InviteCode == "" {
+		return fmt.Errorf("auth.invite_code is required when registration_mode is \"invite\"")
+	}
+	return nil
 }
 
 // ParseTokenTTL parses the TokenTTL string as a time.Duration.
@@ -59,6 +107,22 @@ func (a *AuthConfig) ParseTokenTTL() (time.Duration, error) {
 		return 0, fmt.Errorf("parse token_ttl %q: %w", a.TokenTTL, err)
 	}
 	return d, nil
+}
+
+// resolveJWTSecret populates JWTSecret from JWTSecretFile when appropriate.
+// It returns an error if both JWTSecret and JWTSecretFile are set.
+func (a *AuthConfig) resolveJWTSecret() error {
+	if a.JWTSecret != "" && a.JWTSecretFile != "" {
+		return fmt.Errorf("auth.jwt_secret and auth.jwt_secret_file are mutually exclusive")
+	}
+	if a.JWTSecretFile != "" {
+		data, err := os.ReadFile(a.JWTSecretFile)
+		if err != nil {
+			return fmt.Errorf("read auth.jwt_secret_file %q: %w", a.JWTSecretFile, err)
+		}
+		a.JWTSecret = strings.TrimSpace(string(data))
+	}
+	return nil
 }
 
 // LoadServerConfig reads a TOML config file, parses it into a ServerConfig,
@@ -97,8 +161,14 @@ func (c *ServerConfig) Validate() error {
 	if c.TLS.ServerKey == "" {
 		return fmt.Errorf("tls.server_key is required")
 	}
+	if err := c.Auth.resolveJWTSecret(); err != nil {
+		return err
+	}
 	if len(c.Auth.JWTSecret) < 32 {
 		return fmt.Errorf("auth.jwt_secret must be at least 32 characters for HS256 security")
+	}
+	if err := c.Auth.validateRegistrationMode(); err != nil {
+		return err
 	}
 	return nil
 }

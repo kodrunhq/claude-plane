@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/api"
-	"github.com/claudeplane/claude-plane/internal/server/auth"
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/api"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 func TestRequestBodySizeLimit(t *testing.T) {
@@ -28,7 +28,7 @@ func TestRequestBodySizeLimit(t *testing.T) {
 
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
-	h := api.NewHandlers(s, authSvc, cm)
+	h := api.NewHandlers(s, authSvc, cm, "open", "")
 	router := api.NewRouter(h, nil, nil, nil, nil, nil)
 
 	// 2MB body — should exceed 1MB limit

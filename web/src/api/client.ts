@@ -10,9 +10,7 @@ export class ApiError extends Error {
 const BASE_URL = '/api/v1';
 
 export async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('token') ?? '';
   const headers: HeadersInit = {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options?.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...options?.headers,
   };
@@ -20,6 +18,7 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers,
+    credentials: 'same-origin',
   });
 
   if (!response.ok) {

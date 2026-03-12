@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	"github.com/creack/pty"
 )
 
@@ -26,7 +27,7 @@ type Session struct {
 	scrollbackPath string
 
 	mu       sync.Mutex
-	status   string // "running", "completed", "failed"
+	status   string // status.Running, status.Completed, status.Failed
 	exitCode int
 	logger   *slog.Logger
 }
@@ -72,7 +73,7 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 		outputCh:       make(chan []byte, 256),
 		readDone:       make(chan struct{}),
 		startedAt:      time.Now(),
-		status:         "running",
+		status:         status.Running,
 		scrollback:     sb,
 		scrollbackPath: sbPath,
 		logger:         logger.With("session_id", id),
@@ -126,14 +127,14 @@ func (s *Session) waitForExit() {
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			s.exitCode = exitErr.ExitCode()
-			s.status = "failed"
+			s.status = status.Failed
 		} else {
 			s.exitCode = -1
-			s.status = "failed"
+			s.status = status.Failed
 		}
 	} else {
 		s.exitCode = 0
-		s.status = "completed"
+		s.status = status.Completed
 	}
 	s.mu.Unlock()
 
@@ -190,9 +191,9 @@ func (s *Session) Kill(signal string) error {
 		go func() {
 			time.Sleep(5 * time.Second)
 			s.mu.Lock()
-			status := s.status
+			currStatus := s.status
 			s.mu.Unlock()
-			if status == "running" {
+			if currStatus == status.Running {
 				s.logger.Warn("escalating to SIGKILL after timeout")
 				_ = s.cmd.Process.Signal(syscall.SIGKILL)
 			}

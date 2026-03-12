@@ -3,9 +3,10 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // Orchestrator manages active DAGRunners for job runs.
@@ -72,7 +73,9 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 
 	// Build and start DAGRunner
 	onComplete := func(runID string, status string) {
-		_ = o.store.UpdateRunStatus(o.rootCtx, runID, status)
+		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
+			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
+		}
 		o.mu.Lock()
 		delete(o.activeRuns, runID)
 		o.mu.Unlock()
@@ -85,7 +88,9 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	o.mu.Unlock()
 
 	// Mark run as running
-	_ = o.store.UpdateRunStatus(ctx, run.RunID, store.StatusRunning)
+	if err := o.store.UpdateRunStatus(ctx, run.RunID, store.StatusRunning); err != nil {
+		slog.Warn("failed to mark run as running", "error", err, "run_id", run.RunID)
+	}
 
 	runner.Start(o.rootCtx)
 
@@ -164,7 +169,9 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 
 	// Build new DAGRunner from current DB state
 	onComplete := func(runID string, status string) {
-		_ = o.store.UpdateRunStatus(o.rootCtx, runID, status)
+		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
+			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
+		}
 		o.mu.Lock()
 		delete(o.activeRuns, runID)
 		o.mu.Unlock()

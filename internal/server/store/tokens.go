@@ -5,19 +5,6 @@ import (
 	"time"
 )
 
-// revokedTokensSchema contains the CREATE TABLE statement for the revoked_tokens
-// table. Called from RunMigrations alongside the main schema.
-const revokedTokensSchema = `
-CREATE TABLE IF NOT EXISTS revoked_tokens (
-    jti        TEXT PRIMARY KEY,
-    user_id    TEXT NOT NULL,
-    revoked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expires_at);
-`
-
 // RevokedToken represents a row in the revoked_tokens table.
 type RevokedToken struct {
 	JTI       string

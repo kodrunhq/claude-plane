@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/orchestrator"
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // RunHandler handles REST endpoints for run management.

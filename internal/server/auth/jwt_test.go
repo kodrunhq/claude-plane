@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/claudeplane/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 	"github.com/golang-jwt/jwt/v5"
 )
 

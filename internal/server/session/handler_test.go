@@ -14,16 +14,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/session"
-	"github.com/claudeplane/claude-plane/internal/server/store"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/session"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 // mockMachineStore implements connmgr.MachineStore for tests.
 type mockMachineStore struct{}
 
-func (m *mockMachineStore) UpsertMachine(string, int32) error                         { return nil }
+func (m *mockMachineStore) UpsertMachine(string, int32) error                   { return nil }
 func (m *mockMachineStore) UpdateMachineStatus(string, string, time.Time) error { return nil }
 
 // commandRecorder records commands sent to a mock agent.
@@ -58,8 +58,8 @@ func setupTestHandler(t *testing.T) (*session.SessionHandler, *connmgr.Connectio
 	reg := session.NewRegistry(slog.Default())
 	recorder := &commandRecorder{}
 
-	getClaims := func(r *http.Request) *session.UserClaims { return nil }
-	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	// nil getClaims = unauthenticated mode (no auth configured)
+	handler := session.NewSessionHandler(st, cm, reg, nil, slog.Default())
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/sessions", handler.CreateSession)
@@ -433,5 +433,55 @@ func TestListSessions_FiltersByOwnership(t *testing.T) {
 	json.NewDecoder(adminListW.Body).Decode(&adminSessions)
 	if len(adminSessions) != 2 {
 		t.Errorf("admin sessions count = %d, want 2", len(adminSessions))
+	}
+}
+
+func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
+	cm, recorder, st, reg := setupAuthTestEnv(t)
+
+	createTestUser(t, st, "user-owner")
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	})
+
+	// Create a session directly in the DB
+	if err := st.CreateSession(&store.Session{
+		SessionID: "sess-nil-claims",
+		MachineID: "machine-a",
+		UserID:    "user-owner",
+		Command:   "claude",
+		Status:    store.StatusCreated,
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// getClaims is non-nil (auth is configured) but returns nil claims
+	// (simulates misconfigured middleware or missing auth header)
+	nilClaims := func(r *http.Request) *session.UserClaims { return nil }
+	h := session.NewSessionHandler(st, cm, reg, nilClaims, slog.Default())
+	r := chi.NewRouter()
+	r.Get("/api/v1/sessions/{sessionID}", h.GetSession)
+	r.Get("/api/v1/sessions", h.ListSessions)
+
+	// GET session should be denied (404, not 200)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/sess-nil-claims", nil)
+	getW := httptest.NewRecorder()
+	r.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusNotFound {
+		t.Errorf("GET with nil claims: status = %d, want 404", getW.Code)
+	}
+
+	// LIST sessions should return 401
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions", nil)
+	listW := httptest.NewRecorder()
+	r.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusUnauthorized {
+		t.Errorf("LIST with nil claims: status = %d, want 401", listW.Code)
 	}
 }

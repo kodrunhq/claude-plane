@@ -11,10 +11,10 @@ import (
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/claudeplane/claude-plane/internal/server/auth"
-	"github.com/claudeplane/claude-plane/internal/server/connmgr"
-	"github.com/claudeplane/claude-plane/internal/server/store"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 // ErrAgentNotConnected is returned when no agent is available for a machine.
@@ -31,15 +31,15 @@ type wsControlMessage struct {
 // authTimeout is the maximum time allowed for the first-message auth handshake.
 const authTimeout = 5 * time.Second
 
+// sessionCookieName references the canonical cookie name from the auth package.
+const sessionCookieName = auth.SessionCookieName
+
 // HandleTerminalWS returns an http.HandlerFunc that bridges a browser WebSocket
 // to an agent's terminal session via the gRPC command stream.
 //
-// Authentication supports two modes (backwards compatible):
-//  1. Query parameter: ?token=<jwt> (deprecated, will be removed in a future version)
-//  2. First-message auth: connect without token, send {"type":"auth","token":"<jwt>"} as first message
-//
-// If a query param token is provided, it is used immediately. Otherwise the
-// handler upgrades the WebSocket and waits up to 5 seconds for an auth message.
+// Authentication is checked in this order:
+//  1. httpOnly cookie named "session_token" (preferred, pre-upgrade)
+//  2. First-message auth: send {"type":"auth","token":"<jwt>"} as first WebSocket message
 func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Registry, authSvc *auth.Service, logger *slog.Logger) http.HandlerFunc {
 	if logger == nil {
 		logger = slog.Default()
@@ -48,10 +48,9 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := chi.URLParam(r, "sessionID")
 
-		// --- Query-param auth (deprecated, backwards compat) ---
-		token := r.URL.Query().Get("token")
-		if token != "" {
-			claims, err := authSvc.ValidateToken(token)
+		// --- Cookie auth (preferred, pre-upgrade) ---
+		if cookie, err := r.Cookie(sessionCookieName); err == nil && cookie.Value != "" {
+			claims, err := authSvc.ValidateToken(cookie.Value)
 			if err != nil {
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
@@ -185,13 +184,15 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 		msgType, data, err := conn.Read(ctx)
 		if err != nil {
 			// WebSocket closed or error — send DetachSessionCmd (not kill)
-			_ = sendToAgent(cm, machineID, &pb.ServerCommand{
+			if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 				Command: &pb.ServerCommand_DetachSession{
 					DetachSession: &pb.DetachSessionCmd{
 						SessionId: sessionID,
 					},
 				},
-			})
+			}); err != nil {
+				logger.Warn("failed to send detach session command to agent", "error", err, "session_id", sessionID, "machine_id", machineID)
+			}
 			logger.Debug("websocket read error (client disconnected)", "session_id", sessionID, "error", err)
 			conn.CloseNow()
 			return
@@ -200,14 +201,16 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 		switch msgType {
 		case websocket.MessageBinary:
 			// Keystroke input
-			_ = sendToAgent(cm, machineID, &pb.ServerCommand{
+			if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 				Command: &pb.ServerCommand_InputData{
 					InputData: &pb.InputDataCmd{
 						SessionId: sessionID,
 						Data:      data,
 					},
 				},
-			})
+			}); err != nil {
+				logger.Warn("failed to send input data to agent", "error", err, "session_id", sessionID, "machine_id", machineID)
+			}
 		case websocket.MessageText:
 			// Control message (resize)
 			var ctrl wsControlMessage
@@ -217,7 +220,7 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 			}
 			switch ctrl.Type {
 			case "resize":
-				_ = sendToAgent(cm, machineID, &pb.ServerCommand{
+				if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 					Command: &pb.ServerCommand_ResizeTerminal{
 						ResizeTerminal: &pb.ResizeTerminalCmd{
 							SessionId: sessionID,
@@ -227,7 +230,9 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 							},
 						},
 					},
-				})
+				}); err != nil {
+					logger.Warn("failed to send resize command to agent", "error", err, "session_id", sessionID, "machine_id", machineID)
+				}
 			}
 		}
 	}
