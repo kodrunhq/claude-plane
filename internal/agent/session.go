@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -21,6 +22,9 @@ type Session struct {
 	readDone  chan struct{} // closed when readLoop exits
 	startedAt time.Time
 
+	scrollback     *ScrollbackWriter
+	scrollbackPath string
+
 	mu       sync.Mutex
 	status   string // "running", "completed", "failed"
 	exitCode int
@@ -28,7 +32,8 @@ type Session struct {
 }
 
 // NewSession spawns a process in a PTY and starts read/wait goroutines.
-func NewSession(id, command string, args []string, workDir string, envVars map[string]string, rows, cols uint16, logger *slog.Logger) (*Session, error) {
+// dataDir specifies where scrollback files are stored.
+func NewSession(id, command string, args []string, workDir string, envVars map[string]string, rows, cols uint16, dataDir string, logger *slog.Logger) (*Session, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -47,15 +52,25 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 		return nil, fmt.Errorf("start pty: %w", err)
 	}
 
+	sbPath := filepath.Join(dataDir, id+".cast")
+	sb, err := NewScrollbackWriter(sbPath, uint32(cols), uint32(rows))
+	if err != nil {
+		ptmx.Close()
+		_ = cmd.Process.Kill()
+		return nil, fmt.Errorf("create scrollback writer: %w", err)
+	}
+
 	s := &Session{
-		id:        id,
-		cmd:       cmd,
-		ptyFile:   ptmx,
-		outputCh:  make(chan []byte, 256),
-		readDone:  make(chan struct{}),
-		startedAt: time.Now(),
-		status:    "running",
-		logger:    logger.With("session_id", id),
+		id:             id,
+		cmd:            cmd,
+		ptyFile:        ptmx,
+		outputCh:       make(chan []byte, 256),
+		readDone:       make(chan struct{}),
+		startedAt:      time.Now(),
+		status:         "running",
+		scrollback:     sb,
+		scrollbackPath: sbPath,
+		logger:         logger.With("session_id", id),
 	}
 
 	go s.readLoop()
@@ -66,6 +81,7 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 
 // readLoop reads from the PTY fd in 4096-byte chunks and sends to outputCh.
 // readLoop signals readDone when done. waitForExit closes outputCh after status is set.
+// All PTY output is also teed to the scrollback writer.
 func (s *Session) readLoop() {
 	defer close(s.readDone)
 
@@ -75,6 +91,14 @@ func (s *Session) readLoop() {
 		if n > 0 {
 			data := make([]byte, n)
 			copy(data, buf[:n])
+
+			// Write to scrollback (log errors but don't stop).
+			if s.scrollback != nil {
+				if sbErr := s.scrollback.WriteOutput(data); sbErr != nil {
+					s.logger.Warn("scrollback write failed", "error", sbErr)
+				}
+			}
+
 			// Non-blocking send: drop data if channel is full.
 			select {
 			case s.outputCh <- data:
@@ -113,6 +137,13 @@ func (s *Session) waitForExit() {
 
 	// Wait for readLoop to stop sending to outputCh.
 	<-s.readDone
+
+	// Close scrollback writer after readLoop finishes (no more writes).
+	if s.scrollback != nil {
+		if err := s.scrollback.Close(); err != nil {
+			s.logger.Warn("scrollback close failed", "error", err)
+		}
+	}
 
 	// Now safe to close outputCh: readLoop is done, status is already set.
 	close(s.outputCh)
@@ -193,4 +224,17 @@ func (s *Session) SessionID() string {
 // StartedAt returns when the session was created.
 func (s *Session) StartedAt() time.Time {
 	return s.startedAt
+}
+
+// ScrollbackPath returns the path to the scrollback file.
+func (s *Session) ScrollbackPath() string {
+	return s.scrollbackPath
+}
+
+// ScrollbackOffset returns the current byte offset of the scrollback file.
+func (s *Session) ScrollbackOffset() int64 {
+	if s.scrollback == nil {
+		return 0
+	}
+	return s.scrollback.CurrentOffset()
 }
