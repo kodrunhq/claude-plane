@@ -121,10 +121,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TERM-02 | Phase 4 | Complete |
 | TERM-03 | Phase 4 | Complete |
 | TERM-04 | Phase 4 | Complete |
-| JOBS-01 | Phase 6 | Pending |
-| JOBS-02 | Phase 6 | Pending |
+| JOBS-01 | Phase 6 | In Progress |
+| JOBS-02 | Phase 6 | In Progress |
 | JOBS-03 | Phase 6 | Pending |
-| JOBS-04 | Phase 6 | Pending |
+| JOBS-04 | Phase 6 | In Progress |
 | INFR-01 | Phase 1 | Complete |
 | INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Complete |
