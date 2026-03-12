@@ -2,6 +2,9 @@ package grpc_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"log/slog"
 	"net"
 	"os"
@@ -18,6 +21,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 )
 
 // setupTestCerts generates ephemeral CA, server, and agent certificates.
@@ -194,6 +198,172 @@ func TestConnectionManager_AddRemoveList(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// mockServerStream is a minimal grpc.ServerStream for interceptor unit tests.
+type mockServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (m *mockServerStream) Context() context.Context {
+	return m.ctx
+}
+
+func TestMachineAuthStreamInterceptor_NoPeerInfo(t *testing.T) {
+	interceptor := servergrpc.MachineAuthStreamInterceptor()
+	stream := &mockServerStream{ctx: context.Background()}
+
+	handlerCalled := false
+	handler := func(srv any, ss grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	err := interceptor(nil, stream, &grpc.StreamServerInfo{}, handler)
+	if err == nil {
+		t.Fatal("expected error for context without peer info")
+	}
+	if handlerCalled {
+		t.Error("handler should not be called when auth fails")
+	}
+}
+
+func TestMachineAuthStreamInterceptor_NoCertificate(t *testing.T) {
+	interceptor := servergrpc.MachineAuthStreamInterceptor()
+
+	// Peer with TLS info but no client certificate
+	p := &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345},
+		AuthInfo: credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: nil,
+			},
+		},
+	}
+	ctx := peer.NewContext(context.Background(), p)
+	stream := &mockServerStream{ctx: ctx}
+
+	handlerCalled := false
+	handler := func(srv any, ss grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	err := interceptor(nil, stream, &grpc.StreamServerInfo{}, handler)
+	if err == nil {
+		t.Fatal("expected error for peer with no certificates")
+	}
+	if handlerCalled {
+		t.Error("handler should not be called when auth fails")
+	}
+}
+
+func TestMachineAuthStreamInterceptor_InvalidCNPrefix(t *testing.T) {
+	interceptor := servergrpc.MachineAuthStreamInterceptor()
+
+	// Peer with a certificate that has wrong CN prefix
+	cert := &x509.Certificate{
+		Subject: pkix.Name{CommonName: "bad-prefix-nuc-01"},
+	}
+	p := &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345},
+		AuthInfo: credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{cert},
+			},
+		},
+	}
+	ctx := peer.NewContext(context.Background(), p)
+	stream := &mockServerStream{ctx: ctx}
+
+	handlerCalled := false
+	handler := func(srv any, ss grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	err := interceptor(nil, stream, &grpc.StreamServerInfo{}, handler)
+	if err == nil {
+		t.Fatal("expected error for certificate with invalid CN prefix")
+	}
+	if handlerCalled {
+		t.Error("handler should not be called when auth fails")
+	}
+}
+
+func TestMachineAuthStreamInterceptor_ValidCert(t *testing.T) {
+	interceptor := servergrpc.MachineAuthStreamInterceptor()
+
+	cert := &x509.Certificate{
+		Subject: pkix.Name{CommonName: "agent-nuc-42"},
+	}
+	p := &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345},
+		AuthInfo: credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{cert},
+			},
+		},
+	}
+	ctx := peer.NewContext(context.Background(), p)
+	stream := &mockServerStream{ctx: ctx}
+
+	var capturedCtx context.Context
+	handler := func(srv any, ss grpc.ServerStream) error {
+		capturedCtx = ss.Context()
+		return nil
+	}
+
+	err := interceptor(nil, stream, &grpc.StreamServerInfo{}, handler)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedCtx == nil {
+		t.Fatal("handler was not called")
+	}
+
+	// Verify machine-id was injected into context
+	machineID, err := servergrpc.MachineIDFromContextForTest(capturedCtx)
+	if err != nil {
+		t.Fatalf("MachineIDFromContext: %v", err)
+	}
+	if machineID != "nuc-42" {
+		t.Errorf("machineID = %q, want %q", machineID, "nuc-42")
+	}
+}
+
+func TestMachineAuthStreamInterceptor_EmptyMachineID(t *testing.T) {
+	interceptor := servergrpc.MachineAuthStreamInterceptor()
+
+	// CN = "agent-" with empty machine ID after prefix
+	cert := &x509.Certificate{
+		Subject: pkix.Name{CommonName: "agent-"},
+	}
+	p := &peer.Peer{
+		Addr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 12345},
+		AuthInfo: credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{cert},
+			},
+		},
+	}
+	ctx := peer.NewContext(context.Background(), p)
+	stream := &mockServerStream{ctx: ctx}
+
+	handlerCalled := false
+	handler := func(srv any, ss grpc.ServerStream) error {
+		handlerCalled = true
+		return nil
+	}
+
+	err := interceptor(nil, stream, &grpc.StreamServerInfo{}, handler)
+	if err == nil {
+		t.Fatal("expected error for empty machine-id in certificate CN")
+	}
+	if handlerCalled {
+		t.Error("handler should not be called when auth fails")
+	}
 }
 
 // startTestGRPCServerWithRegistry creates a gRPC server with mTLS and a session
