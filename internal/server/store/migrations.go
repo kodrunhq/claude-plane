@@ -151,12 +151,16 @@ func RunMigrations(db *sql.DB) error {
 	}
 
 	if _, err := db.Exec(schema); err != nil {
-		db.Exec("ROLLBACK;")
+		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
+			return fmt.Errorf("run migrations (schema): %w (rollback failed: %v)", err, rbErr)
+		}
 		return fmt.Errorf("run migrations (schema): %w", err)
 	}
 
 	if _, err := db.Exec("COMMIT;"); err != nil {
-		db.Exec("ROLLBACK;")
+		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
+			return fmt.Errorf("run migrations (commit): %w (rollback failed: %v)", err, rbErr)
+		}
 		return fmt.Errorf("run migrations (commit): %w", err)
 	}
 	return nil
