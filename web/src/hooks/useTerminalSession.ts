@@ -64,11 +64,9 @@ export function useTerminalSession(
       // on the WebSocket upgrade request, so no first-message auth is needed.
       setStatus('replaying');
 
-      // Send actual terminal dimensions to resize the remote PTY from 80x24
-      // to match the browser viewport.
+      // Fit the terminal to the container — this triggers term.onResize which
+      // sends the resize control message to the server automatically.
       fitAddon.fit();
-      const { cols, rows } = term;
-      ws.send(JSON.stringify({ type: 'resize', cols, rows }));
     };
 
     ws.onmessage = (event: MessageEvent) => {

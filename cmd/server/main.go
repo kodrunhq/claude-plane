@@ -189,7 +189,20 @@ func newServeCmd() *cobra.Command {
 			if err := httpServer.Shutdown(shutdownCtx); err != nil {
 				slog.Error("HTTP shutdown error", "error", err)
 			}
-			grpcSrv.GracefulStop()
+
+			// GracefulStop can block indefinitely waiting for in-flight streams.
+			// Run it in a goroutine and fall back to Stop() if the timeout expires.
+			grpcStopped := make(chan struct{})
+			go func() {
+				grpcSrv.GracefulStop()
+				close(grpcStopped)
+			}()
+			select {
+			case <-grpcStopped:
+			case <-shutdownCtx.Done():
+				slog.Warn("gRPC graceful stop timed out, forcing stop")
+				grpcSrv.Stop()
+			}
 
 			// Close the database as the final cleanup step.
 			if err := s.Close(); err != nil {

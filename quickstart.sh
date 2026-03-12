@@ -41,7 +41,7 @@ mkdir -p "$DATA_DIR"/{ca,server-cert,agent-cert}
 
 if [ ! -f "$DATA_DIR/ca/ca.pem" ]; then
   info "Initializing certificate authority..."
-  ./claude-plane-server ca init --out-dir "$DATA_DIR/ca" 2>/dev/null
+  ./claude-plane-server ca init --out-dir "$DATA_DIR/ca"
   ok "CA initialized"
 else
   info "CA already exists, skipping"
@@ -51,7 +51,7 @@ if [ ! -f "$DATA_DIR/server-cert/server.pem" ]; then
   info "Issuing server certificate..."
   ./claude-plane-server ca issue-server \
     --ca-dir "$DATA_DIR/ca" \
-    --out-dir "$DATA_DIR/server-cert" 2>/dev/null
+    --out-dir "$DATA_DIR/server-cert"
   ok "Server certificate issued"
 fi
 
@@ -60,7 +60,7 @@ if [ ! -f "$DATA_DIR/agent-cert/agent.pem" ]; then
   ./claude-plane-server ca issue-agent \
     --ca-dir "$DATA_DIR/ca" \
     --out-dir "$DATA_DIR/agent-cert" \
-    --machine-id agent-local 2>/dev/null
+    --machine-id agent-local
   ok "Agent certificate issued"
 fi
 
@@ -134,7 +134,7 @@ if [ ! -f "$DATA_DIR/claude-plane.db" ]; then
   echo "$ADMIN_PASSWORD" | ./claude-plane-server seed-admin \
     --db "$DATA_DIR/claude-plane.db" \
     --email "$ADMIN_EMAIL" \
-    --name Admin 2>/dev/null
+    --name Admin
 
   ok "Admin account created"
   echo ""
@@ -149,13 +149,22 @@ info "Starting server..."
 ./claude-plane-server serve --config "$SERVER_TOML" &
 SERVER_PID=$!
 
-sleep 1
-
 info "Starting agent..."
 ./claude-plane-agent run --config "$AGENT_TOML" &
 AGENT_PID=$!
 
-sleep 1
+# Install trap immediately after starting processes so early failures
+# (e.g. health check) still clean up backgrounded processes.
+cleanup() {
+  echo ""
+  info "Shutting down..."
+  kill "$SERVER_PID" "$AGENT_PID" 2>/dev/null || true
+  wait "$SERVER_PID" "$AGENT_PID" 2>/dev/null || true
+  ok "Stopped"
+}
+trap cleanup INT TERM EXIT
+
+sleep 2
 
 # Verify server is responding
 if curl -sf http://127.0.0.1:"$HTTP_PORT"/ >/dev/null 2>&1; then
@@ -176,14 +185,6 @@ echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 
-# Trap SIGINT/SIGTERM to clean up both processes
-cleanup() {
-  echo ""
-  info "Shutting down..."
-  kill "$SERVER_PID" "$AGENT_PID" 2>/dev/null || true
-  wait "$SERVER_PID" "$AGENT_PID" 2>/dev/null || true
-  ok "Stopped"
-}
-trap cleanup INT TERM
-
+# Disable EXIT trap for normal wait — cleanup runs on signal only.
+trap - EXIT
 wait "$SERVER_PID" "$AGENT_PID"
