@@ -134,5 +134,5 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 2. Agent Core | 1/2 | In Progress|  |
 | 3. Server Core | 2/3 | In Progress|  |
 | 4. Terminal Streaming | 2/3 | In Progress|  |
-| 5. Frontend | 0/3 | Planning complete | - |
+| 5. Frontend | 1/5 | In Progress|  |
 | 6. Job System | 0/3 | Planning complete | - |
