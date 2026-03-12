@@ -1,7 +1,6 @@
 package tlsutil
 
 import (
-	"crypto/ecdsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -84,6 +83,9 @@ func TestIssueServerCert(t *testing.T) {
 	}
 
 	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		t.Fatal("server.pem is not a valid PEM certificate")
+	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatalf("failed to parse server cert: %v", err)
@@ -158,6 +160,9 @@ func TestIssueAgentCert(t *testing.T) {
 	}
 
 	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		t.Fatal("agent.pem is not a valid PEM certificate")
+	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatalf("failed to parse agent cert: %v", err)
@@ -358,6 +363,9 @@ func loadCertFromDir(t *testing.T, dir, name string) *x509.Certificate {
 		t.Fatalf("read %s: %v", name, err)
 	}
 	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		t.Fatalf("%s is not a valid PEM certificate", name)
+	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatalf("parse %s: %v", name, err)
@@ -377,6 +385,9 @@ func TestGenerateCA_KeyType(t *testing.T) {
 		t.Fatal(err)
 	}
 	block, _ := pem.Decode(keyPEM)
+	if block == nil || block.Type != "EC PRIVATE KEY" {
+		t.Fatal("ca-key.pem is not a valid EC private key PEM")
+	}
 	key, err := x509.ParseECPrivateKey(block.Bytes)
 	if err != nil {
 		t.Fatal(err)
@@ -385,7 +396,4 @@ func TestGenerateCA_KeyType(t *testing.T) {
 	if key.Curve.Params().Name != "P-256" {
 		t.Errorf("expected P-256, got %s", key.Curve.Params().Name)
 	}
-
-	_ = key // use variable
-	_ = (*ecdsa.PrivateKey)(key) // type assertion
 }
