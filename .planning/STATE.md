@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-03-12T11:52:15.922Z"
-last_activity: 2026-03-12 -- Completed 05-04-PLAN.md
+status: completed
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-03-12T13:25:11.258Z"
+last_activity: 2026-03-12 -- Completed 06-05-PLAN.md (gap closure)
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 20
-  completed_plans: 17
-  percent: 85
+  completed_phases: 6
+  total_plans: 22
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal -- with sessions that survive disconnection.
-**Current focus:** Phase 5: Frontend (In Progress)
+**Current focus:** Phase 6: Job System (In Progress)
 
 ## Current Position
 
-Phase: 5 of 6 (Frontend)
-Plan: 4 of 5 in current phase
-Status: In Progress
-Last activity: 2026-03-12 -- Completed 05-04-PLAN.md
+Phase: 6 of 6 (Job System)
+Plan: 5 of 5 in current phase (gap closure plans 04-05)
+Status: Complete
+Last activity: 2026-03-12 -- Completed 06-05-PLAN.md (gap closure)
 
-Progress: [█████████░] 85%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -63,6 +63,11 @@ Progress: [█████████░] 85%
 | Phase 05 P02 | 3min | 2 tasks | 18 files |
 | Phase 05-frontend P03 | 4min | 2 tasks | 11 files |
 | Phase 05-frontend P04 | 2min | 1 tasks | 3 files |
+| Phase 06-job-system P01 | 12min | 2 tasks | 8 files |
+| Phase 06-job-system P02 | 8min | 2 tasks | 4 files |
+| Phase 06-job-system P03 | 3min | 2 tasks | 21 files |
+| Phase 06-job-system P05 | 2min | 2 tasks | 8 files |
+| Phase 06 P04 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -106,6 +111,20 @@ Recent decisions affecting current work:
 - [Phase 05-frontend]: Native WebSocket with exponential backoff instead of reconnecting-websocket (dependency not installed)
 - [Phase 05-frontend]: Event stream invalidates entire query key groups rather than patching individual cache entries
 - [Phase 05-frontend]: Negation pattern in .gitignore (dist/* + !.gitkeep) to track placeholder while ignoring build artifacts
+- [Phase 06-job-system]: JobStoreIface interface for orchestrator DI and testability
+- [Phase 06-job-system]: StepExecutor interface with onComplete callback for async step completion
+- [Phase 06-job-system]: DAGRunner uses context cancellation for run failure/cancellation propagation
+- [Phase 06-job-system]: RunStep.OnFailure populated from original Steps at runtime (not stored in DB snapshot)
+- [Phase 06-job-system]: Mock executor with channels for deterministic concurrent test control
+- [Phase 06-job-system]: Separate handler package for job system (not api package) due to different dependency types
+- [Phase 06-job-system]: Flat route registration to avoid Chi mount conflicts on shared /api/v1 prefix
+- [Phase 06-job-system]: AddDependency handler adds edge then validates DAG, rollback on cycle
+- [Phase 06-job-system]: RetryStep pre-validates step state before delegating to orchestrator
+- [Phase 06-job-system]: Used @xyflow/react (ReactFlow v12) with @dagrejs/dagre for automatic DAG layout
+- [Phase 06-job-system]: Views placed in web/src/views/ following existing project convention (not pages/)
+- [Phase 06-job-system]: RunDAGView is a thin read-only wrapper around DAGCanvas with live status coloring
+- [Phase 06-job-system]: Synthetic edge IDs (dep.depends_on->dep.step_id) since backend StepDependency has no separate id field
+- [Phase 06]: Job/run routes registered as flat paths on top-level router in JWT-protected Group (not inside /api/v1 Route block)
 
 ### Pending Todos
 
@@ -118,6 +137,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T11:46:51.167Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-03-12T13:24:58.455Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None

@@ -39,10 +39,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Job System
 
-- [ ] **JOBS-01**: User can create a job with multiple ordered steps
-- [ ] **JOBS-02**: User can execute individual job steps and view their output
-- [ ] **JOBS-03**: User can rerun a previously executed step
-- [ ] **JOBS-04**: Steps support dependency ordering (step B waits for step A to complete)
+- [x] **JOBS-01**: User can create a job with multiple ordered steps
+- [x] **JOBS-02**: User can execute individual job steps and view their output
+- [x] **JOBS-03**: User can rerun a previously executed step
+- [x] **JOBS-04**: Steps support dependency ordering (step B waits for step A to complete)
 
 ### Infrastructure
 
@@ -121,10 +121,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TERM-02 | Phase 4 | Complete |
 | TERM-03 | Phase 4 | Complete |
 | TERM-04 | Phase 4 | Complete |
-| JOBS-01 | Phase 6 | Pending |
-| JOBS-02 | Phase 6 | Pending |
-| JOBS-03 | Phase 6 | Pending |
-| JOBS-04 | Phase 6 | Pending |
+| JOBS-01 | Phase 6 | In Progress |
+| JOBS-02 | Phase 6 | In Progress |
+| JOBS-03 | Phase 6 | Complete |
+| JOBS-04 | Phase 6 | In Progress |
 | INFR-01 | Phase 1 | Complete |
 | INFR-02 | Phase 1 | Complete |
 | INFR-03 | Phase 1 | Complete |

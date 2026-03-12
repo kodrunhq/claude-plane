@@ -8,6 +8,7 @@ import (
 
 	"github.com/claudeplane/claude-plane/internal/server/auth"
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
+	"github.com/claudeplane/claude-plane/internal/server/handler"
 	"github.com/claudeplane/claude-plane/internal/server/session"
 	"github.com/claudeplane/claude-plane/internal/server/store"
 )
@@ -32,7 +33,7 @@ func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.Connect
 // Public routes (register, login) require no authentication.
 // Protected routes (logout, machines, sessions) require a valid JWT Bearer token.
 // The WebSocket route uses query-param authentication (WebSocket can't send headers).
-func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc) chi.Router {
+func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -67,6 +68,19 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 			}
 		})
 	})
+
+	// Job system routes (flat paths, JWT-protected)
+	if jobHandler != nil || runHandler != nil {
+		r.Group(func(r chi.Router) {
+			r.Use(JWTAuthMiddleware(h.authSvc))
+			if jobHandler != nil {
+				handler.RegisterJobRoutes(r, jobHandler)
+			}
+			if runHandler != nil {
+				handler.RegisterRunRoutes(r, runHandler)
+			}
+		})
+	}
 
 	return r
 }

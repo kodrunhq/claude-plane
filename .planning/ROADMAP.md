@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Server Core** - Server accepts agents, exposes REST API, handles user authentication
 - [ ] **Phase 4: Terminal Streaming** - End-to-end terminal I/O from browser through server to agent PTY
 - [x] **Phase 5: Frontend** - Full React SPA with session dashboard, machine status, and polished UX (completed 2026-03-12)
-- [ ] **Phase 6: Job System** - Multi-step interactive notebook execution on top of session infrastructure
+- [ ] **Phase 6: Job System** - Multi-step interactive notebook execution on top of session infrastructure (gap closure in progress)
 
 ## Phase Details
 
@@ -115,12 +115,14 @@ Plans:
   2. User can execute individual steps and see their output in real time
   3. User can rerun a previously completed step and see updated output
   4. Steps with dependencies wait for prerequisite steps to complete before executing
-**Plans**: 3 plans
+**Plans**: 5 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Job store (DB CRUD) + DAGRunner (execution engine) + Orchestrator (run lifecycle)
-- [ ] 06-02-PLAN.md — REST handlers for jobs, steps, runs (full API surface)
-- [ ] 06-03-PLAN.md — Frontend: API client, DAG canvas (ReactFlow), job editor, run detail with live status
+- [x] 06-01-PLAN.md — Job store (DB CRUD) + DAGRunner (execution engine) + Orchestrator (run lifecycle)
+- [x] 06-02-PLAN.md — REST handlers for jobs, steps, runs (full API surface)
+- [x] 06-03-PLAN.md — Frontend: API client, DAG canvas (ReactFlow), job editor, run detail with live status
+- [ ] 06-04-PLAN.md — Gap closure: wire job/run routes into production router + implement UpdateJob
+- [ ] 06-05-PLAN.md — Gap closure: align frontend types with backend JSON field names
 
 ## Progress
 
@@ -135,4 +137,4 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 3. Server Core | 2/3 | In Progress|  |
 | 4. Terminal Streaming | 2/3 | In Progress|  |
 | 5. Frontend | 5/5 | Complete   | 2026-03-12 |
-| 6. Job System | 0/3 | Planning complete | - |
+| 6. Job System | 3/5 | Gap Closure |  |
