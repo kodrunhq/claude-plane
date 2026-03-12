@@ -3,15 +3,27 @@ package agent
 import (
 	"log/slog"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/creack/pty"
 )
 
 func skipIfNopty(t *testing.T) {
 	t.Helper()
-	if os.Getenv("CI") != "" {
-		t.Skip("PTY tests require terminal")
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY tests not supported on Windows")
+	}
+	// Verify PTY allocation actually works on this system.
+	ptmx, err := pty.Start(exec.Command("/bin/true"))
+	if ptmx != nil {
+		ptmx.Close()
+	}
+	if err != nil {
+		t.Skipf("PTY allocation unavailable: %v", err)
 	}
 }
 

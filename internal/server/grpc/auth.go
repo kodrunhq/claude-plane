@@ -4,7 +4,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -25,7 +24,7 @@ var machineIDKey = machineIDKeyType{}
 func MachineIDFromContext(ctx context.Context) (string, error) {
 	v, ok := ctx.Value(machineIDKey).(string)
 	if !ok || v == "" {
-		return "", fmt.Errorf("machine-id not found in context")
+		return "", status.Error(codes.Unauthenticated, "machine-id not found in context")
 	}
 	return v, nil
 }
@@ -58,11 +57,6 @@ func extractMachineID(ctx context.Context) (string, error) {
 	}
 
 	return machineID, nil
-}
-
-// ExtractMachineIDForTest exports extractMachineID for testing purposes.
-func ExtractMachineIDForTest(ctx context.Context) (string, error) {
-	return extractMachineID(ctx)
 }
 
 // MachineAuthUnaryInterceptor returns a gRPC unary server interceptor that

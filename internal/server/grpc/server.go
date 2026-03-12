@@ -92,8 +92,10 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 		"existing_sessions", len(req.GetExistingSessions()),
 	)
 
+	token := NextStreamToken()
 	s.connMgr.Add(machineID, &ConnectedAgent{
 		MachineID:     machineID,
+		StreamToken:   token,
 		MaxSessions:   req.GetMaxSessions(),
 		ConnectedAt:   time.Now(),
 		SessionStates: req.GetExistingSessions(),
@@ -114,9 +116,16 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 		return err
 	}
 
+	// Capture the current stream token so we only remove our own entry on close,
+	// not a newer connection from the same agent that reconnected.
+	var streamToken uint64
+	if agent, ok := s.connMgr.Get(machineID); ok {
+		streamToken = agent.StreamToken
+	}
+
 	s.logger.Info("agent stream opened", "machine_id", machineID)
 	defer func() {
-		s.connMgr.Remove(machineID)
+		s.connMgr.RemoveIfToken(machineID, streamToken)
 		s.logger.Info("agent stream closed", "machine_id", machineID)
 	}()
 

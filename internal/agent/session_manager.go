@@ -81,9 +81,14 @@ func (sm *SessionManager) HandleCommand(cmd *pb.ServerCommand) {
 
 func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 	var rows, cols uint16 = 24, 80
-	if cmd.GetTerminalSize() != nil {
-		rows = uint16(cmd.GetTerminalSize().GetRows())
-		cols = uint16(cmd.GetTerminalSize().GetCols())
+	if ts := cmd.GetTerminalSize(); ts != nil {
+		const maxUint16 = uint32(^uint16(0))
+		if r := ts.GetRows(); r >= 1 && r <= maxUint16 {
+			rows = uint16(r)
+		}
+		if c := ts.GetCols(); c >= 1 && c <= maxUint16 {
+			cols = uint16(c)
+		}
 	}
 
 	command := cmd.GetCommand()
@@ -109,6 +114,12 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 	}
 
 	sm.mu.Lock()
+	if existing, ok := sm.sessions[cmd.GetSessionId()]; ok {
+		sm.mu.Unlock()
+		sm.logger.Warn("duplicate session ID, killing existing session", "session_id", cmd.GetSessionId())
+		_ = existing.Kill("")
+		sm.mu.Lock()
+	}
 	sm.sessions[cmd.GetSessionId()] = sess
 	sm.mu.Unlock()
 
@@ -153,7 +164,13 @@ func (sm *SessionManager) handleResize(cmd *pb.ResizeTerminalCmd) {
 	if size == nil {
 		return
 	}
-	if err := sess.Resize(uint16(size.GetRows()), uint16(size.GetCols())); err != nil {
+	const maxUint16 = uint32(^uint16(0))
+	r, c := size.GetRows(), size.GetCols()
+	if r < 1 || r > maxUint16 || c < 1 || c > maxUint16 {
+		sm.logger.Warn("invalid resize dimensions", "session_id", cmd.GetSessionId(), "rows", r, "cols", c)
+		return
+	}
+	if err := sess.Resize(uint16(r), uint16(c)); err != nil {
 		sm.logger.Error("resize failed", "session_id", cmd.GetSessionId(), "error", err)
 	}
 }

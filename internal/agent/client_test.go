@@ -131,7 +131,7 @@ func TestAgentConnectsAndRegisters(t *testing.T) {
 
 func TestAgentMTLSRejection(t *testing.T) {
 	caDir, serverDir, _ := setupTestEnv(t, "agent-nuc-01")
-	addr, _, stop := startServer(t, caDir, serverDir)
+	addr, srv, stop := startServer(t, caDir, serverDir)
 	defer stop()
 
 	// Create agent certs from a DIFFERENT CA.
@@ -178,10 +178,18 @@ func TestAgentMTLSRejection(t *testing.T) {
 
 	// Give some time for the connection attempt to fail.
 	time.Sleep(1 * time.Second)
-	cancel()
 
-	// The agent should not have successfully registered.
-	// (Run returns ctx.Err after cancel, the important thing is no panic and no registration)
+	// Verify the rogue agent was never registered on the server.
+	agents := srv.ConnectionManager().List()
+	if len(agents) != 0 {
+		t.Errorf("expected 0 registered agents, got %d", len(agents))
+	}
+	if client.Connected() {
+		t.Error("expected rogue agent to NOT be connected, but Connected() returned true")
+	}
+
+	cancel()
+	<-errCh
 }
 
 func TestAgentReconnectsOnDrop(t *testing.T) {
