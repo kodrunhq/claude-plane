@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	"github.com/creack/pty"
 )
 
@@ -63,7 +64,7 @@ done:
 	// Wait for session to complete.
 	deadline := time.After(5 * time.Second)
 	for {
-		if sess.Status() == "completed" {
+		if sess.Status() == status.Completed {
 			break
 		}
 		select {
@@ -140,8 +141,8 @@ drainTrue:
 		}
 	}
 
-	if sess.Status() != "completed" {
-		t.Errorf("expected status 'completed' for /bin/true, got %q", sess.Status())
+	if sess.Status() != status.Completed {
+		t.Errorf("expected status %q for /bin/true, got %q", status.Completed, sess.Status())
 	}
 	if sess.ExitCode() != 0 {
 		t.Errorf("expected exit code 0, got %d", sess.ExitCode())
@@ -166,8 +167,8 @@ drainFalse:
 		}
 	}
 
-	if sess2.Status() != "failed" {
-		t.Errorf("expected status 'failed' for /bin/false, got %q", sess2.Status())
+	if sess2.Status() != status.Failed {
+		t.Errorf("expected status %q for /bin/false, got %q", status.Failed, sess2.Status())
 	}
 	if sess2.ExitCode() == 0 {
 		t.Error("expected non-zero exit code for /bin/false")
@@ -303,8 +304,8 @@ func TestSessionDetachKeepsPTYRunning(t *testing.T) {
 	}
 
 	// Verify running.
-	if sess.Status() != "running" {
-		t.Fatalf("expected status 'running', got %q", sess.Status())
+	if sess.Status() != status.Running {
+		t.Fatalf("expected status %q, got %q", status.Running, sess.Status())
 	}
 
 	// Write input and verify PTY echoes it back (proving it's still alive).
@@ -331,8 +332,8 @@ func TestSessionDetachKeepsPTYRunning(t *testing.T) {
 done:
 
 	// PTY still alive.
-	if sess.Status() != "running" {
-		t.Errorf("expected status still 'running' after detach, got %q", sess.Status())
+	if sess.Status() != status.Running {
+		t.Errorf("expected status still %q after detach, got %q", status.Running, sess.Status())
 	}
 
 	_ = sess.Kill("")
