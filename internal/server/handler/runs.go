@@ -2,8 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -51,7 +51,7 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 
 	run, err := h.orch.CreateRun(r.Context(), jobID, req.TriggerType)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
 			return
 		}
@@ -87,7 +87,7 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runID")
 	detail, err := h.store.GetRunWithSteps(r.Context(), runID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "run not found")
 			return
 		}
@@ -101,7 +101,7 @@ func (h *RunHandler) GetRun(w http.ResponseWriter, r *http.Request) {
 func (h *RunHandler) CancelRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runID")
 	if err := h.orch.CancelRun(r.Context(), runID); err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "run not found")
 			return
 		}
@@ -126,7 +126,7 @@ func (h *RunHandler) RetryStep(w http.ResponseWriter, r *http.Request) {
 	// Check that the step is in a failed/skipped/cancelled state before retrying
 	detail, err := h.store.GetRunWithSteps(r.Context(), runID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "run not found")
 			return
 		}

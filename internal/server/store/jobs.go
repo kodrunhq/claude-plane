@@ -3,11 +3,15 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrNotFound is returned when a requested resource does not exist.
+var ErrNotFound = errors.New("not found")
 
 // JobStoreIface defines the interface for job-related database operations.
 // Used by the orchestrator package for dependency injection and testability.
@@ -139,7 +143,7 @@ func (s *Store) GetJob(ctx context.Context, jobID string) (*JobDetail, error) {
 		`SELECT job_id, name, description, user_id, created_at, updated_at FROM jobs WHERE job_id = ?`, jobID,
 	).Scan(&job.JobID, &job.Name, &desc, &userID, &job.CreatedAt, &job.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("job not found: %s", jobID)
+		return nil, fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get job: %w", err)
@@ -210,7 +214,7 @@ func (s *Store) DeleteJob(ctx context.Context, jobID string) error {
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("job not found: %s", jobID)
+		return fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
 	return nil
 }
@@ -226,7 +230,7 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, name, description string) 
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return nil, fmt.Errorf("job not found: %s", jobID)
+		return nil, fmt.Errorf("job %s: %w", jobID, ErrNotFound)
 	}
 
 	var job Job
@@ -285,7 +289,7 @@ func (s *Store) UpdateStep(ctx context.Context, stepID, name, prompt, machineID,
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("step not found: %s", stepID)
+		return fmt.Errorf("step %s: %w", stepID, ErrNotFound)
 	}
 	return nil
 }
@@ -298,7 +302,7 @@ func (s *Store) DeleteStep(ctx context.Context, stepID string) error {
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("step not found: %s", stepID)
+		return fmt.Errorf("step %s: %w", stepID, ErrNotFound)
 	}
 	return nil
 }
@@ -329,7 +333,7 @@ func (s *Store) RemoveDependency(ctx context.Context, stepID, dependsOn string) 
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("dependency not found: %s -> %s", stepID, dependsOn)
+		return fmt.Errorf("dependency %s -> %s: %w", stepID, dependsOn, ErrNotFound)
 	}
 	return nil
 }
@@ -427,7 +431,7 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 		 FROM runs WHERE run_id = ?`, runID,
 	).Scan(&run.RunID, &run.JobID, &run.Status, &run.TriggerType, &startedAt, &completedAt, &run.CreatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("run not found: %s", runID)
+		return nil, fmt.Errorf("run %s: %w", runID, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get run: %w", err)
@@ -502,7 +506,7 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("run step not found: %s", runStepID)
+		return fmt.Errorf("run step %s: %w", runStepID, ErrNotFound)
 	}
 	return nil
 }
@@ -525,7 +529,7 @@ func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("run not found: %s", runID)
+		return fmt.Errorf("run %s: %w", runID, ErrNotFound)
 	}
 	return nil
 }

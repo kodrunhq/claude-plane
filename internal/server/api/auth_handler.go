@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/mail"
 
 	"github.com/google/uuid"
 
@@ -38,6 +39,14 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Password) < 8 {
 		writeError(w, http.StatusBadRequest, "password must be at least 8 characters")
+		return
+	}
+	if len(req.Password) > 128 {
+		writeError(w, http.StatusBadRequest, "password must be at most 128 characters")
+		return
+	}
+	if _, err := mail.ParseAddress(req.Email); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid email format")
 		return
 	}
 
@@ -80,12 +89,19 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Password) > 128 {
+		writeError(w, http.StatusBadRequest, "password must be at most 128 characters")
+		return
+	}
+
 	user, err := h.store.GetUserByEmail(req.Email)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	if user == nil {
+		// Perform dummy hash to prevent timing oracle for user enumeration
+		_, _ = store.HashPassword(req.Password)
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}

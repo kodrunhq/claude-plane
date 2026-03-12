@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"golang.org/x/time/rate"
 
 	"github.com/claudeplane/claude-plane/internal/server/auth"
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
@@ -54,16 +55,20 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(securityHeadersMiddleware)
 
 	// WebSocket route — uses query param auth, not JWT middleware
 	if wsHandler != nil {
 		r.Get("/ws/terminal/{sessionID}", wsHandler)
 	}
 
+	// 5 requests per minute per IP for auth endpoints
+	authLimiter := RateLimitMiddleware(rate.Limit(5.0/60.0), 5)
+
 	// Public routes
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Post("/auth/register", h.Register)
-		r.Post("/auth/login", h.Login)
+		r.With(authLimiter).Post("/auth/register", h.Register)
+		r.With(authLimiter).Post("/auth/login", h.Login)
 
 		// Protected routes
 		r.Group(func(r chi.Router) {
