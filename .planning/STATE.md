@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-12T10:26:00Z"
-last_activity: 2026-03-12 -- Completed 04-01-PLAN.md
+status: in-progress
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-12T10:31:18Z"
+last_activity: 2026-03-12 -- Completed 04-02-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 20
-  completed_plans: 10
-  percent: 50
+  completed_plans: 11
+  percent: 55
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 4 of 6 (Terminal Streaming)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In Progress
-Last activity: 2026-03-12 -- Completed 04-01-PLAN.md
+Last activity: 2026-03-12 -- Completed 04-02-PLAN.md
 
-Progress: [█████░░░░░] 50%
+Progress: [█████▌░░░░] 55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 4.4min
-- Total execution time: 0.75 hours
+- Total plans completed: 11
+- Average duration: 4.7min
+- Total execution time: 0.87 hours
 
 **By Phase:**
 
@@ -46,16 +46,17 @@ Progress: [█████░░░░░] 50%
 | 01-foundation | 4 | 13min | 3.3min |
 | 02-agent-core | 2 | 14min | 7.0min |
 | 03-server-core | 3 | 14min | 4.7min |
-| 04-terminal-streaming | 1 | 5min | 5.0min |
+| 04-terminal-streaming | 2 | 15min | 7.5min |
 
 **Recent Trend:**
-- Last 5 plans: 8min, 4min, 6min, 4min, 5min
+- Last 5 plans: 4min, 6min, 4min, 5min, 10min
 - Trend: Stable
 
 *Updated after each plan completion*
 | Phase 03 P02 | 6min | 3 tasks | 7 files |
 | Phase 03 P03 | 4min | 2 tasks | 8 files |
 | Phase 04 P01 | 5min | 2 tasks | 6 files |
+| Phase 04 P02 | 10min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,12 @@ Recent decisions affecting current work:
 - [Phase 04-terminal-streaming]: json.Marshal for scrollback data escaping handles binary/control chars safely
 - [Phase 04-terminal-streaming]: New sessions auto-attach for backward compatibility with relay behavior
 - [Phase 04-terminal-streaming]: Scrollback write errors logged but don't stop readLoop
+- [Phase 04-terminal-streaming]: SendCommand func field on ConnectedAgent for command dispatch without proto imports
+- [Phase 04-terminal-streaming]: coder/websocket library for WebSocket (modern, context-aware)
+- [Phase 04-terminal-streaming]: Query-param token auth for WebSocket upgrade (browsers can't set headers)
+- [Phase 04-terminal-streaming]: Buffered channel cap 256 with non-blocking drop for slow WS consumers
+- [Phase 04-terminal-streaming]: WebSocket close sends DetachSessionCmd not KillSessionCmd
+- [Phase 04-terminal-streaming]: ClaimsGetter function type decouples session handler from api package
 
 ### Pending Todos
 
@@ -96,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T10:26:00Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-12T10:31:18Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
