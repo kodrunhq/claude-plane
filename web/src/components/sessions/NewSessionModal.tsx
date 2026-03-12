@@ -22,13 +22,14 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
 
   useEffect(() => {
     if (preselectedMachineId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing prop to local form state
       setMachineId(preselectedMachineId);
     }
   }, [preselectedMachineId]);
 
   useEffect(() => {
     if (!open) {
-      // Reset form when closing
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting form on close
       if (!preselectedMachineId) setMachineId('');
       setWorkingDir('');
       setCommand('');

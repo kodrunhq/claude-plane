@@ -15,10 +15,10 @@ export function RunDetail() {
 
   const { data: runDetail, isLoading: runLoading } = useRun(id);
   const run = runDetail?.run;
-  const runSteps = runDetail?.run_steps ?? [];
+  const runSteps = useMemo(() => runDetail?.run_steps ?? [], [runDetail?.run_steps]);
 
   const { data: jobDetail, isLoading: jobLoading } = useJob(run?.job_id);
-  const steps = jobDetail?.steps ?? [];
+  const steps = useMemo(() => jobDetail?.steps ?? [], [jobDetail?.steps]);
   const dependencies = jobDetail?.dependencies ?? [];
 
   const cancelRun = useCancelRun();
@@ -40,6 +40,7 @@ export function RunDetail() {
   // Sync run steps to store
   useEffect(() => {
     if (runSteps.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to Zustand store
       setStepStatuses(runSteps);
     }
   }, [runSteps, setStepStatuses]);
@@ -88,9 +89,14 @@ export function RunDetail() {
   // Elapsed time — ticks every second for active runs
   const [elapsed, setElapsed] = useState<number | null>(null);
   useEffect(() => {
-    if (!run?.started_at) { setElapsed(null); return; }
+    if (!run?.started_at) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing derived state from run timestamps
+      setElapsed(null);
+      return;
+    }
     const start = new Date(run.started_at).getTime();
     if (run.completed_at) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- computing final elapsed from completed run
       setElapsed(Math.floor((new Date(run.completed_at).getTime() - start) / 1000));
       return;
     }
