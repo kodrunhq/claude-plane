@@ -18,6 +18,7 @@ const statusColors: Record<string, string> = {
   completed: 'bg-green-500',
   failed: 'bg-red-500',
   skipped: 'bg-yellow-500',
+  cancelled: 'bg-orange-500',
 };
 
 const statusBorderColors: Record<string, string> = {
@@ -26,6 +27,7 @@ const statusBorderColors: Record<string, string> = {
   completed: 'border-green-500',
   failed: 'border-red-500',
   skipped: 'border-yellow-500',
+  cancelled: 'border-orange-500',
 };
 
 export const StepNode = memo(function StepNode({ data }: NodeProps<StepNodeType>) {

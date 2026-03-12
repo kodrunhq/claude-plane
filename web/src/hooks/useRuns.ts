@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '../api/jobs.ts';
 
-export function useRuns() {
+export function useRuns(jobId: string | undefined) {
   return useQuery({
-    queryKey: ['runs'],
-    queryFn: () => jobsApi.listRuns(),
+    queryKey: ['runs', jobId],
+    queryFn: () => jobsApi.listRuns(jobId!),
+    enabled: !!jobId,
   });
 }
 

@@ -87,11 +87,7 @@ func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDepen
 		inDegree[d.StepID]++
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	return &DAGRunner{
-		ctx:           ctx,
-		cancel:        cancel,
 		runID:         runID,
 		steps:         steps,
 		dependents:    dependents,
@@ -104,9 +100,12 @@ func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDepen
 }
 
 // Start launches all root steps (in-degree 0) concurrently.
-func (d *DAGRunner) Start(ctx context.Context) {
+// Uses a background context since runs outlive the triggering HTTP request.
+func (d *DAGRunner) Start(_ context.Context) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	d.ctx, d.cancel = context.WithCancel(context.Background())
 
 	for stepID, deg := range d.inDegree {
 		if deg == 0 {

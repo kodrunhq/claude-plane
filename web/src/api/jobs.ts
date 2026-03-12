@@ -57,8 +57,11 @@ export const jobsApi = {
 
   // Runs
   triggerRun: (jobId: string) =>
-    request<Run>(`/jobs/${encodeURIComponent(jobId)}/runs`, { method: 'POST' }),
-  listRuns: () => request<Run[]>('/runs'),
+    request<Run>(`/jobs/${encodeURIComponent(jobId)}/runs`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  listRuns: (jobId: string) => request<Run[]>(`/runs?job_id=${encodeURIComponent(jobId)}`),
   getRun: (id: string) => request<RunDetail>(`/runs/${encodeURIComponent(id)}`),
   cancelRun: (id: string) =>
     request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
