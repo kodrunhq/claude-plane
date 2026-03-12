@@ -172,6 +172,68 @@ func TestLoginSuccess(t *testing.T) {
 	}
 }
 
+func TestLoginSessionCookieSecureFlag(t *testing.T) {
+	srv := setupTestAPI(t)
+	defer srv.Close()
+
+	resp := registerUser(t, srv, "cookie@example.com", "password123", "Cookie User")
+	resp.Body.Close()
+
+	body, _ := json.Marshal(map[string]string{
+		"email":    "cookie@example.com",
+		"password": "password123",
+	})
+
+	t.Run("HTTP request sets non-secure cookie", func(t *testing.T) {
+		loginReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/login", bytes.NewReader(body))
+		loginReq.Header.Set("Content-Type", "application/json")
+		loginResp, err := http.DefaultClient.Do(loginReq)
+		if err != nil {
+			t.Fatalf("login request: %v", err)
+		}
+		defer loginResp.Body.Close()
+
+		var sessionCookie *http.Cookie
+		for _, c := range loginResp.Cookies() {
+			if c.Name == "session_token" {
+				sessionCookie = c
+				break
+			}
+		}
+		if sessionCookie == nil {
+			t.Fatal("expected session_token cookie to be set")
+		}
+		if sessionCookie.Secure {
+			t.Error("expected session_token cookie to be non-secure for HTTP requests")
+		}
+	})
+
+	t.Run("forwarded HTTPS request sets secure cookie", func(t *testing.T) {
+		loginReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/login", bytes.NewReader(body))
+		loginReq.Header.Set("Content-Type", "application/json")
+		loginReq.Header.Set("X-Forwarded-Proto", "https")
+		loginResp, err := http.DefaultClient.Do(loginReq)
+		if err != nil {
+			t.Fatalf("login request: %v", err)
+		}
+		defer loginResp.Body.Close()
+
+		var sessionCookie *http.Cookie
+		for _, c := range loginResp.Cookies() {
+			if c.Name == "session_token" {
+				sessionCookie = c
+				break
+			}
+		}
+		if sessionCookie == nil {
+			t.Fatal("expected session_token cookie to be set")
+		}
+		if !sessionCookie.Secure {
+			t.Error("expected session_token cookie to be secure when forwarded proto is https")
+		}
+	})
+}
+
 func TestLoginInvalidCredentials(t *testing.T) {
 	srv := setupTestAPI(t)
 	defer srv.Close()

@@ -23,7 +23,7 @@ import (
 // mockMachineStore implements connmgr.MachineStore for tests.
 type mockMachineStore struct{}
 
-func (m *mockMachineStore) UpsertMachine(string, int32) error                         { return nil }
+func (m *mockMachineStore) UpsertMachine(string, int32) error                   { return nil }
 func (m *mockMachineStore) UpdateMachineStatus(string, string, time.Time) error { return nil }
 
 // commandRecorder records commands sent to a mock agent.
@@ -456,7 +456,7 @@ func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
 		MachineID: "machine-a",
 		UserID:    "user-owner",
 		Command:   "claude",
-		Status:    "created",
+		Status:    store.StatusCreated,
 	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
