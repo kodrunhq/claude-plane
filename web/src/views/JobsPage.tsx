@@ -23,7 +23,7 @@ export function JobsPage() {
     try {
       const run = await triggerRun.mutateAsync(jobId);
       toast.success('Run started');
-      navigate(`/runs/${run.id}`);
+      navigate(`/runs/${run.run_id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to start run');
     }
@@ -77,8 +77,8 @@ export function JobsPage() {
         <div className="space-y-2">
           {jobs.map((job) => (
             <div
-              key={job.id}
-              onClick={() => navigate(`/jobs/${job.id}`)}
+              key={job.job_id}
+              onClick={() => navigate(`/jobs/${job.job_id}`)}
               className="bg-bg-secondary rounded-lg p-4 flex items-center gap-4 cursor-pointer hover:bg-bg-tertiary/50 transition-colors"
             >
               <div className="flex-1 min-w-0">
@@ -87,7 +87,7 @@ export function JobsPage() {
                     {job.name}
                   </span>
                   <span className="text-xs text-text-secondary">
-                    {truncateId(job.id)}
+                    {truncateId(job.job_id)}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
@@ -101,7 +101,7 @@ export function JobsPage() {
                 </div>
               </div>
               <button
-                onClick={(e) => handleRun(e, job.id)}
+                onClick={(e) => handleRun(e, job.job_id)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors shrink-0"
                 title="Run job"
               >

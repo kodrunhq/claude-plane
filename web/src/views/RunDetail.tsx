@@ -54,7 +54,7 @@ export function RunDetail() {
   );
 
   const selectedStepName = useMemo(
-    () => steps.find((s) => s.id === selectedStepId)?.name,
+    () => steps.find((s) => s.step_id === selectedStepId)?.name,
     [steps, selectedStepId],
   );
 
@@ -87,9 +87,9 @@ export function RunDetail() {
   const elapsed = useMemo(() => {
     if (!run?.started_at) return null;
     const start = new Date(run.started_at).getTime();
-    const end = run.finished_at ? new Date(run.finished_at).getTime() : Date.now();
+    const end = run.completed_at ? new Date(run.completed_at).getTime() : Date.now();
     return Math.floor((end - start) / 1000);
-  }, [run?.started_at, run?.finished_at]);
+  }, [run?.started_at, run?.completed_at]);
 
   const isLoading = runLoading || jobLoading;
 

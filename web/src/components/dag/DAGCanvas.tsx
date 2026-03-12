@@ -84,25 +84,25 @@ export function DAGCanvas({
 
   const { initialNodes, initialEdges } = useMemo(() => {
     const nodes: Node<StepNodeData>[] = steps.map((step) => {
-      const rs = runStepMap.get(step.id);
+      const rs = runStepMap.get(step.step_id);
       return {
-        id: step.id,
+        id: step.step_id,
         type: 'step' as const,
         position: { x: 0, y: 0 },
         data: {
           label: step.name,
           status: rs?.status ?? 'pending',
           machineId: step.machine_id,
-          selected: step.id === selectedStepId,
+          selected: step.step_id === selectedStepId,
         },
       };
     });
 
     const edges: Edge[] = dependencies.map((dep) => {
-      const sourceRs = runStepMap.get(dep.depends_on_step_id);
+      const sourceRs = runStepMap.get(dep.depends_on);
       return {
-        id: dep.id,
-        source: dep.depends_on_step_id,
+        id: `${dep.depends_on}->${dep.step_id}`,
+        source: dep.depends_on,
         target: dep.step_id,
         type: 'step' as const,
         data: {
