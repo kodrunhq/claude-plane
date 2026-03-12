@@ -251,6 +251,8 @@ func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
 	f, err := os.Open(path)
 	if err != nil {
 		sm.logger.Error("failed to open scrollback", "session_id", sessionID, "error", err)
+		// Send final marker so clients don't get stuck in "replaying" state.
+		sm.sendFinalScrollbackMarker(sessionID, 0)
 		return
 	}
 	defer f.Close()
@@ -258,7 +260,6 @@ func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
 	const chunkSize = 32768
 	buf := make([]byte, chunkSize)
 	var offset int64
-	var sentAny bool
 
 	for {
 		n, readErr := f.Read(buf)
@@ -276,30 +277,31 @@ func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
 				},
 			})
 			offset += int64(n)
-			sentAny = true
 		}
 		if readErr == io.EOF {
 			break
 		}
 		if readErr != nil {
 			sm.logger.Error("failed to read scrollback chunk", "session_id", sessionID, "error", readErr)
-			return
+			break
 		}
 	}
 
-	// Send a final marker so the consumer knows scrollback replay is complete.
-	if sentAny {
-		sm.sendEvent(&pb.AgentEvent{
-			Event: &pb.AgentEvent_ScrollbackChunk{
-				ScrollbackChunk: &pb.ScrollbackChunkEvent{
-					SessionId:  sessionID,
-					Offset:     offset,
-					TotalBytes: offset,
-					IsFinal:    true,
-				},
+	// Always send a final marker so clients can transition to live mode.
+	sm.sendFinalScrollbackMarker(sessionID, offset)
+}
+
+func (sm *SessionManager) sendFinalScrollbackMarker(sessionID string, offset int64) {
+	sm.sendEvent(&pb.AgentEvent{
+		Event: &pb.AgentEvent_ScrollbackChunk{
+			ScrollbackChunk: &pb.ScrollbackChunkEvent{
+				SessionId:  sessionID,
+				Offset:     offset,
+				TotalBytes: offset,
+				IsFinal:    true,
 			},
-		})
-	}
+		},
+	})
 }
 
 func (sm *SessionManager) isAttached(sessionID string) bool {

@@ -53,7 +53,9 @@ func (w *ScrollbackWriter) WriteOutput(data []byte) error {
 
 	elapsed := time.Since(w.started).Seconds()
 
-	// Use json.Marshal to properly escape the data string (handles binary, control chars, quotes).
+	// Use json.Marshal to properly escape control chars and quotes. Note: invalid UTF-8
+	// bytes are replaced with U+FFFD per encoding/json semantics, which matches asciicast
+	// v2's expectation of valid UTF-8 terminal text.
 	escapedData, err := json.Marshal(string(data))
 	if err != nil {
 		return fmt.Errorf("marshal data: %w", err)
