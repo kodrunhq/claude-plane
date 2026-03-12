@@ -60,6 +60,16 @@ func (h *JobHandler) authorizeJobByID(w http.ResponseWriter, r *http.Request) *s
 	return detail
 }
 
+// jobOwnsStep returns true if the given step ID belongs to the job in detail.
+func jobOwnsStep(detail *store.JobDetail, stepID string) bool {
+	for _, s := range detail.Steps {
+		if s.StepID == stepID {
+			return true
+		}
+	}
+	return false
+}
+
 // RegisterJobRoutes mounts all job-related routes on the given router.
 func RegisterJobRoutes(r chi.Router, h *JobHandler) {
 	r.Post("/api/v1/jobs", h.CreateJob)
@@ -256,10 +266,15 @@ type updateStepRequest struct {
 
 // UpdateStep handles PUT /api/v1/jobs/{jobID}/steps/{stepID}.
 func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
-	if d := h.authorizeJobByID(w, r); d == nil {
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
 		return
 	}
 	stepID := chi.URLParam(r, "stepID")
+	if !jobOwnsStep(detail, stepID) {
+		writeError(w, http.StatusNotFound, "step not found")
+		return
+	}
 	var req updateStepRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -293,10 +308,15 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 // DeleteStep handles DELETE /api/v1/jobs/{jobID}/steps/{stepID}.
 func (h *JobHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
-	if d := h.authorizeJobByID(w, r); d == nil {
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
 		return
 	}
 	stepID := chi.URLParam(r, "stepID")
+	if !jobOwnsStep(detail, stepID) {
+		writeError(w, http.StatusNotFound, "step not found")
+		return
+	}
 	err := h.store.DeleteStep(r.Context(), stepID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -333,6 +353,11 @@ func (h *JobHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !jobOwnsStep(detail, stepID) || !jobOwnsStep(detail, req.DependsOn) {
+		writeError(w, http.StatusNotFound, "step not found in this job")
+		return
+	}
+
 	// Add the dependency edge
 	if err := h.store.AddDependency(r.Context(), stepID, req.DependsOn); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -361,11 +386,16 @@ func (h *JobHandler) AddDependency(w http.ResponseWriter, r *http.Request) {
 
 // RemoveDependency handles DELETE /api/v1/jobs/{jobID}/steps/{stepID}/deps/{depID}.
 func (h *JobHandler) RemoveDependency(w http.ResponseWriter, r *http.Request) {
-	if d := h.authorizeJobByID(w, r); d == nil {
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
 		return
 	}
 	stepID := chi.URLParam(r, "stepID")
 	depID := chi.URLParam(r, "depID")
+	if !jobOwnsStep(detail, stepID) || !jobOwnsStep(detail, depID) {
+		writeError(w, http.StatusNotFound, "step not found in this job")
+		return
+	}
 	err := h.store.RemoveDependency(r.Context(), stepID, depID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

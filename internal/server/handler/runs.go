@@ -68,7 +68,11 @@ func (h *RunHandler) authorizeRunAccess(w http.ResponseWriter, r *http.Request, 
 	}
 	jobDetail, err := h.store.GetJob(r.Context(), runDetail.Run.JobID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "run not found")
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "run not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal error")
+		}
 		return false
 	}
 	if c.UserID == jobDetail.Job.UserID {
