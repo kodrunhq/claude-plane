@@ -55,7 +55,7 @@ func TestBlocklistAdd(t *testing.T) {
 	}
 
 	exp := time.Now().Add(1 * time.Hour)
-	if err := bl.Add("new-jti", exp); err != nil {
+	if err := bl.Add("new-jti", "user-1", exp); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
@@ -101,13 +101,13 @@ func TestBlocklistCleanup(t *testing.T) {
 
 	// Add a JTI with a past expiry
 	pastExp := time.Now().Add(-1 * time.Second)
-	if err := bl.Add("expired-jti", pastExp); err != nil {
+	if err := bl.Add("expired-jti", "user-1", pastExp); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
 	// Add a JTI with a future expiry
 	futureExp := time.Now().Add(1 * time.Hour)
-	if err := bl.Add("future-jti", futureExp); err != nil {
+	if err := bl.Add("future-jti", "user-1", futureExp); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
@@ -145,7 +145,7 @@ func TestBlocklistConcurrency(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			jti := "concurrent-" + time.Now().Format("150405.000000000") + "-" + string(rune('a'+i%26))
-			_ = bl.Add(jti, time.Now().Add(1*time.Hour))
+			_ = bl.Add(jti, "user-1", time.Now().Add(1*time.Hour))
 		}(i)
 	}
 

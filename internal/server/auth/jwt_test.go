@@ -24,7 +24,7 @@ func (b *testBlocklist) IsRevoked(jti string) bool {
 	return b.revoked[jti]
 }
 
-func (b *testBlocklist) Add(jti string, expiresAt time.Time) error {
+func (b *testBlocklist) Add(jti, userID string, expiresAt time.Time) error {
 	b.revoked[jti] = true
 	return nil
 }

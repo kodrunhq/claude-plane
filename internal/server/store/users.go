@@ -155,7 +155,7 @@ func (s *Store) CreateUser(user *User) error {
 		VALUES (?, ?, ?, ?, ?)
 	`, user.UserID, user.Email, user.DisplayName, user.PasswordHash, user.Role)
 	if err != nil {
-		return err
+		return fmt.Errorf("create user %q: %w", user.Email, err)
 	}
 	return nil
 }
