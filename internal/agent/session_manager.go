@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -17,6 +19,11 @@ type SessionManager struct {
 	sessions map[string]*Session
 	logger   *slog.Logger
 	cliPath  string
+	dataDir  string
+
+	// Attach state: tracks which sessions are attached for live relay.
+	attachedMu sync.RWMutex
+	attached   map[string]bool
 
 	// Relay state.
 	relayMu     sync.Mutex
@@ -27,14 +34,17 @@ type SessionManager struct {
 }
 
 // NewSessionManager creates a new session manager.
-func NewSessionManager(cliPath string, logger *slog.Logger) *SessionManager {
+// dataDir is the directory for scrollback files.
+func NewSessionManager(cliPath, dataDir string, logger *slog.Logger) *SessionManager {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &SessionManager{
 		sessions: make(map[string]*Session),
+		attached: make(map[string]bool),
 		logger:   logger,
 		cliPath:  cliPath,
+		dataDir:  dataDir,
 	}
 }
 
@@ -71,9 +81,11 @@ func (sm *SessionManager) HandleCommand(cmd *pb.ServerCommand) {
 	case *pb.ServerCommand_KillSession:
 		sm.handleKill(c.KillSession)
 	case *pb.ServerCommand_AttachSession:
-		sm.logger.Debug("attach session: not implemented (Phase 4)", "session_id", c.AttachSession.GetSessionId())
+		sm.handleAttach(c.AttachSession)
 	case *pb.ServerCommand_DetachSession:
-		sm.logger.Debug("detach session: not implemented (Phase 4)", "session_id", c.DetachSession.GetSessionId())
+		sm.handleDetach(c.DetachSession)
+	case *pb.ServerCommand_RequestScrollback:
+		sm.handleRequestScrollback(c.RequestScrollback)
 	default:
 		sm.logger.Warn("unknown command type", "command", cmd)
 	}
@@ -106,6 +118,7 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 		cmd.GetWorkingDir(),
 		cmd.GetEnvVars(),
 		rows, cols,
+		sm.dataDir,
 		sm.logger,
 	)
 	if err != nil {
@@ -122,6 +135,11 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 	}
 	sm.sessions[cmd.GetSessionId()] = sess
 	sm.mu.Unlock()
+
+	// Mark new sessions as attached by default so live relay works immediately.
+	sm.attachedMu.Lock()
+	sm.attached[cmd.GetSessionId()] = true
+	sm.attachedMu.Unlock()
 
 	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command)
 
@@ -186,6 +204,112 @@ func (sm *SessionManager) handleKill(cmd *pb.KillSessionCmd) {
 	}
 }
 
+func (sm *SessionManager) handleAttach(cmd *pb.AttachSessionCmd) {
+	sess := sm.getSession(cmd.GetSessionId())
+	if sess == nil {
+		sm.logger.Warn("attach for unknown session", "session_id", cmd.GetSessionId())
+		return
+	}
+
+	// Send scrollback chunks first to catch up the viewer.
+	sm.sendScrollbackChunks(cmd.GetSessionId(), sess.ScrollbackPath())
+
+	// Mark session as attached for live relay.
+	sm.attachedMu.Lock()
+	sm.attached[cmd.GetSessionId()] = true
+	sm.attachedMu.Unlock()
+
+	sm.logger.Info("session attached", "session_id", cmd.GetSessionId())
+}
+
+func (sm *SessionManager) handleDetach(cmd *pb.DetachSessionCmd) {
+	sess := sm.getSession(cmd.GetSessionId())
+	if sess == nil {
+		sm.logger.Warn("detach for unknown session", "session_id", cmd.GetSessionId())
+		return
+	}
+
+	// Mark session as detached — stop live relay but keep PTY running.
+	sm.attachedMu.Lock()
+	sm.attached[cmd.GetSessionId()] = false
+	sm.attachedMu.Unlock()
+
+	sm.logger.Info("session detached", "session_id", cmd.GetSessionId())
+}
+
+func (sm *SessionManager) handleRequestScrollback(cmd *pb.RequestScrollbackCmd) {
+	sess := sm.getSession(cmd.GetSessionId())
+	if sess == nil {
+		sm.logger.Warn("scrollback request for unknown session", "session_id", cmd.GetSessionId())
+		return
+	}
+
+	sm.sendScrollbackChunks(cmd.GetSessionId(), sess.ScrollbackPath())
+}
+
+func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		sm.logger.Error("failed to open scrollback", "session_id", sessionID, "error", err)
+		// Send final marker so clients don't get stuck in "replaying" state.
+		sm.sendFinalScrollbackMarker(sessionID, 0)
+		return
+	}
+	defer f.Close()
+
+	const chunkSize = 32768
+	buf := make([]byte, chunkSize)
+	var offset int64
+
+	for {
+		n, readErr := f.Read(buf)
+		if n > 0 {
+			data := make([]byte, n)
+			copy(data, buf[:n])
+			sm.sendEvent(&pb.AgentEvent{
+				Event: &pb.AgentEvent_ScrollbackChunk{
+					ScrollbackChunk: &pb.ScrollbackChunkEvent{
+						SessionId:  sessionID,
+						Data:       data,
+						Offset:     offset,
+						TotalBytes: offset + int64(n),
+					},
+				},
+			})
+			offset += int64(n)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			sm.logger.Error("failed to read scrollback chunk", "session_id", sessionID, "error", readErr)
+			break
+		}
+	}
+
+	// Always send a final marker so clients can transition to live mode.
+	sm.sendFinalScrollbackMarker(sessionID, offset)
+}
+
+func (sm *SessionManager) sendFinalScrollbackMarker(sessionID string, offset int64) {
+	sm.sendEvent(&pb.AgentEvent{
+		Event: &pb.AgentEvent_ScrollbackChunk{
+			ScrollbackChunk: &pb.ScrollbackChunkEvent{
+				SessionId:  sessionID,
+				Offset:     offset,
+				TotalBytes: offset,
+				IsFinal:    true,
+			},
+		},
+	})
+}
+
+func (sm *SessionManager) isAttached(sessionID string) bool {
+	sm.attachedMu.RLock()
+	defer sm.attachedMu.RUnlock()
+	return sm.attached[sessionID]
+}
+
 func (sm *SessionManager) getSession(id string) *Session {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -233,15 +357,18 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 					})
 					return
 				}
-				sm.sendEvent(&pb.AgentEvent{
-					Event: &pb.AgentEvent_SessionOutput{
-						SessionOutput: &pb.SessionOutputEvent{
-							SessionId: sessionID,
-							Data:      data,
-							Timestamp: float64(time.Now().UnixMilli()) / 1000.0,
+				// Only relay live output if session is attached.
+				if sm.isAttached(sessionID) {
+					sm.sendEvent(&pb.AgentEvent{
+						Event: &pb.AgentEvent_SessionOutput{
+							SessionOutput: &pb.SessionOutputEvent{
+								SessionId: sessionID,
+								Data:      data,
+								Timestamp: float64(time.Now().UnixMilli()) / 1000.0,
+							},
 						},
-					},
-				})
+					})
+				}
 			}
 		}
 	}()

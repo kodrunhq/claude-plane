@@ -27,6 +27,10 @@ type ConnectedAgent struct {
 	// Stream holds the gRPC stream reference. Typed as interface{} to avoid
 	// importing proto package; will be type-asserted when needed.
 	Stream interface{}
+	// SendCommand sends a server command to the agent via the gRPC stream.
+	// Set by the gRPC service when registering the agent. Callers (e.g.,
+	// session handlers) use this to dispatch commands without knowing gRPC internals.
+	SendCommand func(cmd interface{}) error
 }
 
 // AgentInfo is a public DTO for REST API responses.
