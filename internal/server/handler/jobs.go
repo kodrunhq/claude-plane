@@ -3,8 +3,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -96,7 +96,7 @@ func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
 	detail, err := h.store.GetJob(r.Context(), jobID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
 			return
 		}
@@ -123,7 +123,7 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 
 	job, err := h.store.UpdateJob(r.Context(), jobID, req.Name, req.Description)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
 			return
 		}
@@ -138,7 +138,7 @@ func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
 	err := h.store.DeleteJob(r.Context(), jobID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
 			return
 		}
@@ -216,7 +216,7 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 	err := h.store.UpdateStep(r.Context(), stepID, req.Name, req.Prompt, req.MachineID, req.WorkingDir, req.Command, req.Args, req.TimeoutSeconds, req.SortOrder, req.OnFailure)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "step not found")
 			return
 		}
@@ -231,7 +231,7 @@ func (h *JobHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 	stepID := chi.URLParam(r, "stepID")
 	err := h.store.DeleteStep(r.Context(), stepID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "step not found")
 			return
 		}
@@ -294,7 +294,7 @@ func (h *JobHandler) RemoveDependency(w http.ResponseWriter, r *http.Request) {
 	depID := chi.URLParam(r, "depID")
 	err := h.store.RemoveDependency(r.Context(), stepID, depID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "dependency not found")
 			return
 		}
