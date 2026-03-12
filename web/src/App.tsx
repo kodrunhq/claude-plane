@@ -1,6 +1,11 @@
-import { BrowserRouter, Routes, Route } from 'react-router'
+import { BrowserRouter, Routes, Route, useParams } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
+import { AppShell } from './components/layout/AppShell.tsx'
+import { CommandCenter } from './views/CommandCenter.tsx'
+import { SessionsPage } from './views/SessionsPage.tsx'
+import { MachinesPage } from './views/MachinesPage.tsx'
+import { TerminalView } from './components/terminal/TerminalView.tsx'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -10,16 +15,24 @@ const queryClient = new QueryClient({
   },
 })
 
+function TerminalRoute() {
+  const { sessionId } = useParams<{ sessionId: string }>()
+  if (!sessionId) return null
+  return <TerminalView sessionId={sessionId} className="h-full" />
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<div className="p-8 text-text-primary">Command Center - Coming in Plan 03</div>} />
-          <Route path="/sessions" element={<div className="p-8 text-text-primary">Sessions - Coming in Plan 03</div>} />
-          <Route path="/sessions/:sessionId" element={<div className="p-8 text-text-primary">Terminal View - Coming in Plan 03</div>} />
-          <Route path="/machines" element={<div className="p-8 text-text-primary">Machines - Coming in Plan 03</div>} />
-        </Routes>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<CommandCenter />} />
+            <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/sessions/:sessionId" element={<TerminalRoute />} />
+            <Route path="/machines" element={<MachinesPage />} />
+          </Routes>
+        </AppShell>
       </BrowserRouter>
       <Toaster theme="dark" />
     </QueryClientProvider>
