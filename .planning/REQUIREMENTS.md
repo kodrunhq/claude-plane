@@ -25,16 +25,16 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **SESS-01**: User can create a new Claude CLI session on any connected machine
 - [ ] **SESS-02**: User can attach to an existing session and receive terminal output
-- [ ] **SESS-03**: User can detach from a session without terminating it
+- [x] **SESS-03**: User can detach from a session without terminating it
 - [ ] **SESS-04**: User can list all active sessions across all machines
 - [ ] **SESS-05**: User can terminate a session
-- [ ] **SESS-06**: Sessions continue running on the agent when the user disconnects from the browser
+- [x] **SESS-06**: Sessions continue running on the agent when the user disconnects from the browser
 
 ### Terminal Streaming
 
 - [ ] **TERM-01**: User sees real-time terminal output in the browser via xterm.js
 - [ ] **TERM-02**: User can type into the browser terminal and input reaches the remote CLI
-- [ ] **TERM-03**: Browser window resize propagates to the remote PTY dimensions
+- [x] **TERM-03**: Browser window resize propagates to the remote PTY dimensions
 - [ ] **TERM-04**: Flow control prevents fast output from overwhelming the browser
 
 ### Job System
@@ -113,13 +113,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AGNT-04 | Phase 3 | Complete |
 | SESS-01 | Phase 4 | Pending |
 | SESS-02 | Phase 4 | Pending |
-| SESS-03 | Phase 4 | Pending |
+| SESS-03 | Phase 4 | Complete |
 | SESS-04 | Phase 5 | Pending |
 | SESS-05 | Phase 4 | Pending |
-| SESS-06 | Phase 4 | Pending |
+| SESS-06 | Phase 4 | Complete |
 | TERM-01 | Phase 4 | Pending |
 | TERM-02 | Phase 4 | Pending |
-| TERM-03 | Phase 4 | Pending |
+| TERM-03 | Phase 4 | Complete |
 | TERM-04 | Phase 4 | Pending |
 | JOBS-01 | Phase 6 | Pending |
 | JOBS-02 | Phase 6 | Pending |
