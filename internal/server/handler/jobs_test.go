@@ -137,6 +137,61 @@ func TestJobHandler_GetJob_NotFound(t *testing.T) {
 	}
 }
 
+func TestJobHandler_UpdateJob(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	// Create a job
+	body, _ := json.Marshal(map[string]string{"name": "Original", "description": "old desc"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	// Update the job
+	updateBody, _ := json.Marshal(map[string]string{"name": "Updated", "description": "new desc"})
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/jobs/"+created.JobID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result store.Job
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result.Name != "Updated" {
+		t.Errorf("expected name 'Updated', got %q", result.Name)
+	}
+	if result.Description != "new desc" {
+		t.Errorf("expected description 'new desc', got %q", result.Description)
+	}
+}
+
+func TestJobHandler_UpdateJob_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	updateBody, _ := json.Marshal(map[string]string{"name": "Updated"})
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/jobs/nonexistent-id", bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestJobHandler_DeleteJob(t *testing.T) {
 	s := newTestStore(t)
 	srv, _ := newJobRouter(t, s)
