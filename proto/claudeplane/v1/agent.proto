@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+package claudeplane.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1;claudeplanev1";
+
+// AgentService defines the gRPC interface between agents and the server.
+// Agents dial in to the server; the server never dials out.
+service AgentService {
+  // Agent calls this once on startup to register itself.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Persistent bidirectional stream - the main communication channel.
+  // Agent sends: events (session output, status changes, health).
+  // Server sends: commands (create session, attach, detach, kill, resize).
+  rpc CommandStream(stream AgentEvent) returns (stream ServerCommand);
+}
+
+// --- Registration ---
+
+message RegisterRequest {
+  string machine_id = 1;
+  int32 max_sessions = 2;
+  ResourceInfo resources = 3;
+  repeated SessionState existing_sessions = 4;
+}
+
+message RegisterResponse {
+  bool accepted = 1;
+  string reject_reason = 2;
+  string server_version = 3;
+}
+
+message ResourceInfo {
+  int32 cpu_cores = 1;
+  int64 memory_bytes = 2;
+  int64 disk_free_bytes = 3;
+}
+
+message SessionState {
+  string session_id = 1;
+  string status = 2;
+  google.protobuf.Timestamp started_at = 3;
+  optional google.protobuf.Timestamp ended_at = 4;
+  optional int32 exit_code = 5;
+}
+
+// --- Server to Agent Commands ---
+
+message ServerCommand {
+  oneof command {
+    CreateSessionCmd create_session = 1;
+    AttachSessionCmd attach_session = 2;
+    DetachSessionCmd detach_session = 3;
+    KillSessionCmd kill_session = 4;
+    ResizeTerminalCmd resize_terminal = 5;
+    InputDataCmd input_data = 6;
+    RequestScrollbackCmd request_scrollback = 7;
+  }
+}
+
+message CreateSessionCmd {
+  string session_id = 1;
+  string working_dir = 2;
+  map<string, string> env_vars = 3;
+  string command = 4;
+  repeated string args = 5;
+  string initial_prompt = 6;
+  TerminalSize terminal_size = 7;
+}
+
+message AttachSessionCmd {
+  string session_id = 1;
+}
+
+message DetachSessionCmd {
+  string session_id = 1;
+}
+
+message KillSessionCmd {
+  string session_id = 1;
+  string signal = 2;
+}
+
+message ResizeTerminalCmd {
+  string session_id = 1;
+  TerminalSize size = 2;
+}
+
+message InputDataCmd {
+  string session_id = 1;
+  bytes data = 2;
+}
+
+message RequestScrollbackCmd {
+  string session_id = 1;
+}
+
+message TerminalSize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+// --- Agent to Server Events ---
+
+message AgentEvent {
+  oneof event {
+    SessionOutputEvent session_output = 1;
+    SessionStatusEvent session_status = 2;
+    HealthEvent health = 3;
+    ScrollbackChunkEvent scrollback_chunk = 4;
+    SessionExitEvent session_exit = 5;
+  }
+}
+
+message SessionOutputEvent {
+  string session_id = 1;
+  bytes data = 2;
+  double timestamp = 3;
+}
+
+message SessionStatusEvent {
+  string session_id = 1;
+  string status = 2;
+}
+
+message SessionExitEvent {
+  string session_id = 1;
+  int32 exit_code = 2;
+  google.protobuf.Timestamp exited_at = 3;
+  int64 scrollback_bytes = 4;
+}
+
+message HealthEvent {
+  float cpu_usage_percent = 1;
+  int64 memory_used_bytes = 2;
+  int64 disk_free_bytes = 3;
+  int32 active_sessions = 4;
+  int32 max_sessions = 5;
+}
+
+message ScrollbackChunkEvent {
+  string session_id = 1;
+  bytes data = 2;
+  bool is_final = 3;
+  int64 total_bytes = 4;
+  int64 offset = 5;
+}
