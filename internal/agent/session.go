@@ -18,6 +18,7 @@ type Session struct {
 	cmd       *exec.Cmd
 	ptyFile   *os.File
 	outputCh  chan []byte
+	readDone  chan struct{} // closed when readLoop exits
 	startedAt time.Time
 
 	mu       sync.Mutex
@@ -51,6 +52,7 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 		cmd:       cmd,
 		ptyFile:   ptmx,
 		outputCh:  make(chan []byte, 256),
+		readDone:  make(chan struct{}),
 		startedAt: time.Now(),
 		status:    "running",
 		logger:    logger.With("session_id", id),
@@ -63,7 +65,11 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 }
 
 // readLoop reads from the PTY fd in 4096-byte chunks and sends to outputCh.
+// readLoop owns outputCh: it is the only goroutine that sends to or closes it.
 func (s *Session) readLoop() {
+	defer close(s.outputCh)
+	defer close(s.readDone)
+
 	buf := make([]byte, 4096)
 	for {
 		n, err := s.ptyFile.Read(buf)
@@ -103,11 +109,12 @@ func (s *Session) waitForExit() {
 	}
 	s.mu.Unlock()
 
-	// Close PTY fd (stops readLoop).
+	// Close PTY fd — this causes readLoop's Read to return an error, which
+	// makes readLoop exit and close outputCh (readLoop owns the channel).
 	s.ptyFile.Close()
 
-	// Close output channel to signal consumers.
-	close(s.outputCh)
+	// Wait for readLoop to finish and close outputCh.
+	<-s.readDone
 
 	s.logger.Info("session exited", "status", s.status, "exit_code", s.exitCode)
 }
