@@ -37,7 +37,7 @@ func setupTestAPI(t *testing.T) *httptest.Server {
 	cm := connmgr.NewConnectionManager(s, nil)
 
 	handlers := api.NewHandlers(s, authSvc, cm)
-	router := api.NewRouter(handlers)
+	router := api.NewRouter(handlers, nil, nil)
 	return httptest.NewServer(router)
 }
 
