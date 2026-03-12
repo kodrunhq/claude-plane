@@ -141,6 +141,62 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	waitForRunStatus(t, orch, run.RunID, "completed", 5*time.Second)
 }
 
+func TestOrchestrator_OnStepCompleted_ExternalAPI(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Test 1: Calling OnStepCompleted on a nonexistent run is a safe no-op
+	t.Run("nonexistent_run", func(t *testing.T) {
+		mock := newMockExecutor()
+		orch := NewOrchestrator(context.Background(), s, mock)
+		// Should not panic
+		orch.OnStepCompleted("nonexistent-run-id", "nonexistent-step-id", 0)
+	})
+
+	// Test 2: OnStepCompleted routes to the correct active DAGRunner
+	t.Run("routes_to_active_runner", func(t *testing.T) {
+		job, _ := s.CreateJob(ctx, "OnStepCompleted Job", "", "")
+		stepA, _ := s.CreateStep(ctx, job.JobID, "A", "do A", "", "/tmp", "claude", "", 0, 0, "fail_run")
+		stepB, _ := s.CreateStep(ctx, job.JobID, "B", "do B", "", "/tmp", "claude", "", 0, 1, "fail_run")
+		_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
+
+		mock := newMockExecutor()
+		orch := NewOrchestrator(context.Background(), s, mock)
+
+		run, err := orch.CreateRun(ctx, job.JobID, "manual")
+		if err != nil {
+			t.Fatalf("CreateRun: %v", err)
+		}
+
+		// Verify the run is tracked as active
+		orch.mu.Lock()
+		_, active := orch.activeRuns[run.RunID]
+		orch.mu.Unlock()
+		if !active {
+			t.Fatal("expected run to be active after CreateRun")
+		}
+
+		// Complete steps through the standard mock path
+		mock.waitForStep(stepA.StepID)
+		mock.completeStep(stepA.StepID, 0)
+		mock.waitForStep(stepB.StepID)
+		mock.completeStep(stepB.StepID, 0)
+
+		waitForRunStatus(t, orch, run.RunID, "completed", 5*time.Second)
+
+		// After completion, the run should no longer be active
+		orch.mu.Lock()
+		_, active = orch.activeRuns[run.RunID]
+		orch.mu.Unlock()
+		if active {
+			t.Error("expected run to be removed from activeRuns after completion")
+		}
+
+		// Calling OnStepCompleted on a completed run is a safe no-op
+		orch.OnStepCompleted(run.RunID, stepA.StepID, 0)
+	})
+}
+
 // waitForRunStatus polls the orchestrator until the run reaches the expected status,
 // then verifies the persisted status in the database matches.
 func waitForRunStatus(t *testing.T, orch *Orchestrator, runID, expectedStatus string, timeout time.Duration) {
