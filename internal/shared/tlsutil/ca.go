@@ -214,11 +214,17 @@ func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.Pri
 }
 
 // randomSerial generates a random 128-bit serial number for certificates.
+// Per RFC 5280, serial numbers must be positive integers. We ensure the
+// result is at least 2 to satisfy both the RFC and test assertions.
 func randomSerial() (*big.Int, error) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serial, err := rand.Int(rand.Reader, limit)
-	if err != nil {
-		return nil, fmt.Errorf("generate serial number: %w", err)
+	for {
+		serial, err := rand.Int(rand.Reader, limit)
+		if err != nil {
+			return nil, fmt.Errorf("generate serial number: %w", err)
+		}
+		if serial.Cmp(big.NewInt(1)) > 0 {
+			return serial, nil
+		}
 	}
-	return serial, nil
 }

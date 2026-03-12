@@ -75,5 +75,14 @@ func (c *ServerConfig) Validate() error {
 	if c.TLS.CACert == "" {
 		return fmt.Errorf("tls.ca_cert is required")
 	}
+	if c.TLS.ServerCert == "" {
+		return fmt.Errorf("tls.server_cert is required")
+	}
+	if c.TLS.ServerKey == "" {
+		return fmt.Errorf("tls.server_key is required")
+	}
+	if c.Auth.JWTSecret == "" {
+		return fmt.Errorf("auth.jwt_secret is required")
+	}
 	return nil
 }

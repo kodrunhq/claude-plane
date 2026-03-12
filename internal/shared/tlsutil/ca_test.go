@@ -228,16 +228,30 @@ func TestMTLSHandshake(t *testing.T) {
 	}
 	defer listener.Close()
 
-	errCh := make(chan error, 1)
+	type serverResult struct {
+		err     error
+		peerCN  string
+		hasCert bool
+	}
+	resultCh := make(chan serverResult, 1)
 	go func() {
 		conn, err := listener.Accept()
 		if err != nil {
-			errCh <- err
+			resultCh <- serverResult{err: err}
 			return
 		}
 		defer conn.Close()
 		tlsConn := conn.(*tls.Conn)
-		errCh <- tlsConn.Handshake()
+		if err := tlsConn.Handshake(); err != nil {
+			resultCh <- serverResult{err: err}
+			return
+		}
+		state := tlsConn.ConnectionState()
+		res := serverResult{hasCert: len(state.PeerCertificates) > 0}
+		if res.hasCert {
+			res.peerCN = state.PeerCertificates[0].Subject.CommonName
+		}
+		resultCh <- res
 	}()
 
 	agentTLS.ServerName = "localhost"
@@ -247,14 +261,17 @@ func TestMTLSHandshake(t *testing.T) {
 	}
 	defer conn.Close()
 
-	if err := <-errCh; err != nil {
-		t.Fatalf("server handshake failed: %v", err)
+	res := <-resultCh
+	if res.err != nil {
+		t.Fatalf("server handshake failed: %v", res.err)
 	}
 
 	// Verify the agent's identity from the server side
-	state := conn.ConnectionState()
-	if len(state.PeerCertificates) == 0 {
-		t.Log("Note: peer certs not available on client side, this is expected")
+	if !res.hasCert {
+		t.Fatal("server should see agent's client certificate")
+	}
+	if res.peerCN != "test-agent" {
+		t.Errorf("server saw client CN=%q, want %q", res.peerCN, "test-agent")
 	}
 }
 
