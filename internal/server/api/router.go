@@ -46,7 +46,7 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 // Public routes (register, login) require no authentication.
 // Protected routes (logout, machines, sessions) require a valid JWT Bearer token.
 // The WebSocket route uses query-param authentication (WebSocket can't send headers).
-func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
+func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -57,9 +57,12 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeadersMiddleware)
 
-	// WebSocket route — uses query param auth, not JWT middleware
+	// WebSocket routes — use query param auth, not JWT middleware
 	if wsHandler != nil {
 		r.Get("/ws/terminal/{sessionID}", wsHandler)
+	}
+	if eventsWSHandler != nil {
+		r.Get("/ws/events", eventsWSHandler)
 	}
 
 	// 5 requests per minute per IP for auth endpoints
