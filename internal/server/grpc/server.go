@@ -3,12 +3,15 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
+	"github.com/claudeplane/claude-plane/internal/server/session"
 	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 
 	"google.golang.org/grpc"
@@ -21,6 +24,7 @@ type GRPCServer struct {
 	*grpc.Server
 	connMgr      *ConnectionManager
 	agentConnMgr *connmgr.ConnectionManager
+	agentSvc     *agentService
 	logger       *slog.Logger
 }
 
@@ -29,6 +33,7 @@ type agentService struct {
 	pb.UnimplementedAgentServiceServer
 	connMgr      *ConnectionManager
 	agentConnMgr *connmgr.ConnectionManager
+	registry     *session.Registry
 	logger       *slog.Logger
 }
 
@@ -68,8 +73,14 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 		Server:       srv,
 		connMgr:      connMgr,
 		agentConnMgr: agentConnMgr,
+		agentSvc:     svc,
 		logger:       logger,
 	}
+}
+
+// SetRegistry sets the session registry for routing agent events to WebSocket subscribers.
+func (s *GRPCServer) SetRegistry(r *session.Registry) {
+	s.agentSvc.registry = r
 }
 
 // Serve starts the gRPC server on the given listener.
@@ -142,6 +153,18 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	// can cancel the old stream's receive loop.
 	ctx, cancel := context.WithCancel(stream.Context())
 
+	// Build a thread-safe SendCommand function using a mutex to protect stream.Send.
+	var sendMu sync.Mutex
+	sendCommand := func(cmd interface{}) error {
+		serverCmd, ok := cmd.(*pb.ServerCommand)
+		if !ok {
+			return fmt.Errorf("expected *pb.ServerCommand, got %T", cmd)
+		}
+		sendMu.Lock()
+		defer sendMu.Unlock()
+		return stream.Send(serverCmd)
+	}
+
 	// Register with the DB-backed connection manager if available.
 	if s.agentConnMgr != nil {
 		var maxSessions int32
@@ -154,6 +177,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			MaxSessions:  maxSessions,
 			Cancel:       cancel,
 			Stream:       stream,
+			SendCommand:  sendCommand,
 		}
 		if regErr := s.agentConnMgr.Register(machineID, ca); regErr != nil {
 			cancel()
@@ -198,6 +222,19 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				return res.err
 			}
 			s.logger.Debug("agent event received", "machine_id", machineID, "event", res.event)
+
+			// Route terminal events to session registry for WebSocket forwarding
+			if s.registry != nil {
+				if out := res.event.GetSessionOutput(); out != nil {
+					s.registry.Publish(out.GetSessionId(), out.GetData())
+				}
+				if sc := res.event.GetScrollbackChunk(); sc != nil {
+					s.registry.Publish(sc.GetSessionId(), sc.GetData())
+					if sc.GetIsFinal() {
+						s.registry.PublishControl(sc.GetSessionId(), []byte(`{"type":"scrollback_end"}`))
+					}
+				}
+			}
 		}
 	}
 }

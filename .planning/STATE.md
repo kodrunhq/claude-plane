@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-03-12T09:58:42.479Z"
-last_activity: 2026-03-12 -- Completed 03-03-PLAN.md
+status: executing
+stopped_at: Completed 04-03-PLAN.md (checkpoint pending)
+last_updated: "2026-03-12T10:37:20.833Z"
+last_activity: 2026-03-12 -- Completed 04-03-PLAN.md
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 20
-  completed_plans: 9
-  percent: 45
+  completed_plans: 12
+  percent: 60
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal -- with sessions that survive disconnection.
-**Current focus:** Phase 3: Server Core (Complete)
+**Current focus:** Phase 4: Terminal Streaming (Complete, checkpoint pending)
 
 ## Current Position
 
-Phase: 3 of 6 (Server Core) -- COMPLETE
+Phase: 4 of 6 (Terminal Streaming)
 Plan: 3 of 3 in current phase
-Status: Phase Complete
-Last activity: 2026-03-12 -- Completed 03-03-PLAN.md
+Status: Complete (checkpoint pending)
+Last activity: 2026-03-12 -- Completed 04-03-PLAN.md
 
-Progress: [█████░░░░░] 45%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 4.4min
-- Total execution time: 0.67 hours
+- Total plans completed: 11
+- Average duration: 4.7min
+- Total execution time: 0.87 hours
 
 **By Phase:**
 
@@ -46,14 +46,18 @@ Progress: [█████░░░░░] 45%
 | 01-foundation | 4 | 13min | 3.3min |
 | 02-agent-core | 2 | 14min | 7.0min |
 | 03-server-core | 3 | 14min | 4.7min |
+| 04-terminal-streaming | 2 | 15min | 7.5min |
 
 **Recent Trend:**
-- Last 5 plans: 7min, 8min, 4min, 6min, 4min
+- Last 5 plans: 4min, 6min, 4min, 5min, 10min
 - Trend: Stable
 
 *Updated after each plan completion*
 | Phase 03 P02 | 6min | 3 tasks | 7 files |
 | Phase 03 P03 | 4min | 2 tasks | 8 files |
+| Phase 04 P01 | 5min | 2 tasks | 6 files |
+| Phase 04 P02 | 10min | 2 tasks | 11 files |
+| Phase 04 P03 | 2min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -79,6 +83,16 @@ Recent decisions affecting current work:
 - [Phase 03-server-core]: Connection manager performs DB operations outside mutex lock to prevent lock contention
 - [Phase 03]: Handlers struct centralizes store/authSvc/connMgr as single injection point for all API handlers
 - [Phase 03]: Generic 'invalid credentials' for login failures prevents user enumeration
+- [Phase 04-terminal-streaming]: json.Marshal for scrollback data escaping handles binary/control chars safely
+- [Phase 04-terminal-streaming]: New sessions auto-attach for backward compatibility with relay behavior
+- [Phase 04-terminal-streaming]: Scrollback write errors logged but don't stop readLoop
+- [Phase 04-terminal-streaming]: SendCommand func field on ConnectedAgent for command dispatch without proto imports
+- [Phase 04-terminal-streaming]: coder/websocket library for WebSocket (modern, context-aware)
+- [Phase 04-terminal-streaming]: Query-param token auth for WebSocket upgrade (browsers can't set headers)
+- [Phase 04-terminal-streaming]: Buffered channel cap 256 with non-blocking drop for slow WS consumers
+- [Phase 04-terminal-streaming]: WebSocket close sends DetachSessionCmd not KillSessionCmd
+- [Phase 04-terminal-streaming]: ClaimsGetter function type decouples session handler from api package
+- [Phase 04]: Scaffolded Vite React+TS project for web/ directory
 
 ### Pending Todos
 
@@ -91,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:54:40.356Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-03-12T10:37:20.831Z
+Stopped at: Completed 04-03-PLAN.md (checkpoint pending)
 Resume file: None
