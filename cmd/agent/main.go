@@ -75,18 +75,12 @@ func newRunCmd() *cobra.Command {
 				"shutdown_timeout", shutdownTimeout,
 			)
 
-			// Run the gRPC client (blocks until ctx is cancelled, auto-reconnects).
-			go func() {
-				if err := client.Run(ctx); err != nil && ctx.Err() == nil {
-					slog.Error("agent client error", "error", err)
-				}
-			}()
-
-			// Block until shutdown signal.
-			<-ctx.Done()
-			slog.Info("Shutdown signal received, starting graceful shutdown",
-				"timeout", shutdownTimeout,
-			)
+			// Run the gRPC client — blocks until ctx is cancelled, auto-reconnects.
+			// Running in the main goroutine ensures the process waits for the client
+			// to unwind and close the gRPC connection cleanly before exiting.
+			if err := client.Run(ctx); err != nil && ctx.Err() == nil {
+				return fmt.Errorf("agent client: %w", err)
+			}
 
 			slog.Info("Agent shutdown complete")
 			return nil
