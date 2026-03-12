@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-03-12T13:00:32.797Z"
-last_activity: 2026-03-12 -- Completed 06-03-PLAN.md
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-03-12T13:20:07.619Z"
+last_activity: 2026-03-12 -- Completed 06-05-PLAN.md (gap closure)
 progress:
   total_phases: 6
-  completed_phases: 6
-  total_plans: 20
-  completed_plans: 20
+  completed_phases: 5
+  total_plans: 22
+  completed_plans: 22
   percent: 100
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 6 of 6 (Job System)
-Plan: 3 of 3 in current phase
+Plan: 5 of 5 in current phase (gap closure plans 04-05)
 Status: Complete
-Last activity: 2026-03-12 -- Completed 06-03-PLAN.md
+Last activity: 2026-03-12 -- Completed 06-05-PLAN.md (gap closure)
 
 Progress: [██████████] 100%
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 06-job-system P01 | 12min | 2 tasks | 8 files |
 | Phase 06-job-system P02 | 8min | 2 tasks | 4 files |
 | Phase 06-job-system P03 | 3min | 2 tasks | 21 files |
+| Phase 06-job-system P05 | 2min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,7 @@ Recent decisions affecting current work:
 - [Phase 06-job-system]: Used @xyflow/react (ReactFlow v12) with @dagrejs/dagre for automatic DAG layout
 - [Phase 06-job-system]: Views placed in web/src/views/ following existing project convention (not pages/)
 - [Phase 06-job-system]: RunDAGView is a thin read-only wrapper around DAGCanvas with live status coloring
+- [Phase 06-job-system]: Synthetic edge IDs (dep.depends_on->dep.step_id) since backend StepDependency has no separate id field
 
 ### Pending Todos
 
@@ -133,6 +135,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T13:00:32.794Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-03-12T13:20:07.617Z
+Stopped at: Completed 06-05-PLAN.md
 Resume file: None
