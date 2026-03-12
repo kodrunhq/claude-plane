@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,7 +44,16 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
-	cmd.Env = os.Environ()
+	// Build a clean environment, stripping CLAUDECODE= env vars to prevent
+	// "nested session" detection when spawning Claude CLI processes.
+	environ := os.Environ()
+	cmd.Env = make([]string, 0, len(environ)+len(envVars))
+	for _, e := range environ {
+		if strings.HasPrefix(e, "CLAUDECODE=") {
+			continue
+		}
+		cmd.Env = append(cmd.Env, e)
+	}
 	for k, v := range envVars {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

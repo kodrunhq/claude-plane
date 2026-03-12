@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router';
-import { LayoutDashboard, Terminal, Server, Workflow, Settings } from 'lucide-react';
+import { LayoutDashboard, Terminal, Server, Workflow, LogOut } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
+import { useAuthStore } from '../../stores/auth.ts';
 
 const navItems = [
   { to: '/', label: 'Command Center', icon: LayoutDashboard },
@@ -11,6 +12,7 @@ const navItems = [
 
 export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
+  const logout = useAuthStore((s) => s.logout);
 
   return (
     <aside
@@ -39,11 +41,12 @@ export function Sidebar() {
 
       <div className="p-2 border-t border-gray-700">
         <button
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/50 w-full transition-colors"
-          aria-label="Settings"
+          onClick={() => logout()}
+          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-status-error hover:bg-bg-tertiary/50 w-full transition-colors"
+          aria-label="Sign out"
         >
-          <Settings size={20} className="shrink-0" />
-          {!collapsed && <span>Settings</span>}
+          <LogOut size={20} className="shrink-0" />
+          {!collapsed && <span>Sign out</span>}
         </button>
       </div>
     </aside>

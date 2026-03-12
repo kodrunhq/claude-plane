@@ -32,8 +32,8 @@ claude-plane is a self-hosted control plane for managing interactive Claude CLI 
 ## Security Model
 
 - Agent↔Server: mTLS with built-in CA tooling (`claude-plane-server ca init/issue-server/issue-agent`)
-- Frontend↔Server: Basic Auth + TLS (V1), OIDC/OAuth2 planned for V2
-- Agent identity embedded in certificate CN as `machine-id`
+- Frontend↔Server: JWT via httpOnly cookies (login page gating all routes), OIDC/OAuth2 planned for V2
+- Agent certificate CN must be `agent-{machine-id}` (gRPC interceptor strips the `agent-` prefix to derive the logical machine ID)
 
 ## Data Model (SQLite)
 
@@ -48,33 +48,39 @@ Detailed architecture specs live in `docs/internal/product/`:
 
 **Always consult these docs before making architectural decisions.**
 
-## Build Commands (planned)
+## Build & Run
 
 ```bash
-# Backend
+# Build
 go build -o claude-plane-server ./cmd/server
 go build -o claude-plane-agent ./cmd/agent
-go test -race ./...
 
-# Frontend (inside web/ directory)
+# Quickstart (generates certs, configs, admin, starts everything)
+./quickstart.sh
+
+# Tests
+go test -race ./...
+cd web && npx vitest run
+
+# Frontend dev (inside web/ directory)
 npm install
 npm run dev          # Vite dev server
 npm run build        # Production build (output embedded into server binary)
-npm run test         # Vitest
 npm run lint         # ESLint
 
 # Proto generation
 buf generate         # or protoc with go-grpc plugin
 ```
 
-## Project Structure (planned)
+## Project Structure
 
 ```
-cmd/server/          # Server entrypoint
-cmd/agent/           # Agent entrypoint
+cmd/server/          # Server entrypoint (serve, CA tools, seed-admin)
+cmd/agent/           # Agent entrypoint (run)
 internal/server/     # Server business logic
 internal/agent/      # Agent business logic
-internal/proto/      # Generated gRPC code
+internal/shared/     # Shared code (proto, TLS utilities)
 proto/               # .proto definitions
 web/                 # React frontend (Vite project)
+quickstart.sh        # One-command local setup
 ```

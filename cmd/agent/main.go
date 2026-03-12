@@ -10,10 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/kodrunhq/claude-plane/internal/agent"
 	"github.com/kodrunhq/claude-plane/internal/agent/config"
-
-	// Prove generated proto package compiles.
-	_ "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 var version = "0.1.0-dev"
@@ -56,6 +54,20 @@ func newRunCmd() *cobra.Command {
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
+			// Ensure data directory exists.
+			if err := os.MkdirAll(cfg.Agent.DataDir, 0o750); err != nil {
+				return fmt.Errorf("create data dir: %w", err)
+			}
+
+			// Session manager (handles PTY sessions).
+			sessionMgr := agent.NewSessionManager(cfg.Agent.ClaudeCLIPath, cfg.Agent.DataDir, slog.Default())
+
+			// gRPC client with reconnection.
+			client, err := agent.NewAgentClient(cfg, sessionMgr, slog.Default())
+			if err != nil {
+				return fmt.Errorf("create agent client: %w", err)
+			}
+
 			slog.Info("Agent starting",
 				"machine_id", cfg.Agent.MachineID,
 				"server_address", cfg.Server.Address,
@@ -63,22 +75,12 @@ func newRunCmd() *cobra.Command {
 				"shutdown_timeout", shutdownTimeout,
 			)
 
-			// TODO: Establish gRPC connection to server here (pass ctx).
-			// TODO: Start session manager / PTY supervisor here.
-
-			// Block until shutdown signal.
-			<-ctx.Done()
-			slog.Info("Shutdown signal received, starting graceful shutdown",
-				"timeout", shutdownTimeout,
-			)
-
-			// Create a timeout context for the shutdown sequence.
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
-			defer shutdownCancel()
-			_ = shutdownCtx // used by shutdown calls below
-
-			// TODO: Close all active PTY sessions gracefully (use shutdownCtx for deadline).
-			// TODO: Disconnect gRPC stream so the server knows we're leaving.
+			// Run the gRPC client — blocks until ctx is cancelled, auto-reconnects.
+			// Running in the main goroutine ensures the process waits for the client
+			// to unwind and close the gRPC connection cleanly before exiting.
+			if err := client.Run(ctx); err != nil && ctx.Err() == nil {
+				return fmt.Errorf("agent client: %w", err)
+			}
 
 			slog.Info("Agent shutdown complete")
 			return nil

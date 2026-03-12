@@ -43,8 +43,19 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
     if (!machineId) return;
 
     try {
+      // Estimate terminal dimensions from the viewport so the PTY starts
+      // at the right size instead of the 80x24 default. Uses the same font
+      // metrics as the xterm.js Terminal (fontSize 14, JetBrains Mono).
+      const charWidth = 8.4;
+      const lineHeight = 18;
+      const sidebarWidth = 56;   // w-14 = 3.5rem = 56px
+      const chromeHeight = 120;  // top bar + status bar + terminal status bar + padding
+      const cols = Math.max(80, Math.floor((window.innerWidth - sidebarWidth - 32) / charWidth));
+      const rows = Math.max(24, Math.floor((window.innerHeight - chromeHeight) / lineHeight));
+
       const session = await createSession.mutateAsync({
         machine_id: machineId,
+        terminal_size: { cols, rows },
         ...(command ? { command } : {}),
         ...(workingDir ? { working_dir: workingDir } : {}),
       });
