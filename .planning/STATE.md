@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-12T09:47:42.106Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-12T09:54:40.358Z"
 last_activity: 2026-03-12 -- Completed 03-02-PLAN.md
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 20
-  completed_plans: 8
-  percent: 40
+  completed_plans: 9
+  percent: 45
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal -- with sessions that survive disconnection.
-**Current focus:** Phase 3: Server Core
+**Current focus:** Phase 3: Server Core (Complete)
 
 ## Current Position
 
-Phase: 3 of 6 (Server Core)
-Plan: 2 of 3 in current phase
-Status: In Progress
-Last activity: 2026-03-12 -- Completed 03-02-PLAN.md
+Phase: 3 of 6 (Server Core) -- COMPLETE
+Plan: 3 of 3 in current phase
+Status: Phase Complete
+Last activity: 2026-03-12 -- Completed 03-03-PLAN.md
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 45%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 4.5min
-- Total execution time: 0.60 hours
+- Total plans completed: 9
+- Average duration: 4.4min
+- Total execution time: 0.67 hours
 
 **By Phase:**
 
@@ -45,14 +45,15 @@ Progress: [████░░░░░░] 40%
 |-------|-------|-------|----------|
 | 01-foundation | 4 | 13min | 3.3min |
 | 02-agent-core | 2 | 14min | 7.0min |
-| 03-server-core | 2 | 10min | 5.0min |
+| 03-server-core | 3 | 14min | 4.7min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 7min, 8min, 4min, 6min
+- Last 5 plans: 7min, 8min, 4min, 6min, 4min
 - Trend: Stable
 
 *Updated after each plan completion*
 | Phase 03 P02 | 6min | 3 tasks | 7 files |
+| Phase 03 P03 | 4min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 03-server-core]: Blocklist uses RWMutex with in-memory map backed by SQLite for fast lookups with persistence
 - [Phase 03-server-core]: MachineStore interface in connmgr for testable store dependency via mock
 - [Phase 03-server-core]: Connection manager performs DB operations outside mutex lock to prevent lock contention
+- [Phase 03]: Handlers struct centralizes store/authSvc/connMgr as single injection point for all API handlers
+- [Phase 03]: Generic 'invalid credentials' for login failures prevents user enumeration
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:47:13Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-12T09:54:40.356Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
