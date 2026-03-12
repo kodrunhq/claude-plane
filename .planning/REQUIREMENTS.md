@@ -26,7 +26,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SESS-01**: User can create a new Claude CLI session on any connected machine
 - [x] **SESS-02**: User can attach to an existing session and receive terminal output
 - [x] **SESS-03**: User can detach from a session without terminating it
-- [ ] **SESS-04**: User can list all active sessions across all machines
+- [x] **SESS-04**: User can list all active sessions across all machines
 - [x] **SESS-05**: User can terminate a session
 - [x] **SESS-06**: Sessions continue running on the agent when the user disconnects from the browser
 
@@ -114,7 +114,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SESS-01 | Phase 4 | Complete |
 | SESS-02 | Phase 4 | Complete |
 | SESS-03 | Phase 4 | Complete |
-| SESS-04 | Phase 5 | Pending |
+| SESS-04 | Phase 5 | Complete |
 | SESS-05 | Phase 4 | Complete |
 | SESS-06 | Phase 4 | Complete |
 | TERM-01 | Phase 4 | Complete |
