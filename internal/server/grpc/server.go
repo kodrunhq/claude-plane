@@ -1,8 +1,11 @@
 package grpc
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
@@ -241,7 +244,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					s.registry.Publish(out.GetSessionId(), out.GetData())
 				}
 				if sc := res.event.GetScrollbackChunk(); sc != nil {
-					s.registry.Publish(sc.GetSessionId(), sc.GetData())
+					// Scrollback data is asciicast v2 JSONL. Parse each line
+					// to extract raw terminal output, skipping the header.
+					termData := parseAsciicastData(sc.GetData())
+					if len(termData) > 0 {
+						s.registry.Publish(sc.GetSessionId(), termData)
+					}
 					if sc.GetIsFinal() {
 						s.registry.PublishControl(sc.GetSessionId(), []byte(`{"type":"scrollback_end"}`))
 					}
@@ -249,4 +257,44 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			}
 		}
 	}
+}
+
+// parseAsciicastData extracts raw terminal output bytes from asciicast v2 JSONL data.
+// It skips the header line ({"version":2,...}) and parses each event line
+// [timestamp, "o", "data"] to extract the data field.
+func parseAsciicastData(raw []byte) []byte {
+	var buf bytes.Buffer
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	// Asciicast lines can be large (e.g. big output bursts); raise the
+	// default 64 KiB token limit to 1 MiB to avoid silent truncation.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		// Skip the header object (starts with '{')
+		if line[0] == '{' {
+			continue
+		}
+		// Event lines are JSON arrays: [timestamp, "o", "data"]
+		if line[0] != '[' {
+			continue
+		}
+		var entry []json.RawMessage
+		if err := json.Unmarshal(line, &entry); err != nil || len(entry) < 3 {
+			continue
+		}
+		var data string
+		if err := json.Unmarshal(entry[2], &data); err != nil {
+			continue
+		}
+		buf.WriteString(data)
+	}
+	if err := scanner.Err(); err != nil {
+		// Log would require passing a logger; return what we have so far.
+		// Partial data is better than nothing for scrollback replay.
+		return buf.Bytes()
+	}
+	return buf.Bytes()
 }

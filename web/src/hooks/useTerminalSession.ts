@@ -63,6 +63,10 @@ export function useTerminalSession(
       // Cookie-based auth: the session_token cookie is sent automatically
       // on the WebSocket upgrade request, so no first-message auth is needed.
       setStatus('replaying');
+
+      // Fit the terminal to the container — this triggers term.onResize which
+      // sends the resize control message to the server automatically.
+      fitAddon.fit();
     };
 
     ws.onmessage = (event: MessageEvent) => {
