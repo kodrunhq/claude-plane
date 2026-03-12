@@ -24,7 +24,7 @@ export function CommandCenter() {
     [sessions],
   );
   const onlineMachines = useMemo(
-    () => (machines ?? []).filter((m) => m.status === 'online'),
+    () => (machines ?? []).filter((m) => m.status === 'connected'),
     [machines],
   );
 

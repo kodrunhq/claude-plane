@@ -1,13 +1,13 @@
-// Machine type -- matches server REST response
+// Machine type -- matches Go store.Machine struct
 export interface Machine {
   machine_id: string;
-  hostname: string;
-  os: string;
-  arch: string;
-  status: 'online' | 'offline';
+  display_name: string;
+  status: 'connected' | 'disconnected';
+  max_sessions: number;
+  last_health: string;
   last_seen_at: string;
-  registered_at: string;
-  session_count?: number;
+  cert_expires: string;
+  created_at: string;
 }
 
 // WebSocket event message types
