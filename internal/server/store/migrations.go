@@ -157,6 +157,13 @@ func RunMigrations(db *sql.DB) error {
 		return fmt.Errorf("run migrations (schema): %w", err)
 	}
 
+	if _, err := db.Exec(revokedTokensSchema); err != nil {
+		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
+			return fmt.Errorf("run migrations (schema): %w (rollback failed: %v)", err, rbErr)
+		}
+		return fmt.Errorf("run migrations (schema): %w", err)
+	}
+
 	if _, err := db.Exec("COMMIT;"); err != nil {
 		if _, rbErr := db.Exec("ROLLBACK;"); rbErr != nil {
 			return fmt.Errorf("run migrations (commit): %w (rollback failed: %v)", err, rbErr)
