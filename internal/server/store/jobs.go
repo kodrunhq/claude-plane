@@ -9,6 +9,30 @@ import (
 	"github.com/google/uuid"
 )
 
+// JobStoreIface defines the interface for job-related database operations.
+// Used by the orchestrator package for dependency injection and testability.
+type JobStoreIface interface {
+	CreateJob(ctx context.Context, name, description, userID string) (*Job, error)
+	GetJob(ctx context.Context, jobID string) (*JobDetail, error)
+	ListJobs(ctx context.Context) ([]Job, error)
+	DeleteJob(ctx context.Context, jobID string) error
+	CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error)
+	UpdateStep(ctx context.Context, stepID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) error
+	DeleteStep(ctx context.Context, stepID string) error
+	AddDependency(ctx context.Context, stepID, dependsOn string) error
+	RemoveDependency(ctx context.Context, stepID, dependsOn string) error
+	GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []StepDependency, error)
+	CreateRun(ctx context.Context, jobID, triggerType string) (*Run, error)
+	InsertRunSteps(ctx context.Context, runID string, steps []Step) error
+	GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, error)
+	UpdateRunStepStatus(ctx context.Context, runStepID, status, sessionID string, exitCode int) error
+	UpdateRunStatus(ctx context.Context, runID, status string) error
+	ListRuns(ctx context.Context, jobID string) ([]Run, error)
+}
+
+// Compile-time check that Store implements JobStoreIface.
+var _ JobStoreIface = (*Store)(nil)
+
 // Job represents a reusable job definition.
 type Job struct {
 	JobID       string    `json:"job_id"`
