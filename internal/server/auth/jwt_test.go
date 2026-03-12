@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -157,9 +155,6 @@ func TestValidateWrongAlgorithm(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for HS384 token (only HS256 allowed)")
 	}
-
-	// Suppress unused import warning for hmac/sha256 — they're used in noneToken construction above
-	_ = hmac.New(sha256.New, nil)
 }
 
 func TestValidateRevoked(t *testing.T) {

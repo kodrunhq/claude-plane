@@ -1,9 +1,11 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/claudeplane/claude-plane/internal/server/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -57,7 +59,11 @@ func (h *Handlers) GetMachine(w http.ResponseWriter, r *http.Request) {
 
 	machine, err := h.store.GetMachine(machineID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "machine not found")
+		if errors.Is(err, store.ErrMachineNotFound) {
+			writeError(w, http.StatusNotFound, "machine not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal error")
+		}
 		return
 	}
 

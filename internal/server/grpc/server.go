@@ -173,21 +173,31 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 		s.logger.Info("agent stream closed", "machine_id", machineID)
 	}()
 
-	// Receive loop: read events from agent until stream closes, error, or
-	// context cancellation (from a replacement connection).
+	// Receive loop: run Recv in a goroutine so ctx cancellation (from a
+	// replacement connection) can terminate the loop even when Recv is blocked.
+	type recvResult struct {
+		event *pb.AgentEvent
+		err   error
+	}
+	recvCh := make(chan recvResult, 1)
+
 	for {
+		go func() {
+			event, err := stream.Recv()
+			recvCh <- recvResult{event, err}
+		}()
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
+		case res := <-recvCh:
+			if res.err == io.EOF {
+				return nil
+			}
+			if res.err != nil {
+				return res.err
+			}
+			s.logger.Debug("agent event received", "machine_id", machineID, "event", res.event)
 		}
-		event, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		s.logger.Debug("agent event received", "machine_id", machineID, "event", event)
 	}
 }
