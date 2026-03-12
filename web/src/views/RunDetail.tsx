@@ -27,8 +27,15 @@ export function RunDetail() {
   const selectedStepId = useRunStore((s) => s.selectedStepId);
   const selectStep = useRunStore((s) => s.selectStep);
   const setStepStatuses = useRunStore((s) => s.setStepStatuses);
+  const setActiveRunId = useRunStore((s) => s.setActiveRunId);
   const stepStatuses = useRunStore((s) => s.stepStatuses);
   const reset = useRunStore((s) => s.reset);
+
+  // Reset store when route param changes to prevent state leaking between runs
+  useEffect(() => {
+    setActiveRunId(id ?? null);
+    return () => reset();
+  }, [id, setActiveRunId, reset]);
 
   // Sync run steps to store
   useEffect(() => {
@@ -36,11 +43,6 @@ export function RunDetail() {
       setStepStatuses(runSteps);
     }
   }, [runSteps, setStepStatuses]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => reset();
-  }, [reset]);
 
   // Build merged run steps from store (for live updates)
   const mergedRunSteps = useMemo(() => {
