@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -62,7 +63,10 @@ func RateLimitMiddleware(r rate.Limit, burst int) func(http.Handler) http.Handle
 	limiter := newIPRateLimiter(r, burst)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			ip := req.RemoteAddr
+			ip, _, _ := net.SplitHostPort(req.RemoteAddr)
+			if ip == "" {
+				ip = req.RemoteAddr
+			}
 			if !limiter.getLimiter(ip).Allow() {
 				writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
 				return
