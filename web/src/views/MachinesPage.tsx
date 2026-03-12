@@ -14,8 +14,8 @@ export function MachinesPage() {
   const counts = useMemo(() => {
     const all = machines ?? [];
     return {
-      online: all.filter((m) => m.status === 'online').length,
-      offline: all.filter((m) => m.status === 'offline').length,
+      online: all.filter((m) => m.status === 'connected').length,
+      offline: all.filter((m) => m.status === 'disconnected').length,
       total: all.length,
     };
   }, [machines]);
