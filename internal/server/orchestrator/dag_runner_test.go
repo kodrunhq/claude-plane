@@ -260,8 +260,8 @@ func TestDAGRunner_DeepLinearChainSkipPropagation(t *testing.T) {
 
 	runner.waitForDone()
 
-	if runner.finalStatus != "failed" {
-		t.Errorf("final status = %q, want %q", runner.finalStatus, "failed")
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
 	}
 
 	// Verify all downstream steps were skipped
@@ -277,7 +277,7 @@ func TestDAGRunner_DeepLinearChainSkipPropagation(t *testing.T) {
 func TestDAGRunner_CancelBeforeStart(t *testing.T) {
 	runner := NewDAGRunner(
 		"run-1",
-		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: "pending"}},
+		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: store.StatusPending}},
 		nil,
 		nil,
 		nil,

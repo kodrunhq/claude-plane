@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -234,27 +235,53 @@ func RunMigrations(db *sql.DB) error {
 	return nil
 }
 
-// applyMigration runs a single migration inside a transaction and records
-// its version in the schema_version table.
+// applyMigration runs a single migration inside a BEGIN IMMEDIATE transaction
+// and records its version in the schema_version table. BEGIN IMMEDIATE acquires
+// the SQLite write lock upfront, preventing concurrent processes from applying
+// the same migration simultaneously. The version is re-checked inside the
+// transaction to handle races where two processes both see the same
+// currentVersion before either acquires the lock.
 func applyMigration(db *sql.DB, m Migration) error {
-	tx, err := db.Begin()
+	// BEGIN IMMEDIATE acquires the write lock immediately, preventing
+	// concurrent migration attempts from interleaving.
+	conn, err := db.Conn(context.Background())
 	if err != nil {
-		return fmt.Errorf("begin: %w", err)
+		return fmt.Errorf("acquire conn: %w", err)
 	}
-	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
+	defer conn.Close()
 
-	if _, err := tx.Exec(m.SQL); err != nil {
+	if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		return fmt.Errorf("begin immediate: %w", err)
+	}
+
+	// Re-check version inside the transaction to handle concurrent startup.
+	var applied bool
+	err = conn.QueryRowContext(context.Background(),
+		"SELECT EXISTS(SELECT 1 FROM schema_version WHERE version = ?)", m.Version,
+	).Scan(&applied)
+	if err != nil {
+		_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		return fmt.Errorf("check version: %w", err)
+	}
+	if applied {
+		_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		return nil // already applied by another process
+	}
+
+	if _, err := conn.ExecContext(context.Background(), m.SQL); err != nil {
+		_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
 		return fmt.Errorf("exec: %w", err)
 	}
 
-	if _, err := tx.Exec(
-		"INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)",
+	if _, err := conn.ExecContext(context.Background(),
+		"INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
 		m.Version, time.Now().UTC().Format(time.RFC3339),
 	); err != nil {
+		_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
 		return fmt.Errorf("record version: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if _, err := conn.ExecContext(context.Background(), "COMMIT"); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 
