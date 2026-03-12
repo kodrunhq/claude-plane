@@ -2,6 +2,7 @@ package grpc_test
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/claudeplane/claude-plane/internal/server/session"
 	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 	"github.com/claudeplane/claude-plane/internal/shared/tlsutil"
 
@@ -192,4 +194,93 @@ func TestConnectionManager_AddRemoveList(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// startTestGRPCServerWithRegistry creates a gRPC server with mTLS and a session
+// registry for event forwarding tests.
+func startTestGRPCServerWithRegistry(t *testing.T, caDir, serverDir string, reg *session.Registry) (addr string, stop func()) {
+	t.Helper()
+
+	tlsCfg, err := tlsutil.ServerTLSConfig(
+		filepath.Join(caDir, "ca.pem"),
+		filepath.Join(serverDir, "server.pem"),
+		filepath.Join(serverDir, "server-key.pem"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := servergrpc.NewGRPCServer(tlsCfg, nil, nil)
+	srv.SetRegistry(reg)
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	return lis.Addr().String(), func() { srv.Stop() }
+}
+
+func TestCommandStream_EventForwarding(t *testing.T) {
+	caDir, serverDir, agentDir := setupTestCerts(t, "agent-stream-01")
+	reg := session.NewRegistry(slog.Default())
+	addr, stop := startTestGRPCServerWithRegistry(t, caDir, serverDir, reg)
+	defer stop()
+
+	conn := dialAgent(t, addr, caDir, agentDir)
+	client := pb.NewAgentServiceClient(conn)
+
+	// Register first
+	resp, err := client.Register(context.Background(), &pb.RegisterRequest{
+		MachineId:   "stream-01",
+		MaxSessions: 5,
+	})
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("Register rejected: %s", resp.RejectReason)
+	}
+
+	// Subscribe to session output in the registry before sending events
+	sessionID := "test-session-abc"
+	subCh := reg.Subscribe(sessionID)
+	defer reg.Unsubscribe(sessionID, subCh)
+
+	// Open CommandStream
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := client.CommandStream(ctx)
+	if err != nil {
+		t.Fatalf("CommandStream: %v", err)
+	}
+
+	// Send a SessionOutput event
+	testData := []byte("hello from agent stream")
+	err = stream.Send(&pb.AgentEvent{
+		Event: &pb.AgentEvent_SessionOutput{
+			SessionOutput: &pb.SessionOutputEvent{
+				SessionId: sessionID,
+				Data:      testData,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	// Verify the event was forwarded to the registry subscriber
+	select {
+	case msg := <-subCh:
+		if string(msg.Data) != string(testData) {
+			t.Errorf("forwarded data = %q, want %q", msg.Data, testData)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for event to be forwarded to registry")
+	}
 }
