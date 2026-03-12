@@ -12,7 +12,7 @@ claude-plane delivers a self-hosted control plane for managing interactive Claud
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Compilable binaries, shared contracts, CA tooling, SQLite persistence, config parsing
+- [x] **Phase 1: Foundation** - Compilable binaries, shared contracts, CA tooling, SQLite persistence, config parsing
 - [ ] **Phase 2: Agent Core** - Agent binary connects to server via mTLS, spawns PTYs, maintains scrollback
 - [ ] **Phase 3: Server Core** - Server accepts agents, exposes REST API, handles user authentication
 - [ ] **Phase 4: Terminal Streaming** - End-to-end terminal I/O from browser through server to agent PTY
@@ -37,7 +37,7 @@ Plans:
 - [x] 01-01-PLAN.md — Go module scaffold, protobuf contract, binary entrypoints
 - [x] 01-02-PLAN.md — CA tooling (mTLS certs) + TOML config parsing
 - [x] 01-03-PLAN.md — SQLite store (WAL mode, full schema) + admin seeding
-- [ ] 01-04-PLAN.md — Gap closure: wire all CLI stubs to library implementations
+- [x] 01-04-PLAN.md — Gap closure: wire all CLI stubs to library implementations
 
 ### Phase 2: Agent Core
 **Goal**: Agent binary authenticates to server using its mTLS certificate and maintains a persistent bidirectional gRPC stream with reconnection on failure
@@ -130,7 +130,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/4 | Gap closure | - |
+| 1. Foundation | 4/4 | Complete | 2026-03-12 |
 | 2. Agent Core | 0/2 | Planning complete | - |
 | 3. Server Core | 0/3 | Planning complete | - |
 | 4. Terminal Streaming | 0/3 | Planning complete | - |
