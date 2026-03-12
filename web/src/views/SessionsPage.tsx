@@ -88,7 +88,7 @@ export function SessionsPage() {
             <option value="all">All Machines</option>
             {(machines ?? []).map((m) => (
               <option key={m.machine_id} value={m.machine_id}>
-                {m.hostname} ({m.machine_id.slice(0, 8)})
+                {m.display_name || m.machine_id.slice(0, 8)}
               </option>
             ))}
           </select>

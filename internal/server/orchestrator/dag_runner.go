@@ -179,7 +179,11 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	// rather than launching them — they can't succeed without their dependency.
 	stepFailed := exitCode != 0
 
-	// Check if all steps are done
+	// Collect ready dependents; propagate skips transitively.
+	ctx := d.ctx
+	d.processReadyDependents(stepID, stepFailed, &toLaunch)
+
+	// Check if all steps are done (after processing dependents/skips)
 	if d.completed == d.total {
 		status := store.StatusCompleted
 		if d.failed || stepFailed {
@@ -197,27 +201,6 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		}
 		return
 	}
-
-	// Collect ready dependents
-	ctx := d.ctx
-	for _, depID := range d.dependents[stepID] {
-		d.inDegree[depID]--
-		if d.inDegree[depID] == 0 {
-			depRS := d.steps[depID]
-			if depRS != nil && depRS.Status == store.StatusPending {
-				if stepFailed {
-					// Skip dependents of failed steps
-					depRS.Status = store.StatusSkipped
-					d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
-					d.completed++
-				} else {
-					depRS.Status = store.StatusRunning
-					d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
-					toLaunch = append(toLaunch, *depRS)
-				}
-			}
-		}
-	}
 	d.mu.Unlock()
 
 	// Launch outside the lock to prevent deadlocks
@@ -234,6 +217,31 @@ func (d *DAGRunner) Cancel() {
 }
 
 // updateRunStepInDB persists run step status changes. No-op if store is nil (unit tests).
+// processReadyDependents decrements in-degree for dependents of stepID.
+// If stepFailed, skips ready dependents and propagates transitively.
+// Must be called with d.mu held.
+func (d *DAGRunner) processReadyDependents(stepID string, stepFailed bool, toLaunch *[]store.RunStep) {
+	for _, depID := range d.dependents[stepID] {
+		d.inDegree[depID]--
+		if d.inDegree[depID] == 0 {
+			depRS := d.steps[depID]
+			if depRS != nil && depRS.Status == store.StatusPending {
+				if stepFailed {
+					depRS.Status = store.StatusSkipped
+					d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
+					d.completed++
+					// Propagate skip transitively to this step's dependents
+					d.processReadyDependents(depID, true, toLaunch)
+				} else {
+					depRS.Status = store.StatusRunning
+					d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
+					*toLaunch = append(*toLaunch, *depRS)
+				}
+			}
+		}
+	}
+}
+
 func (d *DAGRunner) updateRunStepInDB(runStepID, status, sessionID string, exitCode int) {
 	if d.store == nil {
 		return

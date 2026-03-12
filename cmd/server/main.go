@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/claudeplane/claude-plane/internal/server/config"
 	"github.com/claudeplane/claude-plane/internal/server/store"
@@ -169,15 +169,14 @@ func newSeedAdminCmd() *cobra.Command {
 				}
 				password = strings.TrimSpace(string(data))
 			} else {
-				// Read from stdin
+				// Read from stdin without echo
 				fmt.Fprint(os.Stderr, "Enter admin password: ")
-				scanner := bufio.NewScanner(os.Stdin)
-				if scanner.Scan() {
-					password = scanner.Text()
-				}
-				if err := scanner.Err(); err != nil {
+				pwBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Fprintln(os.Stderr) // newline after hidden input
+				if err != nil {
 					return fmt.Errorf("reading password from stdin: %w", err)
 				}
+				password = strings.TrimSpace(string(pwBytes))
 			}
 
 			if len(password) < 8 {
