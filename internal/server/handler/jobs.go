@@ -121,8 +121,7 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get existing job to verify it exists
-	detail, err := h.store.GetJob(r.Context(), jobID)
+	job, err := h.store.UpdateJob(r.Context(), jobID, req.Name, req.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			writeError(w, http.StatusNotFound, "job not found")
@@ -131,12 +130,7 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-
-	// For now, delete and recreate is not ideal. The store doesn't have an UpdateJob.
-	// Return the existing job with updated fields conceptually.
-	// TODO: Add UpdateJob to store interface when needed.
-	_ = detail
-	writeError(w, http.StatusNotImplemented, "update job not yet supported")
+	writeJSON(w, http.StatusOK, job)
 }
 
 // DeleteJob handles DELETE /api/v1/jobs/{jobID}.

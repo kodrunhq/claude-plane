@@ -16,6 +16,7 @@ type JobStoreIface interface {
 	GetJob(ctx context.Context, jobID string) (*JobDetail, error)
 	ListJobs(ctx context.Context) ([]Job, error)
 	DeleteJob(ctx context.Context, jobID string) error
+	UpdateJob(ctx context.Context, jobID, name, description string) (*Job, error)
 	CreateStep(ctx context.Context, jobID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) (*Step, error)
 	UpdateStep(ctx context.Context, stepID, name, prompt, machineID, workingDir, command, args string, timeoutSeconds, sortOrder int, onFailure string) error
 	DeleteStep(ctx context.Context, stepID string) error
@@ -212,6 +213,38 @@ func (s *Store) DeleteJob(ctx context.Context, jobID string) error {
 		return fmt.Errorf("job not found: %s", jobID)
 	}
 	return nil
+}
+
+// UpdateJob updates a job's name and description and returns the updated job.
+func (s *Store) UpdateJob(ctx context.Context, jobID, name, description string) (*Job, error) {
+	result, err := s.writer.ExecContext(ctx,
+		`UPDATE jobs SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?`,
+		name, nullIfEmpty(description), jobID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update job: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return nil, fmt.Errorf("job not found: %s", jobID)
+	}
+
+	var job Job
+	var desc sql.NullString
+	var userID sql.NullString
+	err = s.reader.QueryRowContext(ctx,
+		`SELECT job_id, name, description, user_id, created_at, updated_at FROM jobs WHERE job_id = ?`, jobID,
+	).Scan(&job.JobID, &job.Name, &desc, &userID, &job.CreatedAt, &job.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("read updated job: %w", err)
+	}
+	if desc.Valid {
+		job.Description = desc.String
+	}
+	if userID.Valid {
+		job.UserID = userID.String
+	}
+	return &job, nil
 }
 
 // CreateStep inserts a step for a job and returns it.
