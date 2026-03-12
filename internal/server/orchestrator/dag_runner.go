@@ -175,12 +175,21 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 
 	d.completed++
 
+	// If the step failed (but on_failure != "fail_run"), skip its dependents
+	// rather than launching them — they can't succeed without their dependency.
+	stepFailed := exitCode != 0
+
 	// Check if all steps are done
 	if d.completed == d.total {
+		status := "completed"
+		if d.failed || stepFailed {
+			status = "failed"
+		}
 		if d.onRunComplete != nil {
 			cb := d.onRunComplete
 			runID := d.runID
-			runComplete = func() { cb(runID, "completed") }
+			s := status
+			runComplete = func() { cb(runID, s) }
 		}
 		d.mu.Unlock()
 		if runComplete != nil {
@@ -196,9 +205,16 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		if d.inDegree[depID] == 0 {
 			depRS := d.steps[depID]
 			if depRS != nil && depRS.Status == "pending" {
-				depRS.Status = "running"
-				d.updateRunStepInDB(depRS.RunStepID, "running", "", 0)
-				toLaunch = append(toLaunch, *depRS)
+				if stepFailed {
+					// Skip dependents of failed steps
+					depRS.Status = "skipped"
+					d.updateRunStepInDB(depRS.RunStepID, "skipped", "", 0)
+					d.completed++
+				} else {
+					depRS.Status = "running"
+					d.updateRunStepInDB(depRS.RunStepID, "running", "", 0)
+					toLaunch = append(toLaunch, *depRS)
+				}
 			}
 		}
 	}
