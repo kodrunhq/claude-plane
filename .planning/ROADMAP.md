@@ -12,7 +12,7 @@ claude-plane delivers a self-hosted control plane for managing interactive Claud
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Compilable binaries, shared contracts, CA tooling, SQLite persistence, config parsing
+- [x] **Phase 1: Foundation** - Compilable binaries, shared contracts, CA tooling, SQLite persistence, config parsing (completed 2026-03-12)
 - [ ] **Phase 2: Agent Core** - Agent binary connects to server via mTLS, spawns PTYs, maintains scrollback
 - [ ] **Phase 3: Server Core** - Server accepts agents, exposes REST API, handles user authentication
 - [ ] **Phase 4: Terminal Streaming** - End-to-end terminal I/O from browser through server to agent PTY
@@ -129,7 +129,7 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/3 | In Progress|  |
+| 1. Foundation | 3/3 | Complete   | 2026-03-12 |
 | 2. Agent Core | 0/2 | Planning complete | - |
 | 3. Server Core | 0/3 | Planning complete | - |
 | 4. Terminal Streaming | 0/3 | Planning complete | - |

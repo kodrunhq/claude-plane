@@ -12,7 +12,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **AUTH-01**: User can create account with email and password
 - [ ] **AUTH-02**: User can log in and receive a JWT session token
 - [ ] **AUTH-03**: User can log out and invalidate their session
-- [ ] **AUTH-04**: Admin account can be seeded via server CLI on first run
+- [x] **AUTH-04**: Admin account can be seeded via server CLI on first run
 
 ### Agent Management
 
@@ -48,7 +48,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **INFR-01**: Server is a single Go binary with embedded frontend assets
 - [x] **INFR-02**: Agent is a single Go binary with no external dependencies
-- [ ] **INFR-03**: Server uses SQLite with WAL mode for all persistent storage
+- [x] **INFR-03**: Server uses SQLite with WAL mode for all persistent storage
 - [ ] **INFR-04**: Server and agent support TOML configuration files
 
 ## v2 Requirements
@@ -106,7 +106,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-01 | Phase 3 | Pending |
 | AUTH-02 | Phase 3 | Pending |
 | AUTH-03 | Phase 3 | Pending |
-| AUTH-04 | Phase 1 | Pending |
+| AUTH-04 | Phase 1 | Complete |
 | AGNT-01 | Phase 1 | Pending |
 | AGNT-02 | Phase 2 | Pending |
 | AGNT-03 | Phase 2 | Pending |
@@ -127,7 +127,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOBS-04 | Phase 6 | Pending |
 | INFR-01 | Phase 1 | Complete |
 | INFR-02 | Phase 1 | Complete |
-| INFR-03 | Phase 1 | Pending |
+| INFR-03 | Phase 1 | Complete |
 | INFR-04 | Phase 1 | Pending |
 
 **Coverage:**
