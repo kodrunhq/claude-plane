@@ -33,6 +33,15 @@ import (
 
 var version = "0.1.0-dev"
 
+// noopExecutor is a stub StepExecutor that logs instead of executing.
+// Used until the real session-backed executor is wired up.
+type noopExecutor struct{}
+
+func (noopExecutor) ExecuteStep(_ context.Context, step store.RunStep, onComplete func(string, int)) {
+	slog.Warn("step execution not implemented yet", "step_id", step.StepID)
+	onComplete(step.StepID, 1)
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "claude-plane-server",
@@ -136,8 +145,8 @@ func newServeCmd() *cobra.Command {
 			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
 			eventsWSHandler := session.HandleEventsWS(authSvc, slog.Default())
 
-			// Orchestrator (no-op executor for now)
-			orch := orchestrator.NewOrchestrator(ctx, s, nil)
+			// Orchestrator (stub executor until session-backed execution is wired)
+			orch := orchestrator.NewOrchestrator(ctx, s, noopExecutor{})
 			jobHandler := handler.NewJobHandler(s, handlerClaimsGetter)
 			runHandler := handler.NewRunHandler(s, orch, handlerClaimsGetter)
 
