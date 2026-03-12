@@ -17,6 +17,7 @@ import (
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
 	"github.com/claudeplane/claude-plane/internal/server/session"
 	"github.com/claudeplane/claude-plane/internal/server/store"
+	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 // mockMachineStore implements connmgr.MachineStore for tests.
@@ -28,10 +29,10 @@ func (m *mockMachineStore) UpdateMachineStatus(string, string, time.Time) error 
 // commandRecorder records commands sent to a mock agent.
 type commandRecorder struct {
 	mu       sync.Mutex
-	commands []interface{}
+	commands []*pb.ServerCommand
 }
 
-func (cr *commandRecorder) send(cmd interface{}) error {
+func (cr *commandRecorder) send(cmd *pb.ServerCommand) error {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	cr.commands = append(cr.commands, cmd)
@@ -57,7 +58,7 @@ func setupTestHandler(t *testing.T) (*session.SessionHandler, *connmgr.Connectio
 	reg := session.NewRegistry(slog.Default())
 	recorder := &commandRecorder{}
 
-	getClaims := func(r *http.Request) string { return "" }
+	getClaims := func(r *http.Request) *session.UserClaims { return nil }
 	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
 
 	r := chi.NewRouter()
@@ -214,5 +215,223 @@ func TestTerminateSession(t *testing.T) {
 	}
 	if sess.Status != "terminated" {
 		t.Errorf("status = %q, want %q", sess.Status, "terminated")
+	}
+}
+
+// createTestUser is a helper to ensure a user exists in the DB for FK constraints.
+func createTestUser(t *testing.T, st *store.Store, userID string) {
+	t.Helper()
+	_ = st.CreateUser(&store.User{
+		UserID:       userID,
+		Email:        userID + "@test.com",
+		DisplayName:  userID,
+		PasswordHash: "not-used",
+		Role:         "user",
+	})
+}
+
+// setupAuthTestEnv sets up a shared test environment for authorization tests.
+func setupAuthTestEnv(t *testing.T) (*connmgr.ConnectionManager, *commandRecorder, *store.Store, *session.Registry) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	cm := connmgr.NewConnectionManager(&mockMachineStore{}, nil)
+	reg := session.NewRegistry(slog.Default())
+	recorder := &commandRecorder{}
+
+	return cm, recorder, st, reg
+}
+
+func TestGetSession_AuthorizationNonOwner(t *testing.T) {
+	cm, recorder, st, reg := setupAuthTestEnv(t)
+
+	// Create users for FK constraints
+	createTestUser(t, st, "user-owner")
+	createTestUser(t, st, "user-other")
+
+	// Register agent
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	})
+
+	// Create a session as user-owner
+	ownerClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "user-owner", Role: "user"}
+	}
+	ownerHandler := session.NewSessionHandler(st, cm, reg, ownerClaims, slog.Default())
+	ownerRouter := chi.NewRouter()
+	ownerRouter.Post("/api/v1/sessions", ownerHandler.CreateSession)
+
+	body := `{"machine_id":"machine-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ownerRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	sessionID := resp["session_id"].(string)
+
+	// Now try to GET/DELETE with a different non-admin user
+	otherClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "user-other", Role: "user"}
+	}
+	otherHandler := session.NewSessionHandler(st, cm, reg, otherClaims, slog.Default())
+	otherRouter := chi.NewRouter()
+	otherRouter.Get("/api/v1/sessions/{sessionID}", otherHandler.GetSession)
+	otherRouter.Delete("/api/v1/sessions/{sessionID}", otherHandler.TerminateSession)
+
+	// GET should return 404 (not 403)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID, nil)
+	getW := httptest.NewRecorder()
+	otherRouter.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusNotFound {
+		t.Errorf("GET by non-owner: status = %d, want 404", getW.Code)
+	}
+
+	// DELETE should return 404 (not 403)
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/sessions/"+sessionID, nil)
+	delW := httptest.NewRecorder()
+	otherRouter.ServeHTTP(delW, delReq)
+	if delW.Code != http.StatusNotFound {
+		t.Errorf("DELETE by non-owner: status = %d, want 404", delW.Code)
+	}
+}
+
+func TestGetSession_AdminCanAccessAny(t *testing.T) {
+	cm, recorder, st, reg := setupAuthTestEnv(t)
+
+	createTestUser(t, st, "user-owner")
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	})
+
+	// Create a session as user-owner
+	ownerClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "user-owner", Role: "user"}
+	}
+	ownerHandler := session.NewSessionHandler(st, cm, reg, ownerClaims, slog.Default())
+	ownerRouter := chi.NewRouter()
+	ownerRouter.Post("/api/v1/sessions", ownerHandler.CreateSession)
+
+	body := `{"machine_id":"machine-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ownerRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	sessionID := resp["session_id"].(string)
+
+	// Admin should be able to access
+	adminClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "admin-user", Role: "admin"}
+	}
+	adminHandler := session.NewSessionHandler(st, cm, reg, adminClaims, slog.Default())
+	adminRouter := chi.NewRouter()
+	adminRouter.Get("/api/v1/sessions/{sessionID}", adminHandler.GetSession)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID, nil)
+	getW := httptest.NewRecorder()
+	adminRouter.ServeHTTP(getW, getReq)
+	if getW.Code != http.StatusOK {
+		t.Errorf("GET by admin: status = %d, want 200", getW.Code)
+	}
+}
+
+func TestListSessions_FiltersByOwnership(t *testing.T) {
+	cm, recorder, st, reg := setupAuthTestEnv(t)
+
+	createTestUser(t, st, "user-a")
+	createTestUser(t, st, "user-b")
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	})
+
+	// Create session as user-a
+	claimsA := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "user-a", Role: "user"}
+	}
+	hA := session.NewSessionHandler(st, cm, reg, claimsA, slog.Default())
+	rA := chi.NewRouter()
+	rA.Post("/api/v1/sessions", hA.CreateSession)
+	rA.Get("/api/v1/sessions", hA.ListSessions)
+
+	body := `{"machine_id":"machine-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	rA.ServeHTTP(w, req)
+
+	// Create session as user-b
+	claimsB := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "user-b", Role: "user"}
+	}
+	hB := session.NewSessionHandler(st, cm, reg, claimsB, slog.Default())
+	rB := chi.NewRouter()
+	rB.Post("/api/v1/sessions", hB.CreateSession)
+	rB.Get("/api/v1/sessions", hB.ListSessions)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	rB.ServeHTTP(w2, req2)
+
+	// user-a should only see 1 session
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions", nil)
+	listW := httptest.NewRecorder()
+	rA.ServeHTTP(listW, listReq)
+
+	var sessions []interface{}
+	json.NewDecoder(listW.Body).Decode(&sessions)
+	if len(sessions) != 1 {
+		t.Errorf("user-a sessions count = %d, want 1", len(sessions))
+	}
+
+	// Admin should see both
+	adminClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "admin-user", Role: "admin"}
+	}
+	hAdmin := session.NewSessionHandler(st, cm, reg, adminClaims, slog.Default())
+	rAdmin := chi.NewRouter()
+	rAdmin.Get("/api/v1/sessions", hAdmin.ListSessions)
+
+	adminListReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions", nil)
+	adminListW := httptest.NewRecorder()
+	rAdmin.ServeHTTP(adminListW, adminListReq)
+
+	var adminSessions []interface{}
+	json.NewDecoder(adminListW.Body).Decode(&adminSessions)
+	if len(adminSessions) != 2 {
+		t.Errorf("admin sessions count = %d, want 2", len(adminSessions))
 	}
 }

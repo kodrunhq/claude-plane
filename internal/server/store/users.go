@@ -10,12 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/argon2"
 )
 
 // Argon2id parameters per OWASP recommendations.
 const (
-	argonTime    = 1
+	argonTime    = 2
 	argonMemory  = 64 * 1024 // 64 MB
 	argonThreads = 4
 	argonKeyLen  = 32
@@ -34,7 +35,7 @@ type User struct {
 }
 
 // HashPassword hashes a password using Argon2id with OWASP-recommended parameters.
-// Returns a string in the format: $argon2id$v=19$m=65536,t=1,p=4$<salt>$<hash>
+// Returns a string in the format: $argon2id$v=19$m=65536,t=2,p=4$<salt>$<hash>
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, argonSaltLen)
 	if _, err := rand.Read(salt); err != nil {
@@ -52,7 +53,7 @@ func HashPassword(password string) (string, error) {
 
 // VerifyPassword checks a plaintext password against an Argon2id hash string.
 func VerifyPassword(password, encodedHash string) (bool, error) {
-	// Parse the hash string: $argon2id$v=19$m=65536,t=1,p=4$<salt>$<hash>
+	// Parse the hash string: $argon2id$v=19$m=65536,t=2,p=4$<salt>$<hash>
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {
 		return false, fmt.Errorf("invalid hash format: expected 6 parts, got %d", len(parts))
@@ -107,26 +108,11 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 	return false, nil
 }
 
-// generateUUID generates a random UUID v4 string.
-func generateUUID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate uuid: %w", err)
-	}
-	// Set version (4) and variant (RFC 4122)
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
-}
-
 // SeedAdmin creates an admin user with the given email, password, and display name.
 // The password is hashed with Argon2id. If a user with the same email already exists,
 // a descriptive error is returned (no panic).
 func (s *Store) SeedAdmin(email, password, displayName string) error {
-	userID, err := generateUUID()
-	if err != nil {
-		return fmt.Errorf("generate user id: %w", err)
-	}
+	userID := uuid.New().String()
 
 	hash, err := HashPassword(password)
 	if err != nil {

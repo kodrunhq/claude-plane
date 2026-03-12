@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/claudeplane/claude-plane/internal/server/connmgr"
 	"github.com/claudeplane/claude-plane/internal/server/session"
 	"github.com/claudeplane/claude-plane/internal/server/store"
-	pb "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
 func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRecorder, string, string) {
@@ -159,11 +159,7 @@ func TestWebSocketInputRelay(t *testing.T) {
 	lastCmd := recorder.commands[len(recorder.commands)-1]
 	recorder.mu.Unlock()
 
-	serverCmd, ok := lastCmd.(*pb.ServerCommand)
-	if !ok {
-		t.Fatalf("expected *pb.ServerCommand, got %T", lastCmd)
-	}
-	inputCmd := serverCmd.GetInputData()
+	inputCmd := lastCmd.GetInputData()
 	if inputCmd == nil {
 		t.Fatal("expected InputDataCmd")
 	}
@@ -207,11 +203,7 @@ func TestWebSocketResizeMessage(t *testing.T) {
 	lastCmd := recorder.commands[len(recorder.commands)-1]
 	recorder.mu.Unlock()
 
-	serverCmd, ok := lastCmd.(*pb.ServerCommand)
-	if !ok {
-		t.Fatalf("expected *pb.ServerCommand, got %T", lastCmd)
-	}
-	resizeCmd := serverCmd.GetResizeTerminal()
+	resizeCmd := lastCmd.GetResizeTerminal()
 	if resizeCmd == nil {
 		t.Fatal("expected ResizeTerminalCmd")
 	}
@@ -249,11 +241,7 @@ func TestWebSocketCloseDetaches(t *testing.T) {
 	lastCmd := recorder.commands[len(recorder.commands)-1]
 	recorder.mu.Unlock()
 
-	serverCmd, ok := lastCmd.(*pb.ServerCommand)
-	if !ok {
-		t.Fatalf("expected *pb.ServerCommand, got %T", lastCmd)
-	}
-	detachCmd := serverCmd.GetDetachSession()
+	detachCmd := lastCmd.GetDetachSession()
 	if detachCmd == nil {
 		t.Fatal("expected DetachSessionCmd, got different command type")
 	}
@@ -309,4 +297,48 @@ func TestWebSocketFlowControl(t *testing.T) {
 		t.Error("received no messages via WebSocket")
 	}
 	t.Logf("received %d of 300 messages (some may be dropped by flow control)", received)
+}
+
+func TestWebSocketAuthRejection(t *testing.T) {
+	srv, _, _, sessionID, _ := setupWSTest(t)
+
+	tests := []struct {
+		name       string
+		url        string
+		wantStatus int
+	}{
+		{
+			name:       "missing token",
+			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "invalid token",
+			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID + "?token=bad-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "session not found",
+			url:        strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/nonexistent-session?token=bad-token",
+			wantStatus: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Use plain HTTP GET to check the status code before WS upgrade.
+			// The handler returns an error before the WebSocket upgrade happens,
+			// so a regular HTTP request will get the error response.
+			httpURL := strings.Replace(tc.url, "ws://", "http://", 1)
+			resp, err := http.Get(httpURL)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+		})
+	}
 }
