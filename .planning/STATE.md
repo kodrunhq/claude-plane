@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-03-12T13:20:07.619Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-03-12T13:25:11.258Z"
 last_activity: 2026-03-12 -- Completed 06-05-PLAN.md (gap closure)
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 22
   completed_plans: 22
   percent: 100
@@ -67,6 +67,7 @@ Progress: [██████████] 100%
 | Phase 06-job-system P02 | 8min | 2 tasks | 4 files |
 | Phase 06-job-system P03 | 3min | 2 tasks | 21 files |
 | Phase 06-job-system P05 | 2min | 2 tasks | 8 files |
+| Phase 06 P04 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -123,6 +124,7 @@ Recent decisions affecting current work:
 - [Phase 06-job-system]: Views placed in web/src/views/ following existing project convention (not pages/)
 - [Phase 06-job-system]: RunDAGView is a thin read-only wrapper around DAGCanvas with live status coloring
 - [Phase 06-job-system]: Synthetic edge IDs (dep.depends_on->dep.step_id) since backend StepDependency has no separate id field
+- [Phase 06]: Job/run routes registered as flat paths on top-level router in JWT-protected Group (not inside /api/v1 Route block)
 
 ### Pending Todos
 
@@ -135,6 +137,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T13:20:07.617Z
-Stopped at: Completed 06-05-PLAN.md
+Last session: 2026-03-12T13:24:58.455Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
