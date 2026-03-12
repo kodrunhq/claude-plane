@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -64,16 +65,50 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 	reader.SetMaxOpenConns(4)
 
-	// Set per-connection pragmas on the reader.
-	// With MaxOpenConns=4, we initialize all connections by setting pragmas.
-	// Since foreign_keys and busy_timeout are per-connection, we need them on readers too.
-	if _, err := reader.Exec(pragmas); err != nil {
+	// Initialize all reader connections with per-connection pragmas.
+	// sql.DB lazily creates connections, so we explicitly acquire each one
+	// and run pragmas on it to ensure all pooled connections are configured.
+	if err := initAllConns(reader, 4); err != nil {
 		writer.Close()
 		reader.Close()
-		return nil, fmt.Errorf("set reader pragmas: %w", err)
+		return nil, fmt.Errorf("init reader conns: %w", err)
 	}
 
 	return &Store{writer: writer, reader: reader}, nil
+}
+
+// initAllConns acquires n connections from the pool and runs pragmas on each.
+// Connections are returned to the pool after initialization.
+func initAllConns(db *sql.DB, n int) error {
+	ctx := context.Background()
+	conns := make([]*sql.Conn, 0, n)
+
+	// Acquire all connections to force the pool to create them
+	for i := 0; i < n; i++ {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			// Release already-acquired connections
+			for _, c := range conns {
+				c.Close()
+			}
+			return fmt.Errorf("acquire conn %d: %w", i, err)
+		}
+		// Run pragmas on this specific connection
+		if _, err := conn.ExecContext(ctx, pragmas); err != nil {
+			conn.Close()
+			for _, c := range conns {
+				c.Close()
+			}
+			return fmt.Errorf("set pragmas on conn %d: %w", i, err)
+		}
+		conns = append(conns, conn)
+	}
+
+	// Return all connections to the pool
+	for _, c := range conns {
+		c.Close()
+	}
+	return nil
 }
 
 // Writer returns the write-only database pool (MaxOpenConns=1).

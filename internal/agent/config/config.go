@@ -73,5 +73,11 @@ func (c *AgentConfig) Validate() error {
 	if c.TLS.CACert == "" {
 		return fmt.Errorf("tls.ca_cert is required")
 	}
+	if c.TLS.AgentCert == "" {
+		return fmt.Errorf("tls.agent_cert is required")
+	}
+	if c.TLS.AgentKey == "" {
+		return fmt.Errorf("tls.agent_key is required")
+	}
 	return nil
 }

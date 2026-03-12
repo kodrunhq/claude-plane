@@ -73,6 +73,8 @@ address = "server:9090"
 
 [tls]
 ca_cert = "/ca.pem"
+agent_cert = "/agent.pem"
+agent_key = "/agent-key.pem"
 
 [agent]
 machine_id = "worker-1"
@@ -95,6 +97,8 @@ func TestLoadAgentConfig_MissingServerAddress(t *testing.T) {
 	toml := `
 [tls]
 ca_cert = "/ca.pem"
+agent_cert = "/agent.pem"
+agent_key = "/agent-key.pem"
 [agent]
 machine_id = "worker-1"
 `
@@ -114,6 +118,8 @@ func TestLoadAgentConfig_MissingMachineID(t *testing.T) {
 address = "server:9090"
 [tls]
 ca_cert = "/ca.pem"
+agent_cert = "/agent.pem"
+agent_key = "/agent-key.pem"
 [agent]
 data_dir = "/tmp"
 `
@@ -131,6 +137,9 @@ func TestLoadAgentConfig_MissingTLSCACert(t *testing.T) {
 	toml := `
 [server]
 address = "server:9090"
+[tls]
+agent_cert = "/agent.pem"
+agent_key = "/agent-key.pem"
 [agent]
 machine_id = "worker-1"
 `

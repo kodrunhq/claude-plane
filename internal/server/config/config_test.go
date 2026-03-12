@@ -74,8 +74,12 @@ func TestLoadServerConfig_MissingHTTPListen(t *testing.T) {
 listen = ":9090"
 [tls]
 ca_cert = "/ca.pem"
+server_cert = "/server.pem"
+server_key = "/server-key.pem"
 [database]
 path = "/data.db"
+[auth]
+jwt_secret = "secret"
 `
 	path := writeTOML(t, toml)
 	_, err := LoadServerConfig(path)
@@ -93,8 +97,12 @@ func TestLoadServerConfig_MissingGRPCListen(t *testing.T) {
 listen = ":8080"
 [tls]
 ca_cert = "/ca.pem"
+server_cert = "/server.pem"
+server_key = "/server-key.pem"
 [database]
 path = "/data.db"
+[auth]
+jwt_secret = "secret"
 `
 	path := writeTOML(t, toml)
 	_, err := LoadServerConfig(path)
@@ -114,6 +122,10 @@ listen = ":8080"
 listen = ":9090"
 [tls]
 ca_cert = "/ca.pem"
+server_cert = "/server.pem"
+server_key = "/server-key.pem"
+[auth]
+jwt_secret = "secret"
 `
 	path := writeTOML(t, toml)
 	_, err := LoadServerConfig(path)
@@ -133,6 +145,8 @@ listen = ":8080"
 listen = ":9090"
 [database]
 path = "/data.db"
+[auth]
+jwt_secret = "secret"
 `
 	path := writeTOML(t, toml)
 	_, err := LoadServerConfig(path)

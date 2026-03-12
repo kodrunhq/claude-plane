@@ -58,12 +58,19 @@ func VerifyPassword(password, encodedHash string) (bool, error) {
 		return false, fmt.Errorf("invalid hash format: expected 6 parts, got %d", len(parts))
 	}
 
+	if parts[1] != "argon2id" {
+		return false, fmt.Errorf("unsupported algorithm: %s (expected argon2id)", parts[1])
+	}
+
 	var version int
 	var memory uint32
 	var time uint32
 	var threads uint8
 	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
 		return false, fmt.Errorf("parse version: %w", err)
+	}
+	if version != argon2.Version {
+		return false, fmt.Errorf("unsupported argon2 version: %d (expected %d)", version, argon2.Version)
 	}
 	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time, &threads); err != nil {
 		return false, fmt.Errorf("parse params: %w", err)
