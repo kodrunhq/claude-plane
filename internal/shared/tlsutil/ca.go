@@ -193,12 +193,16 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 }
 
 // writePEMFiles writes a certificate and ECDSA private key as PEM files.
-func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.PrivateKey) error {
+func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.PrivateKey) (err error) {
 	certFile, err := os.Create(filepath.Join(dir, certName))
 	if err != nil {
 		return fmt.Errorf("create %s: %w", certName, err)
 	}
-	defer certFile.Close()
+	defer func() {
+		if cerr := certFile.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close %s: %w", certName, cerr)
+		}
+	}()
 
 	if err := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
 		return fmt.Errorf("encode cert PEM: %w", err)
@@ -213,7 +217,11 @@ func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.Pri
 	if err != nil {
 		return fmt.Errorf("create %s: %w", keyName, err)
 	}
-	defer keyFile.Close()
+	defer func() {
+		if kerr := keyFile.Close(); kerr != nil && err == nil {
+			err = fmt.Errorf("close %s: %w", keyName, kerr)
+		}
+	}()
 
 	if err := pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}); err != nil {
 		return fmt.Errorf("encode key PEM: %w", err)
