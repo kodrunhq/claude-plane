@@ -1,0 +1,233 @@
+package orchestrator
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"github.com/claudeplane/claude-plane/internal/server/store"
+)
+
+// Orchestrator manages active DAGRunners for job runs.
+type Orchestrator struct {
+	mu         sync.Mutex
+	activeRuns map[string]*DAGRunner
+	store      store.JobStoreIface
+	executor   StepExecutor
+}
+
+// NewOrchestrator creates an Orchestrator.
+func NewOrchestrator(s store.JobStoreIface, executor StepExecutor) *Orchestrator {
+	return &Orchestrator{
+		activeRuns: make(map[string]*DAGRunner),
+		store:      s,
+		executor:   executor,
+	}
+}
+
+// CreateRun validates the DAG, creates a run in the DB, snapshots steps
+// into run_steps, builds a DAGRunner, and starts execution.
+func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string) (*store.Run, error) {
+	// Get steps and dependencies
+	steps, deps, err := o.store.GetStepsWithDeps(ctx, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("get steps: %w", err)
+	}
+
+	// Validate DAG
+	if err := ValidateDAG(steps, deps); err != nil {
+		return nil, fmt.Errorf("validate DAG: %w", err)
+	}
+
+	// Create run in DB
+	run, err := o.store.CreateRun(ctx, jobID, triggerType)
+	if err != nil {
+		return nil, fmt.Errorf("create run: %w", err)
+	}
+
+	// Snapshot steps into run_steps
+	if err := o.store.InsertRunSteps(ctx, run.RunID, steps); err != nil {
+		return nil, fmt.Errorf("insert run steps: %w", err)
+	}
+
+	// Read back the run steps to get generated IDs
+	detail, err := o.store.GetRunWithSteps(ctx, run.RunID)
+	if err != nil {
+		return nil, fmt.Errorf("get run steps: %w", err)
+	}
+
+	// Populate OnFailure from the original steps
+	onFailureMap := make(map[string]string)
+	for _, s := range steps {
+		onFailureMap[s.StepID] = s.OnFailure
+	}
+	for i := range detail.RunSteps {
+		if of, ok := onFailureMap[detail.RunSteps[i].StepID]; ok {
+			detail.RunSteps[i].OnFailure = of
+		}
+	}
+
+	// Build and start DAGRunner
+	onComplete := func(runID string, status string) {
+		_ = o.store.UpdateRunStatus(context.Background(), runID, status)
+		o.mu.Lock()
+		delete(o.activeRuns, runID)
+		o.mu.Unlock()
+	}
+
+	runner := NewDAGRunner(run.RunID, detail.RunSteps, deps, o.executor, o.store, onComplete)
+
+	o.mu.Lock()
+	o.activeRuns[run.RunID] = runner
+	o.mu.Unlock()
+
+	// Mark run as running
+	_ = o.store.UpdateRunStatus(ctx, run.RunID, "running")
+
+	runner.Start(ctx)
+
+	return run, nil
+}
+
+// RetryStep resets the target run_step and downstream skipped/cancelled steps
+// to pending, rebuilds the DAGRunner from DB state, and re-launches.
+func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID string) error {
+	// Get current run state
+	detail, err := o.store.GetRunWithSteps(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("get run: %w", err)
+	}
+
+	// Get the job's dependencies
+	_, deps, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID)
+	if err != nil {
+		return fmt.Errorf("get deps: %w", err)
+	}
+
+	// Build dependency graph to find downstream steps
+	dependents := make(map[string][]string)
+	for _, d := range deps {
+		dependents[d.DependsOn] = append(dependents[d.DependsOn], d.StepID)
+	}
+
+	// Find all downstream steps from the target step
+	toReset := map[string]bool{stepID: true}
+	queue := []string{stepID}
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+		for _, dep := range dependents[curr] {
+			if !toReset[dep] {
+				toReset[dep] = true
+				queue = append(queue, dep)
+			}
+		}
+	}
+
+	// Reset target and downstream skipped/cancelled/failed steps to pending
+	for _, rs := range detail.RunSteps {
+		if toReset[rs.StepID] && (rs.Status == "failed" || rs.Status == "skipped" || rs.Status == "cancelled") {
+			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, "pending", "", 0); err != nil {
+				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
+			}
+		}
+	}
+
+	// Update run status back to running
+	if err := o.store.UpdateRunStatus(ctx, runID, "running"); err != nil {
+		return fmt.Errorf("update run status: %w", err)
+	}
+
+	// Re-read run state
+	detail, err = o.store.GetRunWithSteps(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("re-read run: %w", err)
+	}
+
+	// Get on_failure from original steps
+	steps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID)
+	if err != nil {
+		return fmt.Errorf("get steps for on_failure: %w", err)
+	}
+	onFailureMap := make(map[string]string)
+	for _, s := range steps {
+		onFailureMap[s.StepID] = s.OnFailure
+	}
+	for i := range detail.RunSteps {
+		if of, ok := onFailureMap[detail.RunSteps[i].StepID]; ok {
+			detail.RunSteps[i].OnFailure = of
+		}
+	}
+
+	// Build new DAGRunner from current DB state
+	onComplete := func(runID string, status string) {
+		_ = o.store.UpdateRunStatus(context.Background(), runID, status)
+		o.mu.Lock()
+		delete(o.activeRuns, runID)
+		o.mu.Unlock()
+	}
+
+	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, onComplete)
+
+	// Pre-process completed steps: count them and pre-decrement in-degrees
+	// of their dependents so pending steps with completed upstream deps can launch.
+	runner.mu.Lock()
+	for _, rs := range detail.RunSteps {
+		if rs.Status == "completed" {
+			runner.completed++
+			// Decrement in-degree for all steps that depend on this completed step
+			for _, depID := range runner.dependents[rs.StepID] {
+				runner.inDegree[depID]--
+			}
+		}
+	}
+	runner.mu.Unlock()
+
+	o.mu.Lock()
+	o.activeRuns[runID] = runner
+	o.mu.Unlock()
+
+	runner.Start(ctx)
+
+	return nil
+}
+
+// CancelRun stops executing steps and marks remaining as cancelled.
+func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
+	o.mu.Lock()
+	runner, ok := o.activeRuns[runID]
+	delete(o.activeRuns, runID)
+	o.mu.Unlock()
+
+	if ok {
+		runner.Cancel()
+	}
+
+	// Mark pending/running run steps as cancelled
+	detail, err := o.store.GetRunWithSteps(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("get run: %w", err)
+	}
+
+	for _, rs := range detail.RunSteps {
+		if rs.Status == "pending" || rs.Status == "running" {
+			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, "cancelled", "", 0); err != nil {
+				return fmt.Errorf("cancel step %s: %w", rs.StepID, err)
+			}
+		}
+	}
+
+	// Mark run as cancelled
+	return o.store.UpdateRunStatus(ctx, runID, "cancelled")
+}
+
+// OnStepCompleted routes step completion to the correct DAGRunner.
+func (o *Orchestrator) OnStepCompleted(runID string, stepID string, exitCode int) {
+	o.mu.Lock()
+	runner, ok := o.activeRuns[runID]
+	o.mu.Unlock()
+
+	if ok {
+		runner.OnStepCompleted(stepID, exitCode)
+	}
+}

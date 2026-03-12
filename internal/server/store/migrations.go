@@ -70,8 +70,9 @@ CREATE TABLE IF NOT EXISTS steps (
     working_dir    TEXT,
     command        TEXT DEFAULT 'claude',
     args           TEXT,
-    sort_order     INTEGER NOT NULL,
-    timeout_seconds INTEGER,
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    timeout_seconds INTEGER DEFAULT 0,
+    on_failure     TEXT NOT NULL DEFAULT 'fail_run',
     expected_outputs TEXT,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -112,7 +113,13 @@ CREATE TABLE IF NOT EXISTS run_steps (
     exit_code      INTEGER,
     started_at     DATETIME,
     ended_at       DATETIME,
-    error_message  TEXT
+    error_message  TEXT,
+    -- Snapshot fields (immutable copy from step at run creation)
+    prompt_snapshot    TEXT,
+    machine_id_snapshot TEXT,
+    working_dir_snapshot TEXT,
+    command_snapshot    TEXT,
+    args_snapshot       TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id);
