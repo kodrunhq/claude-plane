@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,7 +15,15 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/kodrunhq/claude-plane/internal/server/api"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
 	"github.com/kodrunhq/claude-plane/internal/server/config"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/frontend"
+	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
+	"github.com/kodrunhq/claude-plane/internal/server/handler"
+	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
+	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
@@ -59,6 +69,11 @@ func newServeCmd() *cobra.Command {
 				return fmt.Errorf("parse shutdown timeout: %w", err)
 			}
 
+			tokenTTL, err := cfg.Auth.ParseTokenTTL()
+			if err != nil {
+				return fmt.Errorf("parse token TTL: %w", err)
+			}
+
 			// Root context cancelled on SIGINT or SIGTERM.
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
@@ -68,13 +83,89 @@ func newServeCmd() *cobra.Command {
 				return fmt.Errorf("initialize database: %w", err)
 			}
 
+			// Auth service
+			blocklist, err := auth.NewBlocklist(s)
+			if err != nil {
+				return fmt.Errorf("initialize blocklist: %w", err)
+			}
+			authSvc := auth.NewService([]byte(cfg.Auth.JWTSecret), tokenTTL, blocklist)
+
+			// mTLS config for gRPC
+			tlsCfg, err := tlsutil.ServerTLSConfig(cfg.TLS.CACert, cfg.TLS.ServerCert, cfg.TLS.ServerKey)
+			if err != nil {
+				return fmt.Errorf("load TLS config: %w", err)
+			}
+
+			// Connection manager and session registry
+			connMgr := connmgr.NewConnectionManager(s, slog.Default())
+			registry := session.NewRegistry(slog.Default())
+
+			// gRPC server
+			grpcSrv := grpcserver.NewGRPCServer(tlsCfg, connMgr, slog.Default())
+			grpcSrv.SetRegistry(registry)
+
+			grpcLis, err := net.Listen("tcp", cfg.GRPC.Listen)
+			if err != nil {
+				return fmt.Errorf("listen gRPC on %s: %w", cfg.GRPC.Listen, err)
+			}
+
+			go func() {
+				if err := grpcSrv.Serve(grpcLis); err != nil {
+					slog.Error("gRPC server error", "error", err)
+				}
+			}()
+
+			// Claims getter adapters
+			sessionClaimsGetter := func(r *http.Request) *session.UserClaims {
+				c := api.GetClaims(r)
+				if c == nil {
+					return nil
+				}
+				return &session.UserClaims{UserID: c.UserID, Role: c.Role}
+			}
+			handlerClaimsGetter := func(r *http.Request) *handler.UserClaims {
+				c := api.GetClaims(r)
+				if c == nil {
+					return nil
+				}
+				return &handler.UserClaims{UserID: c.UserID, Role: c.Role}
+			}
+
+			// Handlers
+			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
+			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
+			eventsWSHandler := session.HandleEventsWS(authSvc, slog.Default())
+
+			// Orchestrator (no-op executor for now)
+			orch := orchestrator.NewOrchestrator(ctx, s, nil)
+			jobHandler := handler.NewJobHandler(s, handlerClaimsGetter)
+			runHandler := handler.NewRunHandler(s, orch, handlerClaimsGetter)
+
+			// HTTP router
+			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
+			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler)
+
+			// Mount SPA frontend as catch-all
+			router.Handle("/*", frontend.NewSPAHandler())
+
+			httpServer := &http.Server{
+				Addr:    cfg.HTTP.Listen,
+				Handler: router,
+			}
+
+			go func() {
+				slog.Info("HTTP server starting", "addr", cfg.HTTP.Listen)
+				if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					slog.Error("HTTP server error", "error", err)
+				}
+			}()
+
 			slog.Info("Server initialized",
+				"http", cfg.HTTP.Listen,
+				"grpc", cfg.GRPC.Listen,
 				"database", cfg.Database.Path,
 				"shutdown_timeout", shutdownTimeout,
 			)
-
-			// TODO: Start HTTP server (REST + WebSocket) here.
-			// TODO: Start gRPC server (agent connections) here.
 
 			// Block until shutdown signal.
 			<-ctx.Done()
@@ -85,10 +176,11 @@ func newServeCmd() *cobra.Command {
 			// Create a timeout context for the shutdown sequence.
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer shutdownCancel()
-			_ = shutdownCtx // used by shutdown calls below
 
-			// TODO: httpServer.Shutdown(shutdownCtx)
-			// TODO: grpcServer.GracefulStop() (with shutdownCtx deadline for forced stop)
+			if err := httpServer.Shutdown(shutdownCtx); err != nil {
+				slog.Error("HTTP shutdown error", "error", err)
+			}
+			grpcSrv.GracefulStop()
 
 			// Close the database as the final cleanup step.
 			if err := s.Close(); err != nil {

@@ -43,7 +43,14 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
-	cmd.Env = os.Environ()
+	// Build a clean environment, stripping CLAUDECODE to prevent
+	// "nested session" detection when spawning Claude CLI processes.
+	for _, e := range os.Environ() {
+		if len(e) >= 10 && e[:10] == "CLAUDECODE" {
+			continue
+		}
+		cmd.Env = append(cmd.Env, e)
+	}
 	for k, v := range envVars {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

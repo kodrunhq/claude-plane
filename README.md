@@ -25,16 +25,20 @@ A self-hosted control plane for managing interactive [Claude CLI](https://docs.a
 
 ## Quickstart
 
-Get claude-plane running on a single machine in under 5 minutes:
+Get claude-plane running on a single machine:
 
 ```bash
+# Build
 go build -o claude-plane-server ./cmd/server
 go build -o claude-plane-agent ./cmd/agent
+
+# Run (generates certs, configs, admin account, starts everything)
+./quickstart.sh
 ```
 
-See the [Quickstart Guide](docs/quickstart.md) for full step-by-step instructions.
+The script prints your admin credentials and opens the dashboard at `http://127.0.0.1:8080`. Ctrl+C stops everything.
 
-> **Note:** The full HTTP serve loop is under active development. The server binary currently supports config loading, database initialization, CA tooling, and admin seeding. The serve command will be fully wired in an upcoming release.
+See the [Quickstart Guide](docs/quickstart.md) for manual setup and configuration options.
 
 ## Documentation
 

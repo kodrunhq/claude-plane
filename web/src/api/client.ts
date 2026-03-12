@@ -1,3 +1,5 @@
+import { useAuthStore } from '../stores/auth.ts';
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -22,6 +24,10 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().logout();
+    }
+
     let message = `HTTP ${response.status}`;
     try {
       const body = await response.json() as { error?: string; message?: string };
