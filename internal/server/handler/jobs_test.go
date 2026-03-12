@@ -217,7 +217,10 @@ func TestJobHandler_DeleteJob(t *testing.T) {
 	}
 
 	// Verify it's gone
-	getResp, _ := http.Get(srv.URL + "/api/v1/jobs/" + created.JobID)
+	getResp, err := http.Get(srv.URL + "/api/v1/jobs/" + created.JobID)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
 	defer getResp.Body.Close()
 	if getResp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404 after delete, got %d", getResp.StatusCode)

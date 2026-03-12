@@ -136,7 +136,7 @@ SQLite database with these core tables:
 
 ## Frontend Architecture
 
-React 18 SPA built with Vite and TypeScript:
+React 19 SPA built with Vite and TypeScript:
 
 - **State management:** Zustand for client-side state, TanStack Query for server data
 - **Terminal:** xterm.js with WebGL renderer for full terminal emulation

@@ -44,6 +44,7 @@ export function JobEditor() {
   // Sync job data when loaded
   useEffect(() => {
     if (jobDetail) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local form state
       setJobName(jobDetail.job.name);
       setJobDescription(jobDetail.job.description);
       setJobId(jobDetail.job.job_id);

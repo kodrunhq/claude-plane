@@ -1,5 +1,10 @@
 # claude-plane
 
+[![CI](https://github.com/kodrunhq/claude-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/kodrunhq/claude-plane/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A self-hosted control plane for managing interactive [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) sessions across distributed machines. Run Claude on any number of worker machines and manage them all from a single web interface.
 
 ## Features
@@ -14,20 +19,9 @@ A self-hosted control plane for managing interactive [Claude CLI](https://docs.a
 
 ## Architecture
 
-```
-┌─────────────┐     HTTPS/WSS      ┌─────────────────┐      gRPC/mTLS      ┌──────────────┐
-│   Browser    │◄──────────────────►│  claude-plane    │◄───────────────────►│  claude-plane │
-│  (React SPA) │   REST + WebSocket │     server       │  Bidirectional      │     agent     │
-└─────────────┘                     │                  │  Command Stream     │               │
-                                    │  ┌────────────┐  │                     │  ┌──────────┐ │
-                                    │  │  SQLite DB  │  │                     │  │ Claude   │ │
-                                    │  └────────────┘  │                     │  │ CLI(PTY) │ │
-                                    └─────────────────┘                     │  └──────────┘ │
-                                                                            └──────────────┘
-                                                                            (one per worker)
-```
-
-**Agents dial in, server never dials out.** This means workers can live behind NATs, firewalls, or in private networks — they only need outbound access to the server's gRPC port.
+<p align="center">
+  <img src="docs/assets/architecture.svg" alt="claude-plane architecture" width="800">
+</p>
 
 ## Quickstart
 
@@ -39,6 +33,8 @@ go build -o claude-plane-agent ./cmd/agent
 ```
 
 See the [Quickstart Guide](docs/quickstart.md) for full step-by-step instructions.
+
+> **Note:** The full HTTP serve loop is under active development. The server binary currently supports config loading, database initialization, CA tooling, and admin seeding. The serve command will be fully wired in an upcoming release.
 
 ## Documentation
 
@@ -59,7 +55,7 @@ See the [Quickstart Guide](docs/quickstart.md) for full step-by-step instruction
 go build -o claude-plane-server ./cmd/server
 go build -o claude-plane-agent ./cmd/agent
 
-# Frontend (embedded into server binary)
+# Frontend (output goes to internal/server/frontend/dist/ for embedding)
 cd web
 npm install
 npm run build

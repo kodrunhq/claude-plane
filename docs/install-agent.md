@@ -7,7 +7,7 @@ Deploy `claude-plane-agent` on worker machines where Claude CLI sessions will ru
 - Linux machine (Ubuntu 22.04+, Debian 12+, or similar)
 - Go 1.25+ (for building from source) or a pre-built binary
 - **Claude CLI** — installed and authenticated. The agent spawns Claude CLI processes in PTYs.
-- Agent certificate, key, and CA certificate from the server (see [Server Installation](install-server.md#2-set-up-tls))
+- Agent certificate, key, and CA certificate from the server (see [Server Installation](install-server.md#3-set-up-tls))
 - Outbound TCP access to the server's gRPC port (default: 9443)
 
 ## 1. Build the Binary
@@ -29,9 +29,9 @@ scp claude-plane-agent user@worker:/usr/local/bin/
 The server admin generates agent certificates using the server's CA tool. You need three files on the worker:
 
 ```
-/etc/claude-plane/ca.crt         — CA certificate (same for all agents)
-/etc/claude-plane/agent.crt      — This agent's certificate
-/etc/claude-plane/agent.key      — This agent's private key
+/etc/claude-plane/ca.pem             — CA certificate (same for all agents)
+/etc/claude-plane/agent.pem          — This agent's certificate
+/etc/claude-plane/agent-key.pem      — This agent's private key
 ```
 
 The machine ID embedded in the certificate CN must match the `agent.machine_id` in the config file.
@@ -45,9 +45,9 @@ Create `/etc/claude-plane/agent.toml`:
 address = "your-server-hostname.example.com:9443"
 
 [tls]
-ca_cert = "/etc/claude-plane/ca.crt"
-agent_cert = "/etc/claude-plane/agent.crt"
-agent_key = "/etc/claude-plane/agent.key"
+ca_cert = "/etc/claude-plane/ca.pem"
+agent_cert = "/etc/claude-plane/agent.pem"
+agent_key = "/etc/claude-plane/agent-key.pem"
 
 [agent]
 machine_id = "worker-1"

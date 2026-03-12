@@ -39,7 +39,6 @@ The database file is created automatically if it doesn't exist. Migrations run o
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `jwt_secret` | string | Yes | Secret key for signing JWT tokens. Must be at least 32 characters. |
-| `jwt_secret_file` | string | No | Path to a file containing the JWT secret (alternative to inline) |
 | `token_ttl` | string | No | JWT token lifetime as a Go duration string. Default: `"60m"` |
 
 ### Full Example
@@ -47,16 +46,16 @@ The database file is created automatically if it doesn't exist. Migrations run o
 ```toml
 [http]
 listen = "0.0.0.0:8443"
-tls_cert = "/etc/claude-plane/server-cert/server.crt"
-tls_key = "/etc/claude-plane/server-cert/server.key"
+tls_cert = "/etc/claude-plane/server-cert/server.pem"
+tls_key = "/etc/claude-plane/server-cert/server-key.pem"
 
 [grpc]
 listen = "0.0.0.0:9443"
 
 [tls]
-ca_cert = "/etc/claude-plane/ca/ca.crt"
-server_cert = "/etc/claude-plane/server-cert/server.crt"
-server_key = "/etc/claude-plane/server-cert/server.key"
+ca_cert = "/etc/claude-plane/ca/ca.pem"
+server_cert = "/etc/claude-plane/server-cert/server.pem"
+server_key = "/etc/claude-plane/server-cert/server-key.pem"
 
 [database]
 path = "/var/lib/claude-plane/claude-plane.db"
@@ -100,9 +99,9 @@ token_ttl = "60m"
 address = "server.example.com:9443"
 
 [tls]
-ca_cert = "/etc/claude-plane/ca.crt"
-agent_cert = "/etc/claude-plane/agent.crt"
-agent_key = "/etc/claude-plane/agent.key"
+ca_cert = "/etc/claude-plane/ca.pem"
+agent_cert = "/etc/claude-plane/agent.pem"
+agent_key = "/etc/claude-plane/agent-key.pem"
 
 [agent]
 machine_id = "worker-1"
