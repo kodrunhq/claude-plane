@@ -7,6 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/claudeplane/claude-plane/internal/agent/config"
+
 	// Prove generated proto package compiles.
 	_ "github.com/claudeplane/claude-plane/internal/shared/proto/claudeplane/v1"
 )
@@ -31,12 +33,26 @@ func main() {
 }
 
 func newRunCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Connect to the server and start managing sessions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("not implemented")
+			configPath, _ := cmd.Flags().GetString("config")
+
+			cfg, err := config.LoadAgentConfig(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			slog.Info("Agent config loaded",
+				"machine_id", cfg.Agent.MachineID,
+				"server_address", cfg.Server.Address,
+				"max_sessions", cfg.Agent.MaxSessions,
+			)
+			slog.Info("Agent ready (gRPC connection not yet implemented — Phase 2)")
 			return nil
 		},
 	}
+	cmd.Flags().String("config", "agent.toml", "Path to agent TOML config file")
+	return cmd
 }
