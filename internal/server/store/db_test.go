@@ -37,7 +37,7 @@ func TestRunMigrations(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 
 	// Open a writer connection to run migrations
-	dsn := "file:" + dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL&_foreign_keys=ON"
+	dsn := "file:" + dbPath
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
