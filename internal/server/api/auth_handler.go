@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/mail"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -13,27 +14,37 @@ import (
 // sessionCookieName is the name of the httpOnly cookie used for JWT auth.
 const sessionCookieName = "session_token"
 
-// setSessionCookie sets an httpOnly, Secure, SameSite=Strict cookie with the JWT.
-func (h *Handlers) setSessionCookie(w http.ResponseWriter, token string) {
+func isSecureRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+// setSessionCookie sets an httpOnly, SameSite=Strict cookie with the JWT.
+func (h *Handlers) setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(h.authSvc.TokenTTL().Seconds()),
 	})
 }
 
 // clearSessionCookie removes the session cookie by setting MaxAge=-1.
-func clearSessionCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   isSecureRequest(r),
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
@@ -173,7 +184,7 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Set httpOnly cookie with the JWT (primary auth mechanism).
 	// The token is also returned in the JSON response for backwards compatibility.
-	h.setSessionCookie(w, token)
+	h.setSessionCookie(w, r, token)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"token":   token,
@@ -197,7 +208,7 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clearSessionCookie(w)
+	clearSessionCookie(w, r)
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "logged out",
