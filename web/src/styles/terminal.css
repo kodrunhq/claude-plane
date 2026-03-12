@@ -1,0 +1,17 @@
+@import "@xterm/xterm/css/xterm.css";
+
+.xterm {
+  height: 100%;
+  width: 100%;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.terminal-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background-color: var(--color-bg-primary);
+}

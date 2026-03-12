@@ -1,54 +1,17 @@
+import { request } from './client.ts';
 import type { CreateSessionRequest, Session } from '../types/session.ts';
 
-function getAuthToken(): string {
-  return localStorage.getItem('token') ?? '';
-}
+export const sessionsApi = {
+  list: (filters?: Record<string, string>) =>
+    request<Session[]>(`/sessions${filters ? `?${new URLSearchParams(filters)}` : ''}`),
+  get: (id: string) => request<Session>(`/sessions/${encodeURIComponent(id)}`),
+  create: (params: CreateSessionRequest) =>
+    request<Session>('/sessions', { method: 'POST', body: JSON.stringify(params) }),
+  kill: (id: string) => request<void>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+};
 
-function authHeaders(): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${getAuthToken()}`,
-  };
-}
-
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`API error ${response.status}: ${body}`);
-  }
-  return response.json() as Promise<T>;
-}
-
-export async function createSession(req: CreateSessionRequest): Promise<Session> {
-  const response = await fetch('/api/v1/sessions', {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(req),
-  });
-  return handleResponse<Session>(response);
-}
-
-export async function listSessions(): Promise<Session[]> {
-  const response = await fetch('/api/v1/sessions', {
-    headers: authHeaders(),
-  });
-  return handleResponse<Session[]>(response);
-}
-
-export async function getSession(id: string): Promise<Session> {
-  const response = await fetch(`/api/v1/sessions/${encodeURIComponent(id)}`, {
-    headers: authHeaders(),
-  });
-  return handleResponse<Session>(response);
-}
-
-export async function terminateSession(id: string): Promise<void> {
-  const response = await fetch(`/api/v1/sessions/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`API error ${response.status}: ${body}`);
-  }
-}
+// Keep named exports for backward compatibility with Phase 4 code
+export const listSessions = sessionsApi.list;
+export const getSession = sessionsApi.get;
+export const createSession = sessionsApi.create;
+export const terminateSession = sessionsApi.kill;
