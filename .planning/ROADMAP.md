@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Server Core** - Server accepts agents, exposes REST API, handles user authentication
 - [ ] **Phase 4: Terminal Streaming** - End-to-end terminal I/O from browser through server to agent PTY
 - [x] **Phase 5: Frontend** - Full React SPA with session dashboard, machine status, and polished UX (completed 2026-03-12)
-- [ ] **Phase 6: Job System** - Multi-step interactive notebook execution on top of session infrastructure
+- [x] **Phase 6: Job System** - Multi-step interactive notebook execution on top of session infrastructure (completed 2026-03-12)
 
 ## Phase Details
 
@@ -135,4 +135,4 @@ Note: Phases 2 and 3 can execute in parallel (both depend only on Phase 1).
 | 3. Server Core | 2/3 | In Progress|  |
 | 4. Terminal Streaming | 2/3 | In Progress|  |
 | 5. Frontend | 5/5 | Complete   | 2026-03-12 |
-| 6. Job System | 1/3 | In Progress | - |
+| 6. Job System | 3/3 | Complete   | 2026-03-12 |
