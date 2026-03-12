@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, XCircle, RotateCcw, Clock } from 'lucide-react';
 import { toast } from 'sonner';
@@ -85,12 +85,19 @@ export function RunDetail() {
     }
   }
 
-  // Elapsed time
-  const elapsed = useMemo(() => {
-    if (!run?.started_at) return null;
+  // Elapsed time — ticks every second for active runs
+  const [elapsed, setElapsed] = useState<number | null>(null);
+  useEffect(() => {
+    if (!run?.started_at) { setElapsed(null); return; }
     const start = new Date(run.started_at).getTime();
-    const end = run.completed_at ? new Date(run.completed_at).getTime() : Date.now();
-    return Math.floor((end - start) / 1000);
+    if (run.completed_at) {
+      setElapsed(Math.floor((new Date(run.completed_at).getTime() - start) / 1000));
+      return;
+    }
+    const update = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
   }, [run?.started_at, run?.completed_at]);
 
   const isLoading = runLoading || jobLoading;
