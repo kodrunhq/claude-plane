@@ -11,7 +11,7 @@ export interface Machine {
 }
 
 // WebSocket event message types
-export type EventType = 'session.status' | 'session.exit' | 'machine.status' | 'machine.health';
+export type EventType = 'session.status' | 'session.exit' | 'machine.status' | 'machine.health' | 'run.step.status';
 export interface EventMessage {
   type: EventType;
   payload: Record<string, unknown>;

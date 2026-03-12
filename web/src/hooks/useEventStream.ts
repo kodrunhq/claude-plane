@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { EventMessage } from '../lib/types.ts';
+import { useRunStore } from '../stores/runs.ts';
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 
@@ -44,6 +45,14 @@ export function useEventStream() {
             case 'machine.health':
               queryClient.invalidateQueries({ queryKey: ['machines'] });
               break;
+            case 'run.step.status': {
+              const p = msg.payload as { stepId?: string; status?: string; sessionId?: string };
+              if (p.stepId && p.status) {
+                useRunStore.getState().updateStepStatus(p.stepId, p.status, p.sessionId);
+              }
+              queryClient.invalidateQueries({ queryKey: ['runs'] });
+              break;
+            }
           }
         } catch {
           // Ignore unparseable messages
