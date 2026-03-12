@@ -30,7 +30,10 @@ export function useUpdateJob() {
   return useMutation({
     mutationFn: ({ id, params }: { id: string; params: Partial<CreateJobParams> }) =>
       jobsApi.update(id, params),
-    onSuccess: (_, { id }) => qc.invalidateQueries({ queryKey: ['jobs', id] }),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['jobs', id] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+    },
   });
 }
 

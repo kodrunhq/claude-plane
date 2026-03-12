@@ -27,7 +27,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
       machine_id: form.get('machine_id') as string,
       working_dir: form.get('working_dir') as string,
       command: form.get('command') as string || 'claude',
-      args: (form.get('args') as string).split('\n').filter(Boolean),
+      args: (form.get('args') as string),
     };
     onSave(step.step_id, params);
   }
@@ -110,7 +110,7 @@ export function StepEditor({ step, machines, onSave, onDelete }: StepEditorProps
           id="step-args"
           name="args"
           rows={2}
-          defaultValue={(step.args ?? []).join('\n')}
+          defaultValue={step.args ?? ''}
           key={step.step_id + '-args'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
         />

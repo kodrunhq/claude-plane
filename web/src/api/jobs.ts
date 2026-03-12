@@ -5,7 +5,6 @@ import type {
   Step,
   StepDependency,
   Run,
-  RunStep,
   RunDetail,
   CreateJobParams,
   CreateStepParams,
@@ -33,7 +32,7 @@ export const jobsApi = {
       body: JSON.stringify(params),
     }),
   updateStep: (jobId: string, stepId: string, params: UpdateStepParams) =>
-    request<Step>(
+    request<{ status: string }>(
       `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(stepId)}`,
       { method: 'PUT', body: JSON.stringify(params) },
     ),
@@ -66,7 +65,7 @@ export const jobsApi = {
   cancelRun: (id: string) =>
     request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   retryStep: (runId: string, stepId: string) =>
-    request<RunStep>(
+    request<{ status: string }>(
       `/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepId)}/retry`,
       { method: 'POST' },
     ),

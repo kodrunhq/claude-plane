@@ -141,7 +141,8 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	waitForRunStatus(t, orch, run.RunID, "completed", 5*time.Second)
 }
 
-// waitForRunStatus polls the orchestrator until the run reaches the expected status.
+// waitForRunStatus polls the orchestrator until the run reaches the expected status,
+// then verifies the persisted status in the database matches.
 func waitForRunStatus(t *testing.T, orch *Orchestrator, runID, expectedStatus string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -151,18 +152,17 @@ func waitForRunStatus(t *testing.T, orch *Orchestrator, runID, expectedStatus st
 		orch.mu.Unlock()
 
 		if !active && expectedStatus != "running" {
-			// Run finished, check DB
-			return
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if expectedStatus == "completed" || expectedStatus == "failed" {
-		// Check if it actually finished
-		orch.mu.Lock()
-		_, active := orch.activeRuns[runID]
-		orch.mu.Unlock()
-		if active {
-			t.Fatalf("timed out waiting for run %s to reach status %s", runID, expectedStatus)
-		}
+
+	// Verify the persisted status matches
+	detail, err := orch.store.GetRunWithSteps(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("GetRunWithSteps: %v", err)
+	}
+	if detail.Run.Status != expectedStatus {
+		t.Fatalf("run %s: persisted status = %q, want %q", runID, detail.Run.Status, expectedStatus)
 	}
 }
