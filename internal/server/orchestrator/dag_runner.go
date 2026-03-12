@@ -100,18 +100,18 @@ func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDepen
 }
 
 // Start launches all root steps (in-degree 0) concurrently.
-// Uses a background context since runs outlive the triggering HTTP request.
-func (d *DAGRunner) Start(_ context.Context) {
+// Uses parentCtx as the parent so that runs are tied to the server lifecycle.
+func (d *DAGRunner) Start(parentCtx context.Context) {
 	d.mu.Lock()
-	d.ctx, d.cancel = context.WithCancel(context.Background())
+	d.ctx, d.cancel = context.WithCancel(parentCtx)
 
 	var toLaunch []store.RunStep
 	for stepID, deg := range d.inDegree {
 		if deg == 0 {
 			rs := d.steps[stepID]
-			if rs.Status == "pending" {
-				rs.Status = "running"
-				d.updateRunStepInDB(rs.RunStepID, "running", "", 0)
+			if rs.Status == store.StatusPending {
+				rs.Status = store.StatusRunning
+				d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
 				toLaunch = append(toLaunch, *rs)
 			}
 		}
@@ -140,25 +140,25 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	var runComplete func()
 
 	if exitCode != 0 {
-		rs.Status = "failed"
+		rs.Status = store.StatusFailed
 		ec := exitCode
 		rs.ExitCode = &ec
-		d.updateRunStepInDB(rs.RunStepID, "failed", "", exitCode)
+		d.updateRunStepInDB(rs.RunStepID, store.StatusFailed, "", exitCode)
 
 		if rs.OnFailure == "fail_run" {
 			d.failed = true
 			// Mark remaining pending steps as skipped
 			for _, s := range d.steps {
-				if s.Status == "pending" {
-					s.Status = "skipped"
-					d.updateRunStepInDB(s.RunStepID, "skipped", "", 0)
+				if s.Status == store.StatusPending {
+					s.Status = store.StatusSkipped
+					d.updateRunStepInDB(s.RunStepID, store.StatusSkipped, "", 0)
 				}
 			}
 			d.cancel()
 			if d.onRunComplete != nil {
 				cb := d.onRunComplete
 				runID := d.runID
-				runComplete = func() { cb(runID, "failed") }
+				runComplete = func() { cb(runID, store.StatusFailed) }
 			}
 			d.mu.Unlock()
 			if runComplete != nil {
@@ -167,10 +167,10 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 			return
 		}
 	} else {
-		rs.Status = "completed"
+		rs.Status = store.StatusCompleted
 		ec := 0
 		rs.ExitCode = &ec
-		d.updateRunStepInDB(rs.RunStepID, "completed", "", 0)
+		d.updateRunStepInDB(rs.RunStepID, store.StatusCompleted, "", 0)
 	}
 
 	d.completed++
@@ -181,9 +181,9 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 
 	// Check if all steps are done
 	if d.completed == d.total {
-		status := "completed"
+		status := store.StatusCompleted
 		if d.failed || stepFailed {
-			status = "failed"
+			status = store.StatusFailed
 		}
 		if d.onRunComplete != nil {
 			cb := d.onRunComplete
@@ -238,5 +238,5 @@ func (d *DAGRunner) updateRunStepInDB(runStepID, status, sessionID string, exitC
 	if d.store == nil {
 		return
 	}
-	_ = d.store.UpdateRunStepStatus(context.Background(), runStepID, status, sessionID, exitCode)
+	_ = d.store.UpdateRunStepStatus(d.ctx, runStepID, status, sessionID, exitCode)
 }

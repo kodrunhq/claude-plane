@@ -11,14 +11,17 @@ import (
 // Orchestrator manages active DAGRunners for job runs.
 type Orchestrator struct {
 	mu         sync.Mutex
+	rootCtx    context.Context
 	activeRuns map[string]*DAGRunner
 	store      store.JobStoreIface
 	executor   StepExecutor
 }
 
-// NewOrchestrator creates an Orchestrator.
-func NewOrchestrator(s store.JobStoreIface, executor StepExecutor) *Orchestrator {
+// NewOrchestrator creates an Orchestrator. The provided context is used as the
+// parent for all DAGRunner contexts, tying their lifetime to the server.
+func NewOrchestrator(ctx context.Context, s store.JobStoreIface, executor StepExecutor) *Orchestrator {
 	return &Orchestrator{
+		rootCtx:    ctx,
 		activeRuns: make(map[string]*DAGRunner),
 		store:      s,
 		executor:   executor,
@@ -69,7 +72,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 
 	// Build and start DAGRunner
 	onComplete := func(runID string, status string) {
-		_ = o.store.UpdateRunStatus(context.Background(), runID, status)
+		_ = o.store.UpdateRunStatus(o.rootCtx, runID, status)
 		o.mu.Lock()
 		delete(o.activeRuns, runID)
 		o.mu.Unlock()
@@ -84,7 +87,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	// Mark run as running
 	_ = o.store.UpdateRunStatus(ctx, run.RunID, "running")
 
-	runner.Start(ctx)
+	runner.Start(o.rootCtx)
 
 	return run, nil
 }
@@ -161,7 +164,7 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 
 	// Build new DAGRunner from current DB state
 	onComplete := func(runID string, status string) {
-		_ = o.store.UpdateRunStatus(context.Background(), runID, status)
+		_ = o.store.UpdateRunStatus(o.rootCtx, runID, status)
 		o.mu.Lock()
 		delete(o.activeRuns, runID)
 		o.mu.Unlock()
@@ -183,11 +186,15 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 	}
 	runner.mu.Unlock()
 
+	// Cancel any existing active runner for this run to prevent conflicts
 	o.mu.Lock()
+	if existing, ok := o.activeRuns[runID]; ok {
+		existing.Cancel()
+	}
 	o.activeRuns[runID] = runner
 	o.mu.Unlock()
 
-	runner.Start(ctx)
+	runner.Start(o.rootCtx)
 
 	return nil
 }

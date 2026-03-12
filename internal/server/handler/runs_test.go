@@ -55,7 +55,7 @@ func newRunRouter(t *testing.T) (*httptest.Server, *store.Store, *orchestrator.O
 	t.Helper()
 	s := newTestStore(t)
 	exec := newMockExecutor()
-	orch := orchestrator.NewOrchestrator(s, exec)
+	orch := orchestrator.NewOrchestrator(context.Background(), s, exec)
 
 	jh := handler.NewJobHandler(s)
 	rh := handler.NewRunHandler(s, orch)
