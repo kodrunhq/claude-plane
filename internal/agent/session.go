@@ -65,9 +65,8 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 }
 
 // readLoop reads from the PTY fd in 4096-byte chunks and sends to outputCh.
-// readLoop owns outputCh: it is the only goroutine that sends to or closes it.
+// readLoop signals readDone when done. waitForExit closes outputCh after status is set.
 func (s *Session) readLoop() {
-	defer close(s.outputCh)
 	defer close(s.readDone)
 
 	buf := make([]byte, 4096)
@@ -109,12 +108,14 @@ func (s *Session) waitForExit() {
 	}
 	s.mu.Unlock()
 
-	// Close PTY fd — this causes readLoop's Read to return an error, which
-	// makes readLoop exit and close outputCh (readLoop owns the channel).
+	// Close PTY fd — this causes readLoop's Read to return an error and exit.
 	s.ptyFile.Close()
 
-	// Wait for readLoop to finish and close outputCh.
+	// Wait for readLoop to stop sending to outputCh.
 	<-s.readDone
+
+	// Now safe to close outputCh: readLoop is done, status is already set.
+	close(s.outputCh)
 
 	s.logger.Info("session exited", "status", s.status, "exit_code", s.exitCode)
 }
