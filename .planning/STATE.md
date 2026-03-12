@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-12T09:06:45.048Z"
-last_activity: 2026-03-12 -- Completed 02-02-PLAN.md
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-12T09:47:42.106Z"
+last_activity: 2026-03-12 -- Completed 03-02-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 20
-  completed_plans: 6
-  percent: 30
+  completed_plans: 8
+  percent: 40
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal -- with sessions that survive disconnection.
-**Current focus:** Phase 2: Agent Core
+**Current focus:** Phase 3: Server Core
 
 ## Current Position
 
-Phase: 2 of 6 (Agent Core)
-Plan: 2 of 2 in current phase
-Status: Complete
-Last activity: 2026-03-12 -- Completed 02-02-PLAN.md
+Phase: 3 of 6 (Server Core)
+Plan: 1 of 3 in current phase
+Status: In Progress
+Last activity: 2026-03-12 -- Completed 03-01-PLAN.md
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 35%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 4.5min
-- Total execution time: 0.45 hours
+- Total plans completed: 7
+- Average duration: 4.3min
+- Total execution time: 0.50 hours
 
 **By Phase:**
 
@@ -45,13 +45,14 @@ Progress: [███░░░░░░░] 30%
 |-------|-------|-------|----------|
 | 01-foundation | 4 | 13min | 3.3min |
 | 02-agent-core | 2 | 14min | 7.0min |
+| 03-server-core | 1 | 4min | 4.0min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 3min, 2min, 7min, 8min
+- Last 5 plans: 3min, 2min, 7min, 8min, 4min
 - Trend: Stable
 
 *Updated after each plan completion*
-| Phase 02 P02 | 8 | 2 tasks | 6 files |
+| Phase 03 P01 | 4min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 02-agent-core]: Channel-based sender goroutine pattern prevents concurrent stream.Send calls
 - [Phase 02-agent-core]: SessionProvider interface decouples agent client from session manager
 - [Phase 02]: readLoop signals readDone, waitForExit closes outputCh after status set
+- [Phase 03-server-core]: TokenRevoker interface decouples JWT service from concrete Blocklist for testability
+- [Phase 03-server-core]: Blocklist uses RWMutex with in-memory map backed by SQLite for fast lookups with persistence
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:01:21.169Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-12T09:45:48Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
