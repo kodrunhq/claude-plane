@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -137,6 +138,51 @@ func TestRunMigrations_SkipsAlreadyApplied(t *testing.T) {
 	}
 	if countAfter != count {
 		t.Errorf("schema_version row count changed: %d -> %d", count, countAfter)
+	}
+}
+
+func TestRunMigrations_ConcurrentCalls(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	dsn := "file:" + dbPath
+
+	db1, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open db1: %v", err)
+	}
+	defer db1.Close()
+
+	db2, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open db2: %v", err)
+	}
+	defer db2.Close()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	run := func(db *sql.DB) {
+		defer wg.Done()
+		errCh <- RunMigrations(db)
+	}
+
+	wg.Add(2)
+	go run(db1)
+	go run(db2)
+	wg.Wait()
+	close(errCh)
+
+	for migrationErr := range errCh {
+		if migrationErr != nil {
+			t.Fatalf("RunMigrations returned error: %v", migrationErr)
+		}
+	}
+
+	var count int
+	if err := db1.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count); err != nil {
+		t.Fatalf("count schema_version: %v", err)
+	}
+	if count != len(migrations) {
+		t.Errorf("schema_version row count = %d, want %d", count, len(migrations))
 	}
 }
 
