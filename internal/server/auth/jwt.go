@@ -11,6 +11,10 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
+// SessionCookieName is the name of the httpOnly cookie used for JWT auth.
+// Shared across api and session packages to prevent accidental drift.
+const SessionCookieName = "session_token"
+
 // Claims represents the JWT claims issued by the claude-plane server.
 type Claims struct {
 	jwt.RegisteredClaims

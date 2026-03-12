@@ -141,11 +141,17 @@ func TestRegistryDropWarnLogging(t *testing.T) {
 		t.Errorf("expected total_dropped=1 in log, got: %s", logOutput)
 	}
 
-	// Drop a control message and verify its log too
+	// Drop control messages until total reaches 10 (next sampled log point).
+	// Drops 2-9 are terminal data counter + control counter sharing the same per-channel
+	// counter, so we need to reach total=10 for the next log entry.
+	for i := 0; i < 8; i++ {
+		r.PublishControl("s1", []byte(`{"x":1}`))
+	}
+	// total_dropped is now 9; one more control drop brings it to 10 (logged).
 	r.PublishControl("s1", []byte(`{"x":1}`))
 	logOutput = buf.String()
 	if !strings.Contains(logOutput, "dropped control message for slow subscriber") {
-		t.Errorf("expected warn log for dropped control message, got: %s", logOutput)
+		t.Errorf("expected warn log for dropped control message at total=10, got: %s", logOutput)
 	}
 }
 

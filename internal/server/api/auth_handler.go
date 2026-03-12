@@ -8,11 +8,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
-// sessionCookieName is the name of the httpOnly cookie used for JWT auth.
-const sessionCookieName = "session_token"
+// sessionCookieName references the canonical cookie name from the auth package.
+const sessionCookieName = auth.SessionCookieName
 
 func isSecureRequest(r *http.Request) bool {
 	if r.TLS != nil {
