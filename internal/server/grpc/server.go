@@ -265,6 +265,9 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 func parseAsciicastData(raw []byte) []byte {
 	var buf bytes.Buffer
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	// Asciicast lines can be large (e.g. big output bursts); raise the
+	// default 64 KiB token limit to 1 MiB to avoid silent truncation.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -287,6 +290,11 @@ func parseAsciicastData(raw []byte) []byte {
 			continue
 		}
 		buf.WriteString(data)
+	}
+	if err := scanner.Err(); err != nil {
+		// Log would require passing a logger; return what we have so far.
+		// Partial data is better than nothing for scrollback replay.
+		return buf.Bytes()
 	}
 	return buf.Bytes()
 }

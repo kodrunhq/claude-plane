@@ -33,7 +33,7 @@ claude-plane is a self-hosted control plane for managing interactive Claude CLI 
 
 - Agent↔Server: mTLS with built-in CA tooling (`claude-plane-server ca init/issue-server/issue-agent`)
 - Frontend↔Server: JWT via httpOnly cookies (login page gating all routes), OIDC/OAuth2 planned for V2
-- Agent identity embedded in certificate CN as `machine-id`
+- Agent certificate CN must be `agent-{machine-id}` (gRPC interceptor strips the `agent-` prefix to derive the logical machine ID)
 
 ## Data Model (SQLite)
 
