@@ -29,6 +29,18 @@ func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.Connect
 	}
 }
 
+// maxBytesMiddleware limits the size of request bodies.
+func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // NewRouter creates a chi router with all API routes configured.
 // Public routes (register, login) require no authentication.
 // Protected routes (logout, machines, sessions) require a valid JWT Bearer token.
@@ -38,6 +50,7 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 
 	// Global middleware
 	r.Use(middleware.RequestID)
+	r.Use(maxBytesMiddleware(1 << 20)) // 1MB global limit
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)

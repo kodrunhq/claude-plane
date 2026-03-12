@@ -127,14 +127,15 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 	}
 
 	sm.mu.Lock()
-	if existing, ok := sm.sessions[cmd.GetSessionId()]; ok {
-		sm.mu.Unlock()
-		sm.logger.Warn("duplicate session ID, killing existing session", "session_id", cmd.GetSessionId())
-		_ = existing.Kill("")
-		sm.mu.Lock()
-	}
+	existing, hadExisting := sm.sessions[cmd.GetSessionId()]
 	sm.sessions[cmd.GetSessionId()] = sess
 	sm.mu.Unlock()
+
+	// Kill existing session outside the lock (safe — we already replaced the map entry)
+	if hadExisting {
+		sm.logger.Warn("duplicate session ID, killing existing session", "session_id", cmd.GetSessionId())
+		_ = existing.Kill("")
+	}
 
 	// Mark new sessions as attached by default so live relay works immediately.
 	sm.attachedMu.Lock()

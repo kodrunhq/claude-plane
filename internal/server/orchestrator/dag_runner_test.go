@@ -223,3 +223,22 @@ func TestDAGRunner_ConcurrentCompletions(t *testing.T) {
 		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
 	}
 }
+
+func TestDAGRunner_CancelBeforeStart(t *testing.T) {
+	runner := NewDAGRunner(
+		"run-1",
+		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: "pending"}},
+		nil,
+		nil,
+		nil,
+		func(runID, status string) {},
+	)
+
+	// Should not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("Cancel() panicked: %v", r)
+		}
+	}()
+	runner.Cancel()
+}
