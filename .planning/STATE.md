@@ -46,6 +46,8 @@ Recent decisions affecting current work:
 - Accepted Go toolchain auto-upgrade to 1.25 for golang.org/x/crypto compatibility
 - Set SQLite pragmas explicitly after sql.Open (modernc.org/sqlite does not support _pragma DSN syntax)
 - Used BEGIN IMMEDIATE with inline SQL for migrations
+- ECDSA P-256 for all mTLS certificates with random 128-bit serials, MinVersion TLS 1.2
+- Agent config defaults: max_sessions=5, claude_cli_path="claude"
 
 ### Pending Todos
 
@@ -59,5 +61,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-12
-Stopped at: Completed 01-03-PLAN.md (SQLite store + admin seeding)
+Stopped at: Completed 01-02-PLAN.md (mTLS CA tooling + config parsing)
 Resume file: None
