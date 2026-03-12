@@ -31,7 +31,7 @@ func TestOrchestrator_CreateRun(t *testing.T) {
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	run, err := orch.CreateRun(ctx, job.JobID, "manual")
 	if err != nil {
@@ -69,7 +69,7 @@ func TestOrchestrator_CreateRun_CycleRejected(t *testing.T) {
 	_ = s.AddDependency(ctx, stepA.StepID, stepC.StepID)
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	_, err := orch.CreateRun(ctx, job.JobID, "manual")
 	if err == nil {
@@ -86,7 +86,7 @@ func TestOrchestrator_CancelRun(t *testing.T) {
 	s.CreateStep(ctx, job.JobID, "B", "p", "", "", "claude", "", 0, 1, "fail_run")
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	run, _ := orch.CreateRun(ctx, job.JobID, "manual")
 	mock.waitForStep(stepA.StepID)
@@ -114,7 +114,7 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
 	mock := newMockExecutor()
-	orch := NewOrchestrator(s, mock)
+	orch := NewOrchestrator(context.Background(), s, mock)
 
 	run, _ := orch.CreateRun(ctx, job.JobID, "manual")
 
