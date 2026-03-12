@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-04-PLAN.md (Phase 1 complete -- all CLI stubs wired)
-last_updated: "2026-03-12T07:46:54.562Z"
-last_activity: 2026-03-12 -- Completed 01-04-PLAN.md
+status: executing
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-12T09:06:45.048Z"
+last_activity: 2026-03-12 -- Completed 02-02-PLAN.md
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 20
-  completed_plans: 4
-  percent: 18
+  completed_plans: 6
+  percent: 30
 ---
 
 # Project State
@@ -21,35 +21,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** A developer can open the browser, connect to a Claude CLI session running on any remote machine, and interact with it as if they were sitting at that terminal -- with sessions that survive disconnection.
-**Current focus:** Phase 1: Foundation
+**Current focus:** Phase 2: Agent Core
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation) -- COMPLETE
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-03-12 -- Completed 01-04-PLAN.md
+Phase: 2 of 6 (Agent Core)
+Plan: 2 of 2 in current phase
+Status: Complete
+Last activity: 2026-03-12 -- Completed 02-02-PLAN.md
 
-Progress: [██░░░░░░░░] 18%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 3.3min
-- Total execution time: 0.22 hours
+- Total plans completed: 6
+- Average duration: 4.5min
+- Total execution time: 0.45 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 4 | 13min | 3.3min |
+| 02-agent-core | 2 | 14min | 7.0min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 4min, 3min, 2min
+- Last 5 plans: 4min, 3min, 2min, 7min, 8min
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 02 P02 | 8 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -66,6 +68,9 @@ Recent decisions affecting current work:
 - Agent config defaults: max_sessions=5, claude_cli_path="claude"
 - Kept blank proto import in binaries to prove proto compilation
 - Used slog.Info for all CLI command output
+- [Phase 02-agent-core]: Channel-based sender goroutine pattern prevents concurrent stream.Send calls
+- [Phase 02-agent-core]: SessionProvider interface decouples agent client from session manager
+- [Phase 02]: readLoop signals readDone, waitForExit closes outputCh after status set
 
 ### Pending Todos
 
@@ -78,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Completed 01-04-PLAN.md (Phase 1 complete -- all CLI stubs wired)
+Last session: 2026-03-12T09:01:21.169Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
