@@ -72,7 +72,11 @@ func (c *AgentClient) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		c.logger.Warn("connection lost, reconnecting", "error", err)
+		if err != nil {
+			c.logger.Warn("connection lost, reconnecting", "error", err)
+		} else {
+			c.logger.Info("connection closed, reconnecting")
+		}
 		if err := c.waitWithBackoff(ctx); err != nil {
 			return err
 		}
