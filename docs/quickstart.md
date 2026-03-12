@@ -2,6 +2,8 @@
 
 Get claude-plane running on a single machine for evaluation. This guide sets up the server and one agent on the same host.
 
+> **Note:** The full HTTP serve loop is under active development. The server binary currently supports config loading, database initialization, CA tooling, and admin seeding. The serve command will be fully wired in an upcoming release.
+
 ## Prerequisites
 
 - **Go 1.25+** — [install instructions](https://go.dev/doc/install)
@@ -27,7 +29,7 @@ npm run build
 cd ..
 ```
 
-The build output lands in `web/dist/` and is embedded into the server binary at compile time. If you want the server to serve the frontend, rebuild the server binary after building the frontend:
+The build output lands in `internal/server/frontend/dist/` and is embedded into the server binary at compile time. If you want the server to serve the frontend, rebuild the server binary after building the frontend:
 
 ```bash
 go build -o claude-plane-server ./cmd/server
@@ -38,20 +40,20 @@ go build -o claude-plane-server ./cmd/server
 claude-plane uses mTLS for agent-to-server communication. The server includes a built-in CA tool:
 
 ```bash
-# Initialize the CA (creates ca/ directory)
+# Initialize the CA (creates ca/ directory with ca.pem and ca-key.pem)
 ./claude-plane-server ca init
 
-# Issue a server certificate
+# Issue a server certificate (creates server-cert/ with server.pem and server-key.pem)
 ./claude-plane-server ca issue-server --hostnames localhost
 
-# Issue an agent certificate
+# Issue an agent certificate (creates agent-cert/ with agent.pem and agent-key.pem)
 ./claude-plane-server ca issue-agent --machine-id worker-1
 ```
 
 This creates three directories:
-- `ca/` — CA certificate and private key
-- `server-cert/` — Server TLS certificate and key
-- `agent-cert/` — Agent mTLS certificate and key
+- `ca/` — `ca.pem` (certificate) and `ca-key.pem` (private key)
+- `server-cert/` — `server.pem` and `server-key.pem`
+- `agent-cert/` — `agent.pem` and `agent-key.pem`
 
 ## 4. Create Server Config
 
@@ -60,16 +62,16 @@ Create `server.toml`:
 ```toml
 [http]
 listen = "0.0.0.0:8443"
-tls_cert = "server-cert/server.crt"
-tls_key = "server-cert/server.key"
+tls_cert = "server-cert/server.pem"
+tls_key = "server-cert/server-key.pem"
 
 [grpc]
 listen = "0.0.0.0:9443"
 
 [tls]
-ca_cert = "ca/ca.crt"
-server_cert = "server-cert/server.crt"
-server_key = "server-cert/server.key"
+ca_cert = "ca/ca.pem"
+server_cert = "server-cert/server.pem"
+server_key = "server-cert/server-key.pem"
 
 [database]
 path = "claude-plane.db"
@@ -89,9 +91,9 @@ Create `agent.toml`:
 address = "localhost:9443"
 
 [tls]
-ca_cert = "ca/ca.crt"
-agent_cert = "agent-cert/agent.crt"
-agent_key = "agent-cert/agent.key"
+ca_cert = "ca/ca.pem"
+agent_cert = "agent-cert/agent.pem"
+agent_key = "agent-cert/agent-key.pem"
 
 [agent]
 machine_id = "worker-1"

@@ -17,6 +17,7 @@ export function useTerminalSession(
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [status, setStatus] = useState<TerminalStatus>('connecting');
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- containerRef is a stable ref, intentionally excluded
   useEffect(() => {
     if (!containerRef.current || !sessionId) return;
 
@@ -55,6 +56,7 @@ export function useTerminalSession(
     );
     ws.binaryType = 'arraybuffer';
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing status for new WS connection
     setStatus('connecting');
 
     ws.onopen = () => {
@@ -127,7 +129,7 @@ export function useTerminalSession(
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId]); // containerRef intentionally excluded -- ref identity is stable
+  }, [sessionId]);
 
   const fitTerminal = useCallback(() => {
     fitAddonRef.current?.fit();

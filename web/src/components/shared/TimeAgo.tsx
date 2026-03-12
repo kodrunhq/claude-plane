@@ -10,6 +10,7 @@ export function TimeAgo({ date, className }: TimeAgoProps) {
   const [text, setText] = useState(() => formatTimeAgo(date));
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with external time source
     setText(formatTimeAgo(date));
 
     const interval = setInterval(() => {
