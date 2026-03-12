@@ -81,16 +81,21 @@ func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) e
 		oldCancel()
 	}
 
-	// Persist to DB outside the lock. On failure, roll back the in-memory state.
+	// Persist to DB outside the lock. On failure, roll back the in-memory state
+	// only if it's still our agent (a newer connection may have replaced us).
 	if err := cm.store.UpsertMachine(machineID, agent.MaxSessions); err != nil {
 		cm.mu.Lock()
-		delete(cm.agents, machineID)
+		if cm.agents[machineID] == agent {
+			delete(cm.agents, machineID)
+		}
 		cm.mu.Unlock()
 		return fmt.Errorf("upsert machine on register: %w", err)
 	}
 	if err := cm.store.UpdateMachineStatus(machineID, "connected", time.Now()); err != nil {
 		cm.mu.Lock()
-		delete(cm.agents, machineID)
+		if cm.agents[machineID] == agent {
+			delete(cm.agents, machineID)
+		}
 		cm.mu.Unlock()
 		return fmt.Errorf("update status on register: %w", err)
 	}

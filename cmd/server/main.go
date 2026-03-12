@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -152,14 +154,34 @@ func newSeedAdminCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath, _ := cmd.Flags().GetString("db")
 			email, _ := cmd.Flags().GetString("email")
-			password, _ := cmd.Flags().GetString("password")
+			passwordFile, _ := cmd.Flags().GetString("password-file")
 			name, _ := cmd.Flags().GetString("name")
 
 			if email == "" {
 				return fmt.Errorf("--email is required")
 			}
-			if password == "" {
-				return fmt.Errorf("--password is required")
+
+			var password string
+			if passwordFile != "" {
+				data, err := os.ReadFile(passwordFile)
+				if err != nil {
+					return fmt.Errorf("reading password file: %w", err)
+				}
+				password = strings.TrimSpace(string(data))
+			} else {
+				// Read from stdin
+				fmt.Fprint(os.Stderr, "Enter admin password: ")
+				scanner := bufio.NewScanner(os.Stdin)
+				if scanner.Scan() {
+					password = scanner.Text()
+				}
+				if err := scanner.Err(); err != nil {
+					return fmt.Errorf("reading password from stdin: %w", err)
+				}
+			}
+
+			if len(password) < 8 {
+				return fmt.Errorf("password must be at least 8 characters")
 			}
 
 			s, err := store.NewStore(dbPath)
@@ -178,7 +200,7 @@ func newSeedAdminCmd() *cobra.Command {
 	}
 	cmd.Flags().String("db", "claude-plane.db", "Path to SQLite database file")
 	cmd.Flags().String("email", "", "Admin email address")
-	cmd.Flags().String("password", "", "Admin password")
+	cmd.Flags().String("password-file", "", "Path to file containing admin password")
 	cmd.Flags().String("name", "Admin", "Admin display name")
 	return cmd
 }

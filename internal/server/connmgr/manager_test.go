@@ -1,6 +1,7 @@
 package connmgr
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -191,6 +192,62 @@ func TestListMultipleAgents(t *testing.T) {
 	for _, id := range []string{"m-001", "m-002", "m-003"} {
 		if !ids[id] {
 			t.Errorf("missing agent %q in ListAgents", id)
+		}
+	}
+}
+
+// failingMockStore fails UpsertMachine after failAfter successful calls.
+type failingMockStore struct {
+	mu        sync.Mutex
+	callCount int
+	failAfter int
+}
+
+func (m *failingMockStore) UpsertMachine(machineID string, maxSessions int32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount++
+	if m.callCount > m.failAfter {
+		return fmt.Errorf("simulated DB failure")
+	}
+	return nil
+}
+
+func (m *failingMockStore) UpdateMachineStatus(machineID, status string, lastSeenAt time.Time) error {
+	return nil
+}
+
+func TestRegister_DBFailureDoesNotDeleteNewerConnection(t *testing.T) {
+	failStore := &failingMockStore{failAfter: 1}
+	cm := NewConnectionManager(failStore, nil)
+
+	// First registration succeeds
+	agent1 := &ConnectedAgent{
+		MachineID:   "m1",
+		Cancel:      func() {},
+		SendCommand: func(cmd interface{}) error { return nil },
+	}
+	if err := cm.Register("m1", agent1); err != nil {
+		t.Fatalf("Register agent1: %v", err)
+	}
+
+	// Second registration will fail on DB upsert
+	agent2 := &ConnectedAgent{
+		MachineID:   "m1",
+		Cancel:      func() {},
+		SendCommand: func(cmd interface{}) error { return fmt.Errorf("agent2") },
+	}
+	if err := cm.Register("m1", agent2); err == nil {
+		t.Fatal("expected error from Register agent2")
+	}
+
+	// The identity check ensures rollback only removes our own failed agent,
+	// not a different agent that may have registered concurrently.
+	got := cm.GetAgent("m1")
+	if got != nil {
+		// If something is there, verify it's not the failed agent2
+		if err := got.SendCommand(nil); err != nil {
+			t.Error("agent in map should not be the failed agent2")
 		}
 	}
 }

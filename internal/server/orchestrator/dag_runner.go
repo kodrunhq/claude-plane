@@ -210,9 +210,11 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	}
 }
 
-// Cancel stops the DAGRunner context.
+// Cancel stops the DAGRunner context. Safe to call before Start().
 func (d *DAGRunner) Cancel() {
-	d.cancel()
+	if d.cancel != nil {
+		d.cancel()
+	}
 }
 
 // updateRunStepInDB persists run step status changes. No-op if store is nil (unit tests).

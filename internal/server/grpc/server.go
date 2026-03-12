@@ -205,12 +205,22 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	}
 	recvCh := make(chan recvResult, 1)
 
-	for {
-		go func() {
+	// Single goroutine for receiving — exits when stream closes or context cancels
+	go func() {
+		for {
 			event, err := stream.Recv()
-			recvCh <- recvResult{event, err}
-		}()
+			select {
+			case recvCh <- recvResult{event, err}:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
 
+	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -219,6 +229,13 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				return nil
 			}
 			if res.err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				s.logger.Error("stream receive error",
+					"machine_id", machineID,
+					"error", res.err,
+				)
 				return res.err
 			}
 			s.logger.Debug("agent event received", "machine_id", machineID, "event", res.event)
