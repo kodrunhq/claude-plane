@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 1 of 6 (Foundation)
-Plan: 1 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: Executing
-Last activity: 2026-03-12 -- Completed 01-01-PLAN.md
+Last activity: 2026-03-12 -- Completed 01-03-PLAN.md
 
-Progress: [█░░░░░░░░░] 5%
+Progress: [██░░░░░░░░] 15%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 4min
-- Total execution time: 0.07 hours
+- Total plans completed: 3
+- Average duration: 3.7min
+- Total execution time: 0.18 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 1 | 4min | 4min |
+| 01-foundation | 3 | 11min | 3.7min |
 
 **Recent Trend:**
-- Last 5 plans: 4min
+- Last 5 plans: 4min, 4min, 3min
 - Trend: Starting
 
 *Updated after each plan completion*
@@ -44,6 +44,8 @@ Recent decisions affecting current work:
 
 - Used STANDARD buf lint category with RPC naming exceptions to keep domain-aligned names from design doc
 - Accepted Go toolchain auto-upgrade to 1.25 for golang.org/x/crypto compatibility
+- Set SQLite pragmas explicitly after sql.Open (modernc.org/sqlite does not support _pragma DSN syntax)
+- Used BEGIN IMMEDIATE with inline SQL for migrations
 
 ### Pending Todos
 
@@ -57,5 +59,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-12
-Stopped at: Completed 01-01-PLAN.md (Go module + protobuf scaffold)
+Stopped at: Completed 01-03-PLAN.md (SQLite store + admin seeding)
 Resume file: None
