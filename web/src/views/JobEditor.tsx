@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Plus, Save, Play, ArrowLeft } from 'lucide-react';
+import { Plus, Save, Play, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { JobRunHistory } from '../components/jobs/JobRunHistory.tsx';
 import { toast } from 'sonner';
 import { DAGCanvas } from '../components/dag/DAGCanvas.tsx';
 import { StepEditor } from '../components/jobs/StepEditor.tsx';
@@ -40,6 +41,7 @@ export function JobEditor() {
   const [jobName, setJobName] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
+  const [showRunHistory, setShowRunHistory] = useState(!isNew);
 
   // Sync job data when loaded
   useEffect(() => {
@@ -225,43 +227,67 @@ export function JobEditor() {
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
-        {/* DAG Canvas (left) */}
-        <div className="flex-1 min-w-0">
-          {steps.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
-              <p>No steps yet. Click "Add Step" to begin.</p>
-              {isNew && !jobId && (
-                <div className="mt-4 w-64">
-                  <JobMetaForm
-                    name={jobName}
-                    description={jobDescription}
-                    onChange={handleMetaChange}
-                  />
-                </div>
-              )}
-            </div>
-          ) : (
-            <DAGCanvas
-              steps={steps}
-              dependencies={dependencies}
-              editable
-              selectedStepId={selectedStepId}
-              onNodeClick={selectStep}
-              onConnect={handleConnect}
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* DAG + Step Editor row */}
+        <div className="flex flex-1 min-h-0">
+          {/* DAG Canvas (left) */}
+          <div className="flex-1 min-w-0">
+            {steps.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
+                <p>No steps yet. Click "Add Step" to begin.</p>
+                {isNew && !jobId && (
+                  <div className="mt-4 w-64">
+                    <JobMetaForm
+                      name={jobName}
+                      description={jobDescription}
+                      onChange={handleMetaChange}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <DAGCanvas
+                steps={steps}
+                dependencies={dependencies}
+                editable
+                selectedStepId={selectedStepId}
+                onNodeClick={selectStep}
+                onConnect={handleConnect}
+              />
+            )}
+          </div>
+
+          {/* Step Editor (right panel) */}
+          <div className="w-80 border-l border-gray-700 bg-bg-secondary shrink-0">
+            <StepEditor
+              step={selectedStep}
+              machines={machines ?? []}
+              onSave={handleStepSave}
+              onDelete={handleStepDelete}
             />
-          )}
+          </div>
         </div>
 
-        {/* Step Editor (right panel) */}
-        <div className="w-80 border-l border-gray-700 bg-bg-secondary shrink-0">
-          <StepEditor
-            step={selectedStep}
-            machines={machines ?? []}
-            onSave={handleStepSave}
-            onDelete={handleStepDelete}
-          />
-        </div>
+        {/* Run History (collapsible, only for existing jobs) */}
+        {effectiveJobId && (
+          <div className="border-t border-gray-700 shrink-0">
+            <button
+              onClick={() => setShowRunHistory((prev) => !prev)}
+              className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-secondary hover:bg-bg-tertiary transition-colors"
+            >
+              <span className="flex-1 text-left">Run History</span>
+              {showRunHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {showRunHistory && (
+              <div className="max-h-64 overflow-y-auto">
+                <JobRunHistory
+                  jobId={effectiveJobId}
+                  onRunClick={(runId) => navigate(`/runs/${runId}`)}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
