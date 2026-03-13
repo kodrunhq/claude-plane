@@ -39,9 +39,19 @@ export interface Run {
   run_id: string;
   job_id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  trigger_type?: string;
+  job_name?: string;
   started_at?: string;
   completed_at?: string;
   created_at: string;
+}
+
+export interface ListRunsParams {
+  job_id?: string;
+  status?: string;
+  trigger_type?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface RunStep {

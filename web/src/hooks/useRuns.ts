@@ -4,7 +4,7 @@ import { jobsApi } from '../api/jobs.ts';
 export function useRuns(jobId: string | undefined) {
   return useQuery({
     queryKey: ['runs', 'list', jobId],
-    queryFn: () => jobsApi.listRuns(jobId!),
+    queryFn: () => jobsApi.listRuns({ job_id: jobId! }),
     enabled: !!jobId,
   });
 }
