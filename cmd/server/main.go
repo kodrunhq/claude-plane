@@ -25,6 +25,7 @@ import (
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
+	"github.com/kodrunhq/claude-plane/internal/server/scheduler"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
@@ -265,6 +266,65 @@ func newServeCmd() *cobra.Command {
 			connMgr.SetPublisher(eventBus)
 			orch.SetPublisher(eventBus)
 
+			// ---- Cron scheduler ----
+			schedStore := &scheduler.ScheduleStoreFuncs{
+				ListEnabledSchedulesFn: func(c context.Context) ([]scheduler.CronSchedule, error) {
+					storeSchedules, err := s.ListEnabledSchedules(c)
+					if err != nil {
+						return nil, err
+					}
+					result := make([]scheduler.CronSchedule, len(storeSchedules))
+					for i, ss := range storeSchedules {
+						result[i] = scheduler.CronSchedule{
+							ScheduleID:      ss.ScheduleID,
+							JobID:           ss.JobID,
+							CronExpr:        ss.CronExpr,
+							Timezone:        ss.Timezone,
+							Enabled:         ss.Enabled,
+							NextRunAt:       ss.NextRunAt,
+							LastTriggeredAt: ss.LastTriggeredAt,
+						}
+					}
+					return result, nil
+				},
+				GetScheduleFn: func(c context.Context, scheduleID string) (*scheduler.CronSchedule, error) {
+					ss, err := s.GetSchedule(c, scheduleID)
+					if err != nil {
+						return nil, err
+					}
+					return &scheduler.CronSchedule{
+						ScheduleID:      ss.ScheduleID,
+						JobID:           ss.JobID,
+						CronExpr:        ss.CronExpr,
+						Timezone:        ss.Timezone,
+						Enabled:         ss.Enabled,
+						NextRunAt:       ss.NextRunAt,
+						LastTriggeredAt: ss.LastTriggeredAt,
+					}, nil
+				},
+				UpdateScheduleTimestampsFn: func(c context.Context, scheduleID string, lastTriggered, nextRun time.Time) error {
+					return s.UpdateScheduleTimestamps(c, scheduleID, lastTriggered, nextRun)
+				},
+			}
+
+			// Event publisher adapter — bridges scheduler.Event to event.Event for the bus.
+			schedEventBus := &scheduler.EventPublisherFuncs{
+				PublishFn: func(c context.Context, ev scheduler.Event) error {
+					return eventBus.Publish(c, event.Event{
+						EventID:   ev.EventID,
+						Type:      ev.Type,
+						Timestamp: ev.Timestamp,
+						Source:    ev.Source,
+						Payload:   ev.Payload,
+					})
+				},
+			}
+
+			sched := scheduler.NewScheduler(schedStore, schedEventBus, slog.Default())
+			if err := sched.Start(ctx); err != nil {
+				return fmt.Errorf("start scheduler: %w", err)
+			}
+
 			// Handlers
 			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
 			sessionHandler.SetPublisher(eventBus)
@@ -282,9 +342,11 @@ func newServeCmd() *cobra.Command {
 			ingestSecrets := cfg.Webhooks.InboundSecrets()
 			ingestHandler := handler.NewIngestHandler(eventBus, ingestSecrets, slog.Default())
 
+			scheduleHandler := handler.NewScheduleHandler(s, s, sched, handlerClaimsGetter)
+
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
-			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler)
+			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler)
 
 			// Mount SPA frontend as catch-all
 			router.Handle("/*", frontend.NewSPAHandler())
@@ -321,6 +383,8 @@ func newServeCmd() *cobra.Command {
 			if err := httpServer.Shutdown(shutdownCtx); err != nil {
 				slog.Error("HTTP shutdown error", "error", err)
 			}
+
+			sched.Stop()
 
 			// GracefulStop can block indefinitely waiting for in-flight streams.
 			// Run it in a goroutine and fall back to Stop() if the timeout expires.

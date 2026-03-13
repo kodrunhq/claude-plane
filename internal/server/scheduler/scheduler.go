@@ -240,3 +240,31 @@ func (s *Scheduler) Stop() {
 	stopCtx := s.cron.Stop()
 	<-stopCtx.Done()
 }
+
+// ScheduleStoreFuncs satisfies ScheduleStore via injected function closures.
+type ScheduleStoreFuncs struct {
+	ListEnabledSchedulesFn     func(ctx context.Context) ([]CronSchedule, error)
+	GetScheduleFn              func(ctx context.Context, scheduleID string) (*CronSchedule, error)
+	UpdateScheduleTimestampsFn func(ctx context.Context, scheduleID string, lastTriggered, nextRun time.Time) error
+}
+
+func (f *ScheduleStoreFuncs) ListEnabledSchedules(ctx context.Context) ([]CronSchedule, error) {
+	return f.ListEnabledSchedulesFn(ctx)
+}
+
+func (f *ScheduleStoreFuncs) GetSchedule(ctx context.Context, scheduleID string) (*CronSchedule, error) {
+	return f.GetScheduleFn(ctx, scheduleID)
+}
+
+func (f *ScheduleStoreFuncs) UpdateScheduleTimestamps(ctx context.Context, scheduleID string, lastTriggered, nextRun time.Time) error {
+	return f.UpdateScheduleTimestampsFn(ctx, scheduleID, lastTriggered, nextRun)
+}
+
+// EventPublisherFuncs satisfies EventPublisher via an injected function closure.
+type EventPublisherFuncs struct {
+	PublishFn func(ctx context.Context, event Event) error
+}
+
+func (f *EventPublisherFuncs) Publish(ctx context.Context, event Event) error {
+	return f.PublishFn(ctx, event)
+}
