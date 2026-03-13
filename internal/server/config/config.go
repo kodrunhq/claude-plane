@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -21,6 +22,7 @@ type ServerConfig struct {
 	Webhooks  WebhooksConfig  `toml:"webhooks"`
 	Provision ProvisionConfig `toml:"provision"`
 	CA        CAConfig        `toml:"ca"`
+	Secrets   SecretsConfig   `toml:"secrets"`
 }
 
 // WebhooksConfig groups all webhook-related configuration.
@@ -118,6 +120,47 @@ type AuthConfig struct {
 	TokenTTL         string `toml:"token_ttl"`
 	RegistrationMode string `toml:"registration_mode"`
 	InviteCode       string `toml:"invite_code"`
+}
+
+// SecretsConfig holds encryption settings for the credentials vault.
+type SecretsConfig struct {
+	// EncryptionKey is a 32-byte hex-encoded key used for AES-256-GCM encryption.
+	// If empty, the CLAUDE_PLANE_ENCRYPTION_KEY environment variable is checked.
+	// For production, always set this to a stable 64-hex-character (32-byte) value.
+	EncryptionKey     string `toml:"encryption_key"`
+	EncryptionKeyFile string `toml:"encryption_key_file"`
+}
+
+// ParseEncryptionKey resolves and decodes the 32-byte AES-256 encryption key.
+// Resolution order: EncryptionKeyFile > EncryptionKey > CLAUDE_PLANE_ENCRYPTION_KEY env var.
+// Returns an error if the resolved key is not a 64-character hex string (32 bytes).
+func (s *SecretsConfig) ParseEncryptionKey() ([]byte, error) {
+	raw := s.EncryptionKey
+
+	if s.EncryptionKeyFile != "" {
+		data, err := os.ReadFile(s.EncryptionKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("read secrets.encryption_key_file %q: %w", s.EncryptionKeyFile, err)
+		}
+		raw = strings.TrimSpace(string(data))
+	}
+
+	if raw == "" {
+		raw = os.Getenv("CLAUDE_PLANE_ENCRYPTION_KEY")
+	}
+
+	if raw == "" {
+		return nil, fmt.Errorf("secrets.encryption_key not configured (set in config or CLAUDE_PLANE_ENCRYPTION_KEY env var)")
+	}
+
+	key, err := hex.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("secrets.encryption_key must be hex-encoded: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("secrets.encryption_key must decode to exactly 32 bytes (64 hex chars), got %d bytes", len(key))
+	}
+	return key, nil
 }
 
 // GetRegistrationMode returns the configured registration mode, defaulting to "closed".

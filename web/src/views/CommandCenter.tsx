@@ -1,18 +1,25 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Terminal, Server, Activity, Plus, AlertCircle, RefreshCw } from 'lucide-react';
+import { Terminal, Server, Activity, Plus, AlertCircle, RefreshCw, Workflow, Play, Clock } from 'lucide-react';
 import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
+import { useJobs } from '../hooks/useJobs.ts';
+import { useRuns } from '../hooks/useRuns.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { MachineCard } from '../components/machines/MachineCard.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import { StatusBadge } from '../components/shared/StatusBadge.tsx';
+import { TimeAgo } from '../components/shared/TimeAgo.tsx';
 import { toast } from 'sonner';
+import type { Job, Run } from '../types/job.ts';
 
 export function CommandCenter() {
   const navigate = useNavigate();
   const { data: sessions, isLoading: sessionsLoading, error: sessionsError, refetch: refetchSessions } = useSessions();
   const { data: machines, isLoading: machinesLoading, error: machinesError, refetch: refetchMachines } = useMachines();
+  const { data: jobs, isLoading: jobsLoading } = useJobs();
+  const { data: runs, isLoading: runsLoading } = useRuns({ limit: 20 });
   const terminateSession = useTerminateSession();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -28,8 +35,30 @@ export function CommandCenter() {
     [machines],
   );
 
+  const recentJobs = useMemo(
+    () => [...(jobs ?? [])].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5),
+    [jobs],
+  );
+
+  const recentRuns = useMemo(
+    () => [...(runs ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 5),
+    [runs],
+  );
+
+  const completionRate = useMemo(() => {
+    const allRuns = runs ?? [];
+    if (allRuns.length === 0) return null;
+    const completed = allRuns.filter((r) => r.status === 'completed').length;
+    const terminal = allRuns.filter(
+      (r) => r.status === 'completed' || r.status === 'failed' || r.status === 'cancelled',
+    ).length;
+    if (terminal === 0) return null;
+    return Math.round((completed / terminal) * 100);
+  }, [runs]);
+
   const error = sessionsError || machinesError;
   const isLoading = sessionsLoading || machinesLoading;
+  const isJobsRunsLoading = jobsLoading || runsLoading;
 
   function handleAttach(id: string) {
     navigate(`/sessions/${id}`);
@@ -89,8 +118,8 @@ export function CommandCenter() {
         </button>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Stats Row — Sessions & Machines */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard
           icon={<Activity size={24} />}
           label="Active Sessions"
@@ -106,6 +135,98 @@ export function CommandCenter() {
           label="Total Sessions"
           value={isLoading ? '--' : String(sessions?.length ?? 0)}
         />
+      </div>
+
+      {/* Stats Row — Jobs & Runs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard
+          icon={<Workflow size={24} />}
+          label="Total Jobs"
+          value={isJobsRunsLoading ? '--' : String(jobs?.length ?? 0)}
+          href="/jobs"
+        />
+        <StatCard
+          icon={<Play size={24} />}
+          label="Recent Runs"
+          value={isJobsRunsLoading ? '--' : String(runs?.length ?? 0)}
+          href="/runs"
+        />
+        <StatCard
+          icon={<Activity size={24} />}
+          label="Completion Rate"
+          value={isJobsRunsLoading ? '--' : completionRate !== null ? `${completionRate}%` : 'N/A'}
+        />
+        <StatCard
+          icon={<Clock size={24} />}
+          label="Jobs Run"
+          value={isJobsRunsLoading ? '--' : String(countJobsWithRuns(jobs ?? []))}
+          href="/jobs"
+        />
+      </div>
+
+      {/* Recent Jobs & Recent Runs — 2-column */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Recent Jobs */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+              Recent Jobs
+            </h2>
+            <Link
+              to="/jobs"
+              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              View All Jobs
+            </Link>
+          </div>
+          {isJobsRunsLoading ? (
+            <SkeletonList count={3} />
+          ) : recentJobs.length === 0 ? (
+            <div className="bg-bg-secondary rounded-lg p-6 text-center">
+              <p className="text-sm text-text-secondary">No jobs yet.</p>
+              <Link
+                to="/jobs/new"
+                className="inline-block mt-2 text-xs text-accent-primary hover:text-accent-primary/80"
+              >
+                Create your first job
+              </Link>
+            </div>
+          ) : (
+            <div className="bg-bg-secondary rounded-lg divide-y divide-border-primary">
+              {recentJobs.map((job) => (
+                <RecentJobRow key={job.job_id} job={job} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Recent Runs */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+              Recent Runs
+            </h2>
+            <Link
+              to="/runs"
+              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              View All Runs
+            </Link>
+          </div>
+          {isJobsRunsLoading ? (
+            <SkeletonList count={3} />
+          ) : recentRuns.length === 0 ? (
+            <div className="bg-bg-secondary rounded-lg p-6 text-center">
+              <p className="text-sm text-text-secondary">No runs yet.</p>
+            </div>
+          ) : (
+            <div className="bg-bg-secondary rounded-lg divide-y divide-border-primary">
+              {recentRuns.map((run) => (
+                <RecentRunRow key={run.run_id} run={run} />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Active Sessions */}
@@ -184,14 +305,100 @@ export function CommandCenter() {
   );
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
+function countJobsWithRuns(jobs: Job[]): number {
+  return jobs.filter((j) => j.last_run_status !== undefined && j.last_run_status !== null).length;
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  href?: string;
+}) {
+  const content = (
     <div className="bg-bg-secondary rounded-lg p-4 flex items-center gap-4">
-      <div className="text-accent-primary">{icon}</div>
+      <div className="text-accent-primary shrink-0">{icon}</div>
       <div>
         <p className="text-2xl font-bold text-text-primary">{value}</p>
         <p className="text-xs text-text-secondary">{label}</p>
       </div>
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link to={href} className="block hover:opacity-80 transition-opacity">
+        {content}
+      </Link>
+    );
+  }
+  return content;
+}
+
+function RecentJobRow({ job }: { job: Job }) {
+  return (
+    <Link
+      to={`/jobs/${job.job_id}`}
+      className="flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary transition-colors first:rounded-t-lg last:rounded-b-lg"
+    >
+      <div className="flex-1 min-w-0 mr-3">
+        <p className="text-sm font-medium text-text-primary truncate">{job.name}</p>
+        <p className="text-xs text-text-secondary mt-0.5">
+          {job.step_count != null ? `${job.step_count} step${job.step_count !== 1 ? 's' : ''}` : 'No steps'}
+          {' · '}
+          <TimeAgo date={job.updated_at} />
+        </p>
+      </div>
+      {job.last_run_status && (
+        <StatusBadge status={job.last_run_status} size="sm" />
+      )}
+    </Link>
+  );
+}
+
+function RecentRunRow({ run }: { run: Run }) {
+  const date = run.started_at ?? run.created_at;
+  return (
+    <Link
+      to={`/runs/${run.run_id}`}
+      className="flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary transition-colors first:rounded-t-lg last:rounded-b-lg"
+    >
+      <div className="flex-1 min-w-0 mr-3">
+        <p className="text-sm font-medium text-text-primary truncate">
+          {run.job_name ?? run.job_id}
+        </p>
+        <p className="text-xs text-text-secondary mt-0.5">
+          {run.trigger_type ? (
+            <span className="capitalize">{run.trigger_type}</span>
+          ) : (
+            'manual'
+          )}
+          {' · '}
+          <TimeAgo date={date} />
+        </p>
+      </div>
+      <StatusBadge status={run.status} size="sm" />
+    </Link>
+  );
+}
+
+function SkeletonList({ count }: { count: number }) {
+  return (
+    <div className="bg-bg-secondary rounded-lg divide-y divide-border-primary">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="px-4 py-3 flex items-center gap-3 animate-pulse">
+          <div className="flex-1">
+            <div className="h-4 bg-bg-tertiary rounded w-1/2 mb-2" />
+            <div className="h-3 bg-bg-tertiary rounded w-1/3" />
+          </div>
+          <div className="h-4 bg-bg-tertiary rounded w-16" />
+        </div>
+      ))}
     </div>
   );
 }

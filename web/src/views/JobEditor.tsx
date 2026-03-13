@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { DAGCanvas } from '../components/dag/DAGCanvas.tsx';
 import { StepEditor } from '../components/jobs/StepEditor.tsx';
 import { SchedulePanel } from '../components/jobs/SchedulePanel.tsx';
+import { TriggerPanel } from '../components/jobs/TriggerPanel.tsx';
 import { JobMetaForm } from '../components/jobs/JobMetaForm.tsx';
 import {
   useJob,
@@ -43,7 +44,7 @@ export function JobEditor() {
   const [jobDescription, setJobDescription] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
-  const [rightTab, setRightTab] = useState<'steps' | 'schedules'>('steps');
+  const [rightTab, setRightTab] = useState<'steps' | 'schedules' | 'triggers'>('steps');
 
   // Sync job data when loaded
   useEffect(() => {
@@ -285,17 +286,27 @@ export function JobEditor() {
                   >
                     Schedules
                   </button>
+                  <button
+                    onClick={() => setRightTab('triggers')}
+                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                      rightTab === 'triggers'
+                        ? 'text-text-primary border-b-2 border-accent-primary'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Triggers
+                  </button>
                 </div>
-                {rightTab === 'steps' ? (
+                {rightTab === 'steps' && (
                   <StepEditor
                     step={selectedStep}
                     machines={machines ?? []}
                     onSave={handleStepSave}
                     onDelete={handleStepDelete}
                   />
-                ) : (
-                  <SchedulePanel jobId={effectiveJobId} />
                 )}
+                {rightTab === 'schedules' && <SchedulePanel jobId={effectiveJobId} />}
+                {rightTab === 'triggers' && <TriggerPanel jobId={effectiveJobId} />}
               </>
             ) : (
               <StepEditor

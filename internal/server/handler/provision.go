@@ -64,6 +64,56 @@ func (h *ProvisionHandler) CreateProvision(w http.ResponseWriter, r *http.Reques
 	httputil.WriteJSON(w, http.StatusCreated, result)
 }
 
+// ListTokens handles GET /api/v1/provision/tokens (admin-only, JWT-protected).
+func (h *ProvisionHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
+	claims := h.getClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	tokens, err := h.store.ListProvisioningTokens(r.Context())
+	if err != nil {
+		slog.Error("list provisioning tokens failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Return an empty array instead of null when there are no tokens.
+	if tokens == nil {
+		tokens = []store.ProvisioningTokenSummary{}
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, tokens)
+}
+
+// RevokeToken handles DELETE /api/v1/provision/tokens/{tokenID} (admin-only, JWT-protected).
+func (h *ProvisionHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
+	claims := h.getClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	tokenID := chi.URLParam(r, "tokenID")
+	if tokenID == "" {
+		writeError(w, http.StatusBadRequest, "token ID is required")
+		return
+	}
+
+	if err := h.store.RevokeProvisioningToken(r.Context(), tokenID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "token not found")
+			return
+		}
+		slog.Error("revoke provisioning token failed", "error", err, "token_id", tokenID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ServeScript handles GET /api/v1/provision/{token}/script (token-authenticated, no JWT).
 func (h *ProvisionHandler) ServeScript(w http.ResponseWriter, r *http.Request) {
 	tokenID := chi.URLParam(r, "token")
@@ -115,9 +165,11 @@ func (h *ProvisionHandler) ServeScript(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(script))
 }
 
-// RegisterProvisionRoutes registers the JWT-protected provisioning route.
+// RegisterProvisionRoutes registers the JWT-protected provisioning routes.
 func RegisterProvisionRoutes(r chi.Router, h *ProvisionHandler) {
 	r.Post("/api/v1/provision/agent", h.CreateProvision)
+	r.Get("/api/v1/provision/tokens", h.ListTokens)
+	r.Delete("/api/v1/provision/tokens/{tokenID}", h.RevokeToken)
 }
 
 // RegisterProvisionPublicRoutes registers the public (token-authenticated) provisioning routes.
