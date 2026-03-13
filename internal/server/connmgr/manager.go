@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
@@ -46,10 +47,25 @@ type AgentInfo struct {
 // ConnectionManager tracks connected agents in-memory and persists status
 // changes to the database via MachineStore.
 type ConnectionManager struct {
-	mu     sync.RWMutex
-	agents map[string]*ConnectedAgent
-	store  MachineStore
-	logger *slog.Logger
+	mu        sync.RWMutex
+	agents    map[string]*ConnectedAgent
+	store     MachineStore
+	logger    *slog.Logger
+	publisher event.Publisher
+}
+
+// SetPublisher sets the event publisher used to emit machine connectivity events.
+func (cm *ConnectionManager) SetPublisher(p event.Publisher) {
+	cm.publisher = p
+}
+
+// publishEvent emits an event if a publisher is configured.
+func (cm *ConnectionManager) publishEvent(ctx context.Context, e event.Event) {
+	if cm.publisher != nil {
+		if err := cm.publisher.Publish(ctx, e); err != nil {
+			cm.logger.Warn("failed to publish event", "event_type", e.Type, "error", err)
+		}
+	}
 }
 
 // NewConnectionManager creates a new ConnectionManager backed by the given store.
@@ -103,6 +119,7 @@ func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) e
 	}
 
 	cm.logger.Info("agent registered", "machine_id", machineID, "max_sessions", agent.MaxSessions)
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineConnected, machineID))
 	return nil
 }
 
@@ -118,6 +135,7 @@ func (cm *ConnectionManager) Disconnect(machineID string) {
 	}
 
 	cm.logger.Info("agent disconnected", "machine_id", machineID)
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID))
 }
 
 // GetAgent returns the ConnectedAgent for the given machineID, or nil if not connected.
