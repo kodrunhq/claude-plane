@@ -113,6 +113,21 @@ func (s *Store) UpdateSessionStatus(id, status string) error {
 	return nil
 }
 
+// UpdateSessionStatusIfNotTerminal updates the session status only if it is not
+// already in a terminal state (completed, failed, terminated). This prevents
+// agent exit events from overwriting user-initiated terminations.
+func (s *Store) UpdateSessionStatusIfNotTerminal(id, status string) error {
+	query := `UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP
+		WHERE session_id = ? AND status NOT IN (?, ?, ?)`
+	result, err := s.writer.Exec(query, status, id, StatusCompleted, StatusFailed, StatusTerminated)
+	if err != nil {
+		return fmt.Errorf("update session status if not terminal: %w", err)
+	}
+	// Zero rows affected is expected if the session is already terminal — not an error.
+	_ = result
+	return nil
+}
+
 // DeleteSession removes a session from the table.
 func (s *Store) DeleteSession(id string) error {
 	result, err := s.writer.Exec(`DELETE FROM sessions WHERE session_id = ?`, id)

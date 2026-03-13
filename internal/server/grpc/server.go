@@ -35,6 +35,7 @@ type GRPCServer struct {
 // SessionStore is the interface the gRPC server uses to persist session status changes.
 type SessionStore interface {
 	UpdateSessionStatus(id, status string) error
+	UpdateSessionStatusIfNotTerminal(id, status string) error
 }
 
 // agentService implements the AgentServiceServer interface.
@@ -285,7 +286,8 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					if se.GetExitCode() != 0 {
 						exitStatus = status.Failed
 					}
-					if err := s.sessionStore.UpdateSessionStatus(se.GetSessionId(), exitStatus); err != nil {
+					// Only update if not already in a terminal state (e.g., user-initiated "terminated").
+					if err := s.sessionStore.UpdateSessionStatusIfNotTerminal(se.GetSessionId(), exitStatus); err != nil {
 						s.logger.Warn("failed to update session status on exit",
 							"session_id", se.GetSessionId(), "exit_code", se.GetExitCode(), "error", err)
 					}
