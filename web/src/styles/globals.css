@@ -21,3 +21,105 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 }
+
+/* ─── Card ─────────────────────────────────────────────────────────────────── */
+
+/* Usage: <div class="card"> */
+.card {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid #30363d;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 150ms ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Gradient header ───────────────────────────────────────────────────────── */
+
+/* Usage: <div class="gradient-header"> */
+.gradient-header {
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-secondary) 0%,
+    var(--color-bg-tertiary) 100%
+  );
+  border-bottom: 1px solid #30363d;
+}
+
+/* ─── Table alternating rows ────────────────────────────────────────────────── */
+
+/*
+ * Apply to <tbody> rows via Tailwind's even: modifier in JSX:
+ *   className="even:bg-[#1a1f27] odd:bg-transparent"
+ * Or apply .table-striped to <tbody> and rely on these rules:
+ */
+.table-striped tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.table-striped tr:hover {
+  background-color: rgba(88, 166, 255, 0.06);
+  transition: background-color 100ms ease;
+}
+
+/* ─── Button variants ───────────────────────────────────────────────────────── */
+
+/*
+ * Base reset shared by all button variants. Add a variant class alongside:
+ *   <button class="btn btn-primary">Save</button>
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  user-select: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #1f6feb;
+  border-color: #388bfd;
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #388bfd;
+  box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
+}
+
+.btn-secondary {
+  background-color: #21262d;
+  border-color: #30363d;
+  color: var(--color-text-primary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #30363d;
+  border-color: #484f58;
+}
+
+.btn-danger {
+  background-color: #b91c1c;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
