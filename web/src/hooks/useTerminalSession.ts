@@ -16,10 +16,16 @@ export function useTerminalSession(
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [status, setStatus] = useState<TerminalStatus>('connecting');
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- containerRef is a stable ref, intentionally excluded
+  // Keep a stable reference to the actual container element so the effect
+  // re-runs if the underlying DOM node changes.
   useEffect(() => {
-    if (!containerRef.current || !sessionId) return;
+    setContainerEl(containerRef.current);
+  }, [containerRef]);
+
+  useEffect(() => {
+    if (!containerEl || !sessionId) return;
 
     // 1. Create xterm.js instance
     const term = new Terminal({
@@ -43,7 +49,7 @@ export function useTerminalSession(
       // Falls back to canvas/DOM renderer silently
     }
 
-    term.open(containerRef.current);
+    term.open(containerEl);
     fitAddon.fit();
 
     termRef.current = term;
@@ -56,7 +62,6 @@ export function useTerminalSession(
     );
     ws.binaryType = 'arraybuffer';
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initializing status for new WS connection
     setStatus('connecting');
 
     ws.onopen = () => {
@@ -114,7 +119,7 @@ export function useTerminalSession(
     const observer = new ResizeObserver(() => {
       fitAddon.fit();
     });
-    observer.observe(containerRef.current);
+    observer.observe(containerEl);
 
     // Cleanup
     return () => {
@@ -132,7 +137,7 @@ export function useTerminalSession(
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId]);
+  }, [sessionId, containerEl]);
 
   const fitTerminal = useCallback(() => {
     fitAddonRef.current?.fit();
