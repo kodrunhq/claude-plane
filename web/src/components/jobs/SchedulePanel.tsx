@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Trash2, Pause, Play, Clock, Calendar, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import cronstrue from 'cronstrue';
-import { CronExpressionParser } from 'cron-parser';
+import { parseExpression } from 'cron-parser';
 import {
   useSchedules,
   useCreateSchedule,
@@ -48,7 +48,7 @@ function parseCronDescription(expr: string): string {
 
 function getNextRuns(expr: string, tz: string, count: number): Date[] {
   try {
-    const interval = CronExpressionParser.parse(expr, { tz });
+    const interval = parseExpression(expr, { tz });
     const runs: Date[] = [];
     for (let i = 0; i < count; i++) {
       runs.push(interval.next().toDate());
