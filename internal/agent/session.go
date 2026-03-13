@@ -27,10 +27,11 @@ type Session struct {
 	scrollback     *ScrollbackWriter
 	scrollbackPath string
 
-	mu       sync.Mutex
-	status   string // status.Running, status.Completed, status.Failed
-	exitCode int
-	logger   *slog.Logger
+	mu             sync.Mutex
+	status         string // status.Running, status.Completed, status.Failed
+	exitCode       int
+	logger         *slog.Logger
+	outputObserver func([]byte) // optional callback for each output chunk
 }
 
 // NewSession spawns a process in a PTY and starts read/wait goroutines.
@@ -124,6 +125,14 @@ func (s *Session) readLoop() {
 				if sbErr := s.scrollback.WriteOutput(data); sbErr != nil {
 					s.logger.Warn("scrollback write failed", "error", sbErr)
 				}
+			}
+
+			// Notify output observer (e.g., idle detector for job sessions).
+			s.mu.Lock()
+			obs := s.outputObserver
+			s.mu.Unlock()
+			if obs != nil {
+				obs(data)
 			}
 
 			// Non-blocking send: drop data if channel is full.
@@ -256,6 +265,14 @@ func (s *Session) StartedAt() time.Time {
 // ScrollbackPath returns the path to the scrollback file.
 func (s *Session) ScrollbackPath() string {
 	return s.scrollbackPath
+}
+
+// SetOutputObserver sets a callback that receives every output chunk from the
+// PTY. Must be called before output starts flowing (i.e., right after NewSession).
+func (s *Session) SetOutputObserver(fn func([]byte)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.outputObserver = fn
 }
 
 // ScrollbackOffset returns the current byte offset of the scrollback file.

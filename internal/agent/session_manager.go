@@ -147,6 +147,45 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command)
 
+	// If the command includes an initial prompt (from a job step), set up an
+	// IdleDetector that watches for Claude CLI's startup prompt (❯) to submit
+	// the prompt at exactly the right time, then watches for the completion
+	// prompt to send /exit and gracefully terminate the session.
+	if prompt := cmd.GetInitialPrompt(); prompt != "" {
+		sessionID := cmd.GetSessionId()
+
+		detector := NewIdleDetector(
+			// onReady: CLI startup prompt detected — submit the initial prompt.
+			func() {
+				input := []byte(prompt + "\r")
+				if err := sess.WriteInput(input); err != nil {
+					sm.logger.Error("failed to write initial prompt",
+						"session_id", sessionID,
+						"error", err,
+					)
+				} else {
+					sm.logger.Info("initial prompt submitted",
+						"session_id", sessionID,
+						"prompt_len", len(prompt),
+					)
+				}
+			},
+			// onIdle: CLI completion prompt detected — send /exit.
+			func() {
+				sm.logger.Info("idle prompt detected, sending /exit",
+					"session_id", sessionID,
+				)
+				if err := sess.WriteInput([]byte("/exit\r")); err != nil {
+					sm.logger.Error("failed to send /exit after idle",
+						"session_id", sessionID,
+						"error", err,
+					)
+				}
+			},
+		)
+		sess.SetOutputObserver(detector.Feed)
+	}
+
 	// Send status event.
 	sm.sendEvent(&pb.AgentEvent{
 		Event: &pb.AgentEvent_SessionStatus{
@@ -209,21 +248,29 @@ func (sm *SessionManager) handleKill(cmd *pb.KillSessionCmd) {
 }
 
 func (sm *SessionManager) handleAttach(cmd *pb.AttachSessionCmd) {
-	sess := sm.getSession(cmd.GetSessionId())
-	if sess == nil {
-		sm.logger.Warn("attach for unknown session", "session_id", cmd.GetSessionId())
+	sessionID := cmd.GetSessionId()
+	sess := sm.getSession(sessionID)
+
+	if sess != nil {
+		// Live session: send scrollback then enable live relay.
+		sm.sendScrollbackChunks(sessionID, sess.ScrollbackPath())
+
+		sm.attachedMu.Lock()
+		sm.attached[sessionID] = true
+		sm.attachedMu.Unlock()
+
+		sm.logger.Info("session attached", "session_id", sessionID)
 		return
 	}
 
-	// Send scrollback chunks first to catch up the viewer.
-	sm.sendScrollbackChunks(cmd.GetSessionId(), sess.ScrollbackPath())
-
-	// Mark session as attached for live relay.
-	sm.attachedMu.Lock()
-	sm.attached[cmd.GetSessionId()] = true
-	sm.attachedMu.Unlock()
-
-	sm.logger.Info("session attached", "session_id", cmd.GetSessionId())
+	// Session no longer in memory (already exited). Try to replay scrollback
+	// from the persisted .cast file on disk.
+	scrollbackPath := filepath.Join(sm.dataDir, sessionID+".cast")
+	sm.logger.Info("session not in memory, replaying scrollback from disk",
+		"session_id", sessionID,
+		"path", scrollbackPath,
+	)
+	sm.sendScrollbackChunks(sessionID, scrollbackPath)
 }
 
 func (sm *SessionManager) handleDetach(cmd *pb.DetachSessionCmd) {

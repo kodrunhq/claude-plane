@@ -50,7 +50,13 @@ export function useTerminalSession(
     }
 
     term.open(containerEl);
-    fitAddon.fit();
+
+    // Defer initial fit to next frame so the browser has completed layout
+    // and the container has its final dimensions. Without this, the first
+    // render can have incorrect sizing (fixed by any subsequent resize).
+    const initialFitFrame = requestAnimationFrame(() => {
+      fitAddon.fit();
+    });
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -62,6 +68,8 @@ export function useTerminalSession(
     );
     ws.binaryType = 'arraybuffer';
 
+    let scrollbackTimeout: number | undefined;
+
     setStatus('connecting');
 
     ws.onopen = () => {
@@ -72,6 +80,12 @@ export function useTerminalSession(
       // Fit the terminal to the container — this triggers term.onResize which
       // sends the resize control message to the server automatically.
       fitAddon.fit();
+
+      // Safety timeout: if scrollback_end never arrives, transition to live
+      // mode after 10 seconds to avoid being stuck on "Loading history...".
+      scrollbackTimeout = window.setTimeout(() => {
+        setStatus((prev) => (prev === 'replaying' ? 'live' : prev));
+      }, 10_000);
     };
 
     ws.onmessage = (event: MessageEvent) => {
@@ -83,6 +97,7 @@ export function useTerminalSession(
         try {
           const msg = JSON.parse(event.data as string) as { type: string };
           if (msg.type === 'scrollback_end') {
+            clearTimeout(scrollbackTimeout);
             setStatus('live');
           }
         } catch {
@@ -123,6 +138,8 @@ export function useTerminalSession(
 
     // Cleanup
     return () => {
+      cancelAnimationFrame(initialFitFrame);
+      clearTimeout(scrollbackTimeout);
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
       observer.disconnect();
