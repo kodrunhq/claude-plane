@@ -143,7 +143,7 @@ func newServeCmd() *cobra.Command {
 			// Handlers
 			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
 			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
-			eventsWSHandler := session.HandleEventsWS(authSvc, slog.Default())
+			eventsWSHandler := session.HandleEventsWS(authSvc, nil, slog.Default()) // fanout wired in Task 7
 
 			// Orchestrator (stub executor until session-backed execution is wired)
 			orch := orchestrator.NewOrchestrator(ctx, s, noopExecutor{})
