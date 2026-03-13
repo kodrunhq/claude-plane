@@ -194,7 +194,10 @@ func (s *Store) RevokeProvisioningToken(ctx context.Context, token string) error
 	if err != nil {
 		return fmt.Errorf("revoke provisioning token: %w", err)
 	}
-	affected, _ := result.RowsAffected()
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("revoke provisioning token rows affected: %w", err)
+	}
 	if affected == 0 {
 		return fmt.Errorf("revoke provisioning token: %w", ErrNotFound)
 	}

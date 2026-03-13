@@ -33,7 +33,7 @@ interface ExpandedRowProps {
 function ExpandedPayload({ payload }: ExpandedRowProps) {
   return (
     <tr className="bg-bg-primary/60">
-      <td colSpan={4} className="px-6 py-4">
+      <td colSpan={5} className="px-6 py-4">
         <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap break-all bg-bg-secondary border border-gray-700 rounded-md p-4 max-h-64 overflow-auto">
           {JSON.stringify(payload, null, 2)}
         </pre>

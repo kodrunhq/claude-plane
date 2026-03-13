@@ -150,7 +150,7 @@ func (s *SecretsConfig) ParseEncryptionKey() ([]byte, error) {
 	}
 
 	if raw == "" {
-		return nil, fmt.Errorf("secrets.encryption_key is required (set in config or CLAUDE_PLANE_ENCRYPTION_KEY env var)")
+		return nil, fmt.Errorf("secrets.encryption_key not configured (set in config or CLAUDE_PLANE_ENCRYPTION_KEY env var)")
 	}
 
 	key, err := hex.DecodeString(raw)
