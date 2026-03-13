@@ -54,13 +54,13 @@ func (s *Store) ListEvents(ctx context.Context, filter EventFilter) ([]event.Eve
 	args := make([]interface{}, 0, 4)
 
 	if filter.TypePattern != "" && filter.TypePattern != "*" {
-		sqlPattern := typePatternToSQL(filter.TypePattern)
 		if strings.Contains(filter.TypePattern, "*") {
 			query += ` AND event_type LIKE ? ESCAPE '\'`
+			args = append(args, typePatternToSQL(filter.TypePattern))
 		} else {
 			query += ` AND event_type = ?`
+			args = append(args, filter.TypePattern)
 		}
-		args = append(args, sqlPattern)
 	}
 
 	if !filter.Since.IsZero() {

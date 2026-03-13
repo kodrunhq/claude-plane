@@ -127,7 +127,7 @@ func TestClientMatchesEvent(t *testing.T) {
 
 // --- WSFanout ---
 
-func TestWSFanoutDeliveresToClient(t *testing.T) {
+func TestWSFanoutDeliversToClient(t *testing.T) {
 	bus := NewBus(nullLogger())
 	defer bus.Close()
 
