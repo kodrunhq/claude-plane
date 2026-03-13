@@ -137,6 +137,7 @@ func (e *SessionStepExecutor) ExecuteStep(
 					Rows: defaultTermRows,
 					Cols: defaultTermCols,
 				},
+				InitialPrompt: runStep.PromptSnapshot,
 			},
 		},
 	}
