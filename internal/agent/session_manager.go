@@ -147,43 +147,43 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command)
 
-	// If the command includes an initial prompt (from a job step), submit it
-	// after a short delay to give the CLI time to start up and be ready for input.
-	// Also set up an idle detector to send /exit when the CLI finishes responding.
+	// If the command includes an initial prompt (from a job step), set up an
+	// IdleDetector that watches for Claude CLI's startup prompt (❯) to submit
+	// the prompt at exactly the right time, then watches for the completion
+	// prompt to send /exit and gracefully terminate the session.
 	if prompt := cmd.GetInitialPrompt(); prompt != "" {
 		sessionID := cmd.GetSessionId()
 
-		// Set up idle detection: when Claude CLI returns to its input prompt
-		// after completing the response, send /exit to gracefully terminate.
-		detector := NewIdleDetector(func() {
-			sm.logger.Info("idle prompt detected, sending /exit",
-				"session_id", sessionID,
-			)
-			if err := sess.WriteInput([]byte("/exit\r")); err != nil {
-				sm.logger.Error("failed to send /exit after idle",
+		detector := NewIdleDetector(
+			// onReady: CLI startup prompt detected — submit the initial prompt.
+			func() {
+				input := []byte(prompt + "\r")
+				if err := sess.WriteInput(input); err != nil {
+					sm.logger.Error("failed to write initial prompt",
+						"session_id", sessionID,
+						"error", err,
+					)
+				} else {
+					sm.logger.Info("initial prompt submitted",
+						"session_id", sessionID,
+						"prompt_len", len(prompt),
+					)
+				}
+			},
+			// onIdle: CLI completion prompt detected — send /exit.
+			func() {
+				sm.logger.Info("idle prompt detected, sending /exit",
 					"session_id", sessionID,
-					"error", err,
 				)
-			}
-		})
+				if err := sess.WriteInput([]byte("/exit\r")); err != nil {
+					sm.logger.Error("failed to send /exit after idle",
+						"session_id", sessionID,
+						"error", err,
+					)
+				}
+			},
+		)
 		sess.SetOutputObserver(detector.Feed)
-
-		go func() {
-			time.Sleep(2 * time.Second)
-			input := []byte(prompt + "\r")
-			if err := sess.WriteInput(input); err != nil {
-				sm.logger.Error("failed to write initial prompt",
-					"session_id", sessionID,
-					"error", err,
-				)
-			} else {
-				sm.logger.Info("initial prompt submitted",
-					"session_id", sessionID,
-					"prompt_len", len(prompt),
-				)
-				detector.Arm()
-			}
-		}()
 	}
 
 	// Send status event.
