@@ -5,6 +5,7 @@ import { JobRunHistory } from '../components/jobs/JobRunHistory.tsx';
 import { toast } from 'sonner';
 import { DAGCanvas } from '../components/dag/DAGCanvas.tsx';
 import { StepEditor } from '../components/jobs/StepEditor.tsx';
+import { SchedulePanel } from '../components/jobs/SchedulePanel.tsx';
 import { JobMetaForm } from '../components/jobs/JobMetaForm.tsx';
 import {
   useJob,
@@ -42,6 +43,7 @@ export function JobEditor() {
   const [jobDescription, setJobDescription] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
+  const [rightTab, setRightTab] = useState<'steps' | 'schedules'>('steps');
 
   // Sync job data when loaded
   useEffect(() => {
@@ -257,14 +259,52 @@ export function JobEditor() {
             )}
           </div>
 
-          {/* Step Editor (right panel) */}
-          <div className="w-80 border-l border-gray-700 bg-bg-secondary shrink-0">
-            <StepEditor
-              step={selectedStep}
-              machines={machines ?? []}
-              onSave={handleStepSave}
-              onDelete={handleStepDelete}
-            />
+          {/* Right panel */}
+          <div className="w-80 border-l border-gray-700 bg-bg-secondary shrink-0 flex flex-col">
+            {effectiveJobId ? (
+              <>
+                {/* Tab bar */}
+                <div className="flex border-b border-gray-700 shrink-0">
+                  <button
+                    onClick={() => setRightTab('steps')}
+                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                      rightTab === 'steps'
+                        ? 'text-text-primary border-b-2 border-accent-primary'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Steps
+                  </button>
+                  <button
+                    onClick={() => setRightTab('schedules')}
+                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                      rightTab === 'schedules'
+                        ? 'text-text-primary border-b-2 border-accent-primary'
+                        : 'text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    Schedules
+                  </button>
+                </div>
+                {rightTab === 'steps' ? (
+                  <StepEditor
+                    step={selectedStep}
+                    machines={machines ?? []}
+                    onSave={handleStepSave}
+                    onDelete={handleStepDelete}
+                  />
+                ) : (
+                  <SchedulePanel jobId={effectiveJobId} />
+                )}
+              </>
+            ) : (
+              <StepEditor
+                step={selectedStep}
+                machines={machines ?? []}
+                onSave={handleStepSave}
+                onDelete={handleStepDelete}
+              />
+            )}
           </div>
         </div>
 

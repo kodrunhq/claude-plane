@@ -40,6 +40,7 @@ export interface Run {
   job_id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   trigger_type?: string;
+  trigger_detail?: string;
   job_name?: string;
   started_at?: string;
   completed_at?: string;

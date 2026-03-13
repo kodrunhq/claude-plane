@@ -3,6 +3,7 @@ import { Plus, Play, AlertCircle, RefreshCw } from 'lucide-react';
 import { useJobs, useTriggerRun } from '../hooks/useJobs.ts';
 import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { ScheduleIndicator } from '../components/jobs/ScheduleIndicator.tsx';
 import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
@@ -97,6 +98,7 @@ export function JobsPage() {
                       {job.last_run_status}
                     </span>
                   )}
+                  <ScheduleIndicator jobId={job.job_id} />
                   <span>{formatTimeAgo(job.created_at)}</span>
                 </div>
               </div>
