@@ -18,6 +18,9 @@ var ErrInvalidMachineID = errors.New("invalid machine ID")
 // ErrUnsupportedPlatform is returned when the OS/arch combination is not supported.
 var ErrUnsupportedPlatform = errors.New("unsupported platform")
 
+// ErrInvalidTTL is returned when the token TTL is not positive.
+var ErrInvalidTTL = errors.New("invalid TTL")
+
 // ProvisionResult is the result returned after successfully creating a provisioning token.
 type ProvisionResult struct {
 	Token       string    `json:"token"`
@@ -58,6 +61,16 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	if !tlsutil.ValidMachineID.MatchString(machineID) {
 		return nil, fmt.Errorf("%w: %q", ErrInvalidMachineID, machineID)
 	}
+	// gRPC auth requires CN="agent-{machineID}"; ValidMachineID allows up to 64 chars,
+	// so the full CN must also fit within that limit.
+	cn := "agent-" + machineID
+	if !tlsutil.ValidMachineID.MatchString(cn) {
+		return nil, fmt.Errorf("%w: %q (too long with agent- prefix)", ErrInvalidMachineID, machineID)
+	}
+
+	if ttl <= 0 {
+		return nil, fmt.Errorf("%w: must be positive", ErrInvalidTTL)
+	}
 
 	if targetOS == "" {
 		targetOS = "linux"
@@ -71,7 +84,7 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	}
 
 	// gRPC mTLS auth requires CN="agent-{machineID}", so prefix the CN accordingly.
-	certPEM, keyPEM, err := tlsutil.IssueAgentCertPEM(svc.caDir, "agent-"+machineID)
+	certPEM, keyPEM, err := tlsutil.IssueAgentCertPEM(svc.caDir, cn)
 	if err != nil {
 		return nil, fmt.Errorf("issue agent cert: %w", err)
 	}

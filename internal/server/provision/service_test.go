@@ -163,6 +163,42 @@ func TestCreateAgentProvision_UnsupportedPlatform(t *testing.T) {
 	}
 }
 
+func TestCreateAgentProvision_MachineIDTooLongWithPrefix(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	// 60 chars is valid alone, but "agent-" + 60 = 66 chars exceeds the 64-char CN limit.
+	longID := strings.Repeat("a", 60)
+	_, err := svc.CreateAgentProvision(ctx, longID, "linux", "amd64", "admin", time.Hour)
+	if err == nil {
+		t.Fatal("expected error for machine ID too long with agent- prefix")
+	}
+	if !errors.Is(err, provision.ErrInvalidMachineID) {
+		t.Errorf("expected ErrInvalidMachineID, got %v", err)
+	}
+}
+
+func TestCreateAgentProvision_InvalidTTL(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	ctx := context.Background()
+
+	_, err := svc.CreateAgentProvision(ctx, "my-machine", "linux", "amd64", "admin", 0)
+	if err == nil {
+		t.Fatal("expected error for zero TTL")
+	}
+	if !errors.Is(err, provision.ErrInvalidTTL) {
+		t.Errorf("expected ErrInvalidTTL, got %v", err)
+	}
+
+	_, err = svc.CreateAgentProvision(ctx, "my-machine", "linux", "amd64", "admin", -time.Hour)
+	if err == nil {
+		t.Fatal("expected error for negative TTL")
+	}
+	if !errors.Is(err, provision.ErrInvalidTTL) {
+		t.Errorf("expected ErrInvalidTTL, got %v", err)
+	}
+}
+
 func TestCreateAgentProvision_CurlCommandContainsToken(t *testing.T) {
 	svc, _, _ := newTestService(t)
 	ctx := context.Background()
