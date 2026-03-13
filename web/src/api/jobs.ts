@@ -9,6 +9,7 @@ import type {
   CreateJobParams,
   CreateStepParams,
   UpdateStepParams,
+  ListRunsParams,
 } from '../types/job.ts';
 
 export const jobsApi = {
@@ -60,7 +61,16 @@ export const jobsApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
-  listRuns: (jobId: string) => request<Run[]>(`/runs?job_id=${encodeURIComponent(jobId)}`),
+  listRuns: (params?: ListRunsParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.job_id) searchParams.set('job_id', params.job_id);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.trigger_type) searchParams.set('trigger_type', params.trigger_type);
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.offset) searchParams.set('offset', String(params.offset));
+    const qs = searchParams.toString();
+    return request<Run[]>(`/runs${qs ? `?${qs}` : ''}`);
+  },
   getRun: (id: string) => request<RunDetail>(`/runs/${encodeURIComponent(id)}`),
   cancelRun: (id: string) =>
     request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),

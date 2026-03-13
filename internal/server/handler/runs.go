@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+)
+
+const (
+	defaultListRunsLimit = 50
+	maxListRunsLimit     = 200
 )
 
 // RunHandler handles REST endpoints for run management.
@@ -117,25 +123,45 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListRuns handles GET /api/v1/runs.
-// Required query param ?job_id for filtering by job.
+// All query params are optional: ?job_id, ?status, ?trigger_type, ?limit (default 50, max 200), ?offset (default 0).
+// Always returns []RunWithJobName.
 func (h *RunHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
-	jobID := r.URL.Query().Get("job_id")
-	if jobID == "" {
-		writeError(w, http.StatusBadRequest, "job_id query parameter is required")
-		return
+	q := r.URL.Query()
+	jobID := q.Get("job_id")
+
+	if jobID != "" {
+		if !h.authorizeJobAccess(w, r, jobID) {
+			return
+		}
 	}
 
-	if !h.authorizeJobAccess(w, r, jobID) {
-		return
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = defaultListRunsLimit
+	}
+	if limit > maxListRunsLimit {
+		limit = maxListRunsLimit
+	}
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	if offset < 0 {
+		offset = 0
 	}
 
-	runs, err := h.store.ListRuns(r.Context(), jobID)
+	opts := store.ListRunsOptions{
+		JobID:       jobID,
+		Status:      q.Get("status"),
+		TriggerType: q.Get("trigger_type"),
+		Limit:       limit,
+		Offset:      offset,
+	}
+
+	runs, err := h.store.ListAllRuns(r.Context(), opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	if runs == nil {
-		runs = []store.Run{}
+		runs = []store.RunWithJobName{}
 	}
 	writeJSON(w, http.StatusOK, runs)
 }
