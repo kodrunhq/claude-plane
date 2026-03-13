@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
@@ -88,6 +89,10 @@ func (h *WebhookHandler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "url is required")
 		return
 	}
+	if parsed, err := url.Parse(req.URL); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		writeError(w, http.StatusBadRequest, "url must be a valid http or https URL")
+		return
+	}
 	if len(req.Events) == 0 {
 		writeError(w, http.StatusBadRequest, "events is required")
 		return
@@ -157,6 +162,10 @@ func (h *WebhookHandler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.URL == "" {
 		writeError(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	if parsed, err := url.Parse(req.URL); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		writeError(w, http.StatusBadRequest, "url must be a valid http or https URL")
 		return
 	}
 	if len(req.Events) == 0 {

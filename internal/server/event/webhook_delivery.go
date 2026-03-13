@@ -8,8 +8,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,6 +48,7 @@ type WebhookStore interface {
 	CreateDelivery(ctx context.Context, d WebhookDelivery) error
 	UpdateDelivery(ctx context.Context, d WebhookDelivery) error
 	PendingDeliveries(ctx context.Context) ([]WebhookDelivery, error)
+	GetEventByID(ctx context.Context, eventID string) (*Event, error)
 }
 
 const (
@@ -100,6 +103,7 @@ func (d *WebhookDeliverer) Handler() HandlerFunc {
 			return fmt.Errorf("webhook deliverer: list webhooks: %w", err)
 		}
 
+		var wg sync.WaitGroup
 		for _, wh := range webhooks {
 			if !wh.Enabled {
 				continue
@@ -125,8 +129,13 @@ func (d *WebhookDeliverer) Handler() HandlerFunc {
 				continue
 			}
 
-			d.deliver(ctx, wh, e, &delivery)
+			wg.Add(1)
+			go func(webhook Webhook, del WebhookDelivery) {
+				defer wg.Done()
+				d.deliver(context.Background(), webhook, e, &del)
+			}(wh, delivery)
 		}
+		wg.Wait()
 		return nil
 	}
 }
@@ -184,11 +193,17 @@ func (d *WebhookDeliverer) retryPending(ctx context.Context) {
 			continue
 		}
 
-		// Re-build a minimal event to re-send (only EventID matters for the body here;
-		// the retry sends the stored delivery which already has event_id).
-		// We reconstruct enough of the event to form the JSON body.
-		stub := Event{EventID: delivery.EventID}
-		d.deliver(ctx, wh, stub, &delivery)
+		// Look up the full event so the retry payload is complete.
+		fullEvent, err := d.store.GetEventByID(ctx, delivery.EventID)
+		if err != nil {
+			d.logger.Warn("webhook deliverer: get event for retry",
+				"delivery_id", delivery.DeliveryID,
+				"event_id", delivery.EventID,
+				"error", err,
+			)
+			continue
+		}
+		d.deliver(ctx, wh, *fullEvent, &delivery)
 	}
 }
 
@@ -219,7 +234,10 @@ func (d *WebhookDeliverer) deliver(ctx context.Context, wh Webhook, e Event, del
 		d.recordFailure(ctx, delivery, 0, err.Error())
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck
+		resp.Body.Close()
+	}()
 
 	delivery.ResponseCode = resp.StatusCode
 
