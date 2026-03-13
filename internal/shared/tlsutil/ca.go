@@ -197,7 +197,7 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 
 // writePEMFiles writes a certificate and ECDSA private key as PEM files.
 func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.PrivateKey) (err error) {
-	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", certName, err)
 	}
