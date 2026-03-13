@@ -50,6 +50,7 @@ const navSections: NavSection[] = [
     title: 'Monitoring',
     items: [
       { to: '/events', label: 'Events', icon: Activity },
+      { to: '/credentials', label: 'Credentials', icon: Lock },
     ],
   },
   {
@@ -58,7 +59,6 @@ const navSections: NavSection[] = [
     items: [
       { to: '/users', label: 'Users', icon: Users },
       { to: '/provisioning', label: 'Provisioning', icon: KeyRound },
-      { to: '/credentials', label: 'Credentials', icon: Lock },
     ],
   },
 ];

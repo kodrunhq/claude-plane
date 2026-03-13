@@ -342,12 +342,15 @@ func newServeCmd() *cobra.Command {
 			scheduleHandler := handler.NewScheduleHandler(s, s, sched, handlerClaimsGetter)
 			userHandler := handler.NewUserHandler(s, handlerClaimsGetter)
 
-			// Credentials vault handler — requires encryption key from config.
+			// Credentials vault handler — encryption key is optional.
+			// If not configured, credential endpoints will return 503.
+			var credentialHandler *handler.CredentialHandler
 			encryptionKey, err := cfg.Secrets.ParseEncryptionKey()
 			if err != nil {
-				return fmt.Errorf("resolve encryption key: %w", err)
+				slog.Warn("Credentials vault disabled: encryption key not configured", "error", err)
+			} else {
+				credentialHandler = handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
 			}
-			credentialHandler := handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
 
 			// Provisioning service
 			httpAddr := cfg.Provision.ExternalHTTPAddress

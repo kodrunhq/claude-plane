@@ -4,8 +4,6 @@ import type { User, CreateUserParams, UpdateUserParams } from '../types/user.ts'
 export const usersApi = {
   list: () => request<User[]>('/users'),
 
-  get: (id: string) => request<User>(`/users/${encodeURIComponent(id)}`),
-
   create: (params: CreateUserParams) =>
     request<User>('/users', {
       method: 'POST',
