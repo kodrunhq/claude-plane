@@ -44,7 +44,7 @@ func GenerateCA(outDir string) error {
 			CommonName: "claude-plane-ca",
 		},
 		NotBefore:             now,
-		NotAfter:              now.Add(10 * 365 * 24 * time.Hour),
+		NotAfter:              now.AddDate(10, 0, 0),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
@@ -98,7 +98,7 @@ func IssueServerCert(caDir, outDir string, hostnames []string) error {
 			CommonName: "claude-plane-server",
 		},
 		NotBefore:   now,
-		NotAfter:    now.Add(2 * 365 * 24 * time.Hour),
+		NotAfter:    now.AddDate(2, 0, 0),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:    dnsNames,
@@ -144,7 +144,7 @@ func IssueAgentCert(caDir, outDir, machineID string) error {
 			CommonName: machineID,
 		},
 		NotBefore:   now,
-		NotAfter:    now.Add(2 * 365 * 24 * time.Hour),
+		NotAfter:    now.AddDate(2, 0, 0),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
@@ -194,7 +194,7 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 
 // writePEMFiles writes a certificate and ECDSA private key as PEM files.
 func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.PrivateKey) (err error) {
-	certFile, err := os.Create(filepath.Join(dir, certName))
+	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", certName, err)
 	}
