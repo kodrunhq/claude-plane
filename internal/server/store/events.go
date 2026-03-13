@@ -55,7 +55,7 @@ func (s *Store) ListEvents(ctx context.Context, filter EventFilter) ([]event.Eve
 	if filter.TypePattern != "" && filter.TypePattern != "*" {
 		sqlPattern := typePatternToSQL(filter.TypePattern)
 		if strings.Contains(filter.TypePattern, "*") {
-			query += ` AND event_type LIKE ?`
+			query += ` AND event_type LIKE ? ESCAPE '\'`
 		} else {
 			query += ` AND event_type = ?`
 		}
@@ -106,16 +106,26 @@ func (s *Store) PurgeEvents(ctx context.Context, before time.Time) (int64, error
 	return n, nil
 }
 
+// escapeForLIKE escapes SQL LIKE special characters in s so that they are
+// treated as literals. The caller must add ESCAPE '\' to the LIKE clause.
+func escapeForLIKE(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 // typePatternToSQL converts a glob-style type pattern to a SQL LIKE pattern.
 // "run.*" → "run.%", "*" → "%" (though * alone is handled separately).
+// Literal %, _, and \ in the pattern are escaped before conversion so they
+// cannot be exploited as LIKE wildcards. Use ESCAPE '\' in the query.
 func typePatternToSQL(pattern string) string {
 	if pattern == "*" {
 		return "%"
 	}
-	// Replace trailing ".*" with ".%" for SQL LIKE matching.
-	if strings.HasSuffix(pattern, ".*") {
-		return strings.TrimSuffix(pattern, "*") + "%"
-	}
-	// Replace any remaining "*" with "%".
-	return strings.ReplaceAll(pattern, "*", "%")
+	// Escape SQL LIKE metacharacters first, then convert glob wildcards.
+	// escapeForLIKE escapes \, %, _ — but not *, so the subsequent
+	// ReplaceAll only replaces our intentional glob wildcards.
+	escaped := escapeForLIKE(pattern)
+	return strings.ReplaceAll(escaped, "*", "%")
 }

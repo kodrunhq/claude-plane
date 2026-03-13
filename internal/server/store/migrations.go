@@ -207,7 +207,7 @@ CREATE TABLE webhooks (
 CREATE TABLE webhook_deliveries (
     delivery_id    TEXT PRIMARY KEY,
     webhook_id     TEXT NOT NULL REFERENCES webhooks(webhook_id) ON DELETE CASCADE,
-    event_id       TEXT NOT NULL REFERENCES events(event_id),
+    event_id       TEXT NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
     status         TEXT NOT NULL DEFAULT 'pending',
     attempts       INTEGER NOT NULL DEFAULT 0,
     response_code  INTEGER,
