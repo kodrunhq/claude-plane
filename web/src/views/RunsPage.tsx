@@ -80,7 +80,7 @@ export function RunsPage() {
           ) : (
             <RunsTable
               runs={runs ?? []}
-              showJobName={true}
+              showJobName={selectedJobId === 'all'}
               onRowClick={(runId) => navigate(`/runs/${runId}`)}
             />
           )}

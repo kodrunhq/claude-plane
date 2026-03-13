@@ -41,7 +41,6 @@ export function RunDetail() {
   // Sync run steps to store
   useEffect(() => {
     if (runSteps.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to Zustand store
       setStepStatuses(runSteps);
     }
   }, [runSteps, setStepStatuses]);
@@ -97,7 +96,6 @@ export function RunDetail() {
     }
     const start = new Date(run.started_at).getTime();
     if (run.completed_at) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- computing final elapsed from completed run
       setElapsed(Math.floor((new Date(run.completed_at).getTime() - start) / 1000));
       return;
     }

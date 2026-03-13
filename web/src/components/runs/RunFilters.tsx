@@ -22,8 +22,7 @@ const STATUS_OPTIONS = [
 const TRIGGER_OPTIONS = [
   { value: 'all', label: 'All Triggers' },
   { value: 'manual', label: 'Manual' },
-  { value: 'cron', label: 'Cron' },
-  { value: 'api', label: 'API' },
+  { value: 'scheduled', label: 'Scheduled' },
 ];
 
 const SELECT_CLASS =
