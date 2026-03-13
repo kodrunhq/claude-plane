@@ -77,7 +77,7 @@ func (b *Bus) Publish(ctx context.Context, event Event) error {
 	}
 
 	for _, sub := range b.subscribers {
-		if !matchPattern(sub.pattern, event.Type) {
+		if !MatchPattern(sub.pattern, event.Type) {
 			continue
 		}
 		select {
@@ -188,9 +188,9 @@ func (b *Bus) drain(sub *subscriber) {
 	}
 }
 
-// matchPattern reports whether eventType matches pattern.
+// MatchPattern reports whether eventType matches pattern.
 // Supported forms: "*", "prefix.*", or exact equality.
-func matchPattern(pattern, eventType string) bool {
+func MatchPattern(pattern, eventType string) bool {
 	if pattern == "*" {
 		return true
 	}

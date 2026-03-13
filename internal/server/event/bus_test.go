@@ -449,7 +449,7 @@ func TestBuilderEventIDsAreUnique(t *testing.T) {
 	}
 }
 
-// --- matchPattern unit tests ---
+// --- MatchPattern unit tests ---
 
 func TestMatchPattern(t *testing.T) {
 	cases := []struct {
@@ -473,9 +473,9 @@ func TestMatchPattern(t *testing.T) {
 		{"trigger.*", TypeRunCreated, false},
 	}
 	for _, tc := range cases {
-		got := matchPattern(tc.pattern, tc.eventType)
+		got := MatchPattern(tc.pattern, tc.eventType)
 		if got != tc.want {
-			t.Errorf("matchPattern(%q, %q) = %v, want %v", tc.pattern, tc.eventType, got, tc.want)
+			t.Errorf("MatchPattern(%q, %q) = %v, want %v", tc.pattern, tc.eventType, got, tc.want)
 		}
 	}
 }
