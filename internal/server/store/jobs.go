@@ -520,12 +520,12 @@ func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) 
 // GetRunWithSteps retrieves a run with all its run steps.
 func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, error) {
 	var run Run
-	var startedAt, completedAt sql.NullTime
+	var startedAt, endedAt sql.NullTime
 	var triggerDetail sql.NullString
 	err := s.reader.QueryRowContext(ctx,
 		`SELECT run_id, job_id, status, trigger_type, COALESCE(trigger_detail, ''), started_at, ended_at, created_at
 		 FROM runs WHERE run_id = ?`, runID,
-	).Scan(&run.RunID, &run.JobID, &run.Status, &run.TriggerType, &triggerDetail, &startedAt, &completedAt, &run.CreatedAt)
+	).Scan(&run.RunID, &run.JobID, &run.Status, &run.TriggerType, &triggerDetail, &startedAt, &endedAt, &run.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("run %s: %w", runID, ErrNotFound)
 	}
@@ -538,8 +538,8 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 	if startedAt.Valid {
 		run.StartedAt = &startedAt.Time
 	}
-	if completedAt.Valid {
-		run.CompletedAt = &completedAt.Time
+	if endedAt.Valid {
+		run.CompletedAt = &endedAt.Time
 	}
 
 	rows, err := s.reader.QueryContext(ctx,

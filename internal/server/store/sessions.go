@@ -14,7 +14,9 @@ type Session struct {
 	Command    string    `json:"command"`
 	WorkingDir string    `json:"working_dir"`
 	Status     string    `json:"status"`
+	// CreatedAt corresponds to the database column `started_at`.
 	CreatedAt  time.Time `json:"created_at"`
+	// UpdatedAt corresponds to the database column `ended_at` (or CreatedAt if not ended).
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
@@ -40,11 +42,14 @@ func (s *Store) CreateSession(sess *Session) error {
 func (s *Store) GetSession(id string) (*Session, error) {
 	sess := &Session{}
 	var userID sql.NullString
+	// endedAt temporarily holds the database `ended_at` column, which is then
+	// mapped to Session.UpdatedAt (or left equal to CreatedAt if NULL).
 	var endedAt sql.NullTime
 	err := s.reader.QueryRow(`
 		SELECT session_id, machine_id, user_id, COALESCE(command, 'claude'),
 		       COALESCE(working_dir, ''), status, started_at, ended_at
 		FROM sessions WHERE session_id = ?`, id,
+	// Note: started_at -> sess.CreatedAt, ended_at -> endedAt (-> sess.UpdatedAt).
 	).Scan(&sess.SessionID, &sess.MachineID, &userID, &sess.Command,
 		&sess.WorkingDir, &sess.Status, &sess.CreatedAt, &endedAt)
 	if err == sql.ErrNoRows {
