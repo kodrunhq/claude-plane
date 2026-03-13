@@ -20,9 +20,9 @@ import (
 	"time"
 )
 
-// validMachineID matches alphanumeric IDs with hyphens/underscores, 1-64 chars,
+// ValidMachineID matches alphanumeric IDs with hyphens/underscores, 1-64 chars,
 // starting with an alphanumeric character.
-var validMachineID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+var ValidMachineID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 
 // GenerateCA creates a self-signed CA certificate and private key in outDir.
 // Files written: ca.pem (certificate), ca-key.pem (ECDSA P-256 private key).
@@ -127,8 +127,8 @@ func IssueServerCert(caDir, outDir string, hostnames []string) error {
 // The cert has CN=machineID for agent identity. Validity is 2 years.
 // ExtKeyUsage is ClientAuth.
 func IssueAgentCert(caDir, outDir, machineID string) error {
-	if !validMachineID.MatchString(machineID) {
-		return fmt.Errorf("invalid machineID %q: must match %s", machineID, validMachineID.String())
+	if !ValidMachineID.MatchString(machineID) {
+		return fmt.Errorf("invalid machineID %q: must match %s", machineID, ValidMachineID.String())
 	}
 
 	if err := os.MkdirAll(outDir, 0o700); err != nil {
@@ -255,6 +255,69 @@ func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.Pri
 	}
 
 	return nil
+}
+
+// IssueAgentCertPEM creates an agent certificate signed by the CA in caDir
+// and returns the certificate and key as PEM-encoded bytes.
+// Unlike IssueAgentCert, it does not write to disk.
+func IssueAgentCertPEM(caDir, machineID string) (certPEM, keyPEM []byte, err error) {
+	if !ValidMachineID.MatchString(machineID) {
+		return nil, nil, fmt.Errorf("invalid machineID %q: must match %s", machineID, ValidMachineID.String())
+	}
+
+	caCert, caKey, err := loadCA(caDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate agent key: %w", err)
+	}
+
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	now := time.Now()
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName: machineID,
+		},
+		NotBefore:   now,
+		NotAfter:    now.AddDate(2, 0, 0),
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &key.PublicKey, caKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create agent certificate: %w", err)
+	}
+
+	var certBuf bytes.Buffer
+	if err := pem.Encode(&certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+		return nil, nil, fmt.Errorf("encode cert PEM: %w", err)
+	}
+
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal EC key: %w", err)
+	}
+
+	var keyBuf bytes.Buffer
+	if err := pem.Encode(&keyBuf, &pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}); err != nil {
+		return nil, nil, fmt.Errorf("encode key PEM: %w", err)
+	}
+
+	return certBuf.Bytes(), keyBuf.Bytes(), nil
+}
+
+// ReadCACertPEM reads the CA certificate PEM from caDir.
+func ReadCACertPEM(caDir string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(caDir, "ca.pem"))
 }
 
 // randomSerial generates a random 128-bit serial number for certificates.

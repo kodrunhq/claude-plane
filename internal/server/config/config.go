@@ -12,13 +12,15 @@ import (
 
 // ServerConfig is the top-level configuration for the claude-plane server.
 type ServerConfig struct {
-	HTTP     HTTPConfig     `toml:"http"`
-	GRPC     GRPCConfig     `toml:"grpc"`
-	TLS      TLSConfig      `toml:"tls"`
-	Database DatabaseConfig `toml:"database"`
-	Auth     AuthConfig     `toml:"auth"`
-	Shutdown ShutdownConfig `toml:"shutdown"`
-	Webhooks WebhooksConfig `toml:"webhooks"`
+	HTTP      HTTPConfig      `toml:"http"`
+	GRPC      GRPCConfig      `toml:"grpc"`
+	TLS       TLSConfig       `toml:"tls"`
+	Database  DatabaseConfig  `toml:"database"`
+	Auth      AuthConfig      `toml:"auth"`
+	Shutdown  ShutdownConfig  `toml:"shutdown"`
+	Webhooks  WebhooksConfig  `toml:"webhooks"`
+	Provision ProvisionConfig `toml:"provision"`
+	CA        CAConfig        `toml:"ca"`
 }
 
 // WebhooksConfig groups all webhook-related configuration.
@@ -45,6 +47,26 @@ func (c *WebhooksConfig) InboundSecrets() map[string]string {
 		secrets[name] = src.Secret
 	}
 	return secrets
+}
+
+// ProvisionConfig configures external addresses for provisioning and agent registration.
+// These fields are optional and used only when provisioning features are enabled.
+type ProvisionConfig struct {
+	ExternalHTTPAddress string `toml:"external_http_address"` // e.g. "https://plane.example.com"
+	ExternalGRPCAddress string `toml:"external_grpc_address"` // e.g. "plane.example.com:9090"
+}
+
+// CAConfig configures the certificate authority directory.
+type CAConfig struct {
+	Dir string `toml:"dir"` // path to CA directory (default: "./ca")
+}
+
+// GetCADir returns the CA directory, defaulting to "./ca".
+func (c *CAConfig) GetCADir() string {
+	if c.Dir == "" {
+		return "./ca"
+	}
+	return c.Dir
 }
 
 // ShutdownConfig controls graceful shutdown behavior.

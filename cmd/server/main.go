@@ -13,9 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/kodrunhq/claude-plane/internal/server/agentdl"
 	"github.com/kodrunhq/claude-plane/internal/server/api"
 	"github.com/kodrunhq/claude-plane/internal/server/auth"
 	"github.com/kodrunhq/claude-plane/internal/server/config"
@@ -25,16 +27,16 @@ import (
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
+	"github.com/kodrunhq/claude-plane/internal/server/provision"
 	"github.com/kodrunhq/claude-plane/internal/server/scheduler"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/buildinfo"
 	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
 	// Prove generated proto package compiles.
 	_ "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
-
-var version = "0.1.0-dev"
 
 // noopExecutor is a stub StepExecutor that logs instead of executing.
 // Used until the real session-backed executor is wired up.
@@ -49,13 +51,14 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "claude-plane-server",
 		Short:   "Control plane for Claude CLI sessions",
-		Version: version,
+		Version: buildinfo.String(),
 	}
 
 	rootCmd.AddCommand(
 		newServeCmd(),
 		newCACmd(),
 		newSeedAdminCmd(),
+		newProvisionCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -344,9 +347,33 @@ func newServeCmd() *cobra.Command {
 
 			scheduleHandler := handler.NewScheduleHandler(s, s, sched, handlerClaimsGetter)
 
+			// Provisioning service
+			httpAddr := cfg.Provision.ExternalHTTPAddress
+			if httpAddr == "" {
+				httpAddr = "http://" + normalizeListenAddr(cfg.HTTP.Listen)
+			}
+			grpcAddr := cfg.Provision.ExternalGRPCAddress
+			if grpcAddr == "" {
+				grpcAddr = normalizeListenAddr(cfg.GRPC.Listen)
+			}
+			provisionSvc := provision.NewService(s, cfg.CA.GetCADir(), httpAddr, grpcAddr)
+			provisionHandler := handler.NewProvisionHandler(provisionSvc, s, handlerClaimsGetter)
+
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
 			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler)
+
+			// Agent binary download endpoint (public, no JWT required).
+			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)
+			agentdl.RegisterRoutes(router, dlHandler)
+
+			// Provisioning: JWT-protected route for creating tokens.
+			router.Group(func(r chi.Router) {
+				r.Use(api.JWTAuthMiddleware(authSvc))
+				handler.RegisterProvisionRoutes(r, provisionHandler)
+			})
+			// Provisioning: public route for fetching the install script (token-authenticated).
+			handler.RegisterProvisionPublicRoutes(router, provisionHandler)
 
 			// Mount SPA frontend as catch-all
 			router.Handle("/*", frontend.NewSPAHandler())
@@ -557,4 +584,84 @@ func newSeedAdminCmd() *cobra.Command {
 	cmd.Flags().String("password-file", "", "Path to file containing admin password")
 	cmd.Flags().String("name", "Admin", "Admin display name")
 	return cmd
+}
+
+func newProvisionCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "provision",
+		Short: "Provision a new agent machine",
+	}
+	cmd.AddCommand(newProvisionAgentCmd())
+	return cmd
+}
+
+func newProvisionAgentCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Generate provisioning token and install command for a new agent",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			configPath, _ := cmd.Flags().GetString("config")
+			machineID, _ := cmd.Flags().GetString("machine-id")
+			targetOS, _ := cmd.Flags().GetString("os")
+			targetArch, _ := cmd.Flags().GetString("arch")
+			ttlStr, _ := cmd.Flags().GetString("ttl")
+
+			if machineID == "" {
+				return fmt.Errorf("--machine-id is required")
+			}
+
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				return fmt.Errorf("parse --ttl: %w", err)
+			}
+
+			cfg, err := config.LoadServerConfig(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			s, err := store.NewStore(cfg.Database.Path)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer s.Close()
+
+			httpAddr := cfg.Provision.ExternalHTTPAddress
+			if httpAddr == "" {
+				httpAddr = "http://" + normalizeListenAddr(cfg.HTTP.Listen)
+			}
+			grpcAddr := cfg.Provision.ExternalGRPCAddress
+			if grpcAddr == "" {
+				grpcAddr = normalizeListenAddr(cfg.GRPC.Listen)
+			}
+
+			svc := provision.NewService(s, cfg.CA.GetCADir(), httpAddr, grpcAddr)
+
+			result, err := svc.CreateAgentProvision(context.Background(), machineID, targetOS, targetArch, "cli", ttl)
+			if err != nil {
+				return fmt.Errorf("create provision: %w", err)
+			}
+
+			fmt.Printf("Provisioning token created:\n")
+			fmt.Printf("  Token:   %s\n", result.Token)
+			fmt.Printf("  Expires: %s\n", result.ExpiresAt.Format(time.RFC3339))
+			fmt.Printf("\nRun on the target machine:\n  %s\n", result.CurlCommand)
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "server.toml", "Path to server TOML config file")
+	cmd.Flags().String("machine-id", "", "Machine identifier for the new agent (required)")
+	cmd.Flags().String("os", "linux", "Target OS (linux, darwin)")
+	cmd.Flags().String("arch", "amd64", "Target architecture (amd64, arm64)")
+	cmd.Flags().String("ttl", "1h", "Token time-to-live")
+	return cmd
+}
+
+// normalizeListenAddr converts bare-port listen addresses like ":8080" to
+// "localhost:8080" so they are usable as remote dial targets.
+func normalizeListenAddr(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "localhost" + addr
+	}
+	return addr
 }
