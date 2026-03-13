@@ -123,7 +123,7 @@ func (s *Store) ListEnabledSchedules(ctx context.Context) ([]CronSchedule, error
 	rows, err := s.reader.QueryContext(ctx,
 		`SELECT schedule_id, job_id, cron_expr, timezone, enabled,
 		        next_run_at, last_triggered_at, created_at, updated_at
-		 FROM cron_schedules WHERE enabled = 1 ORDER BY next_run_at`,
+		 FROM cron_schedules WHERE enabled = 1 ORDER BY next_run_at IS NULL, next_run_at`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled schedules: %w", err)
@@ -134,12 +134,13 @@ func (s *Store) ListEnabledSchedules(ctx context.Context) ([]CronSchedule, error
 }
 
 // UpdateSchedule updates the cron expression and timezone of an existing schedule.
+// Clears next_run_at so the scheduler recomputes it on reload.
 // Returns ErrNotFound if no schedule exists with that ID.
 func (s *Store) UpdateSchedule(ctx context.Context, p UpdateScheduleParams) (*CronSchedule, error) {
 	now := time.Now().UTC()
 
 	result, err := s.writer.ExecContext(ctx,
-		`UPDATE cron_schedules SET cron_expr = ?, timezone = ?, updated_at = ?
+		`UPDATE cron_schedules SET cron_expr = ?, timezone = ?, next_run_at = NULL, updated_at = ?
 		 WHERE schedule_id = ?`,
 		p.CronExpr, p.Timezone, now, p.ScheduleID,
 	)

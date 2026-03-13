@@ -96,16 +96,58 @@ func validateTimezone(tz string) error {
 	return err
 }
 
+// claims returns the current user's claims, or nil if no getter is configured.
+func (h *ScheduleHandler) claims(r *http.Request) *UserClaims {
+	if h.getClaims == nil {
+		return nil
+	}
+	return h.getClaims(r)
+}
+
+// authorizeJobByID fetches the job and checks authorization. Returns the job
+// or writes an error response and returns nil.
+func (h *ScheduleHandler) authorizeJobByID(w http.ResponseWriter, r *http.Request, jobID string) *store.JobDetail {
+	detail, err := h.jobStore.GetJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return nil
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return nil
+	}
+	c := h.claims(r)
+	if c != nil && c.Role != "admin" && c.UserID != detail.Job.UserID {
+		writeError(w, http.StatusNotFound, "job not found")
+		return nil
+	}
+	return detail
+}
+
+// authorizeScheduleByID fetches the schedule, then authorizes via its parent job.
+// Returns the schedule or writes an error response and returns nil.
+func (h *ScheduleHandler) authorizeScheduleByID(w http.ResponseWriter, r *http.Request) *store.CronSchedule {
+	scheduleID := chi.URLParam(r, "scheduleID")
+	sc, err := h.store.GetSchedule(r.Context(), scheduleID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "schedule not found")
+			return nil
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return nil
+	}
+	if h.authorizeJobByID(w, r, sc.JobID) == nil {
+		return nil
+	}
+	return sc
+}
+
 // ListSchedules handles GET /api/v1/jobs/{jobID}/schedules.
 func (h *ScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
 
-	if _, err := h.jobStore.GetJob(r.Context(), jobID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "job not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal error")
+	if h.authorizeJobByID(w, r, jobID) == nil {
 		return
 	}
 
@@ -145,12 +187,7 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, err := h.jobStore.GetJob(r.Context(), jobID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "job not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal error")
+	if h.authorizeJobByID(w, r, jobID) == nil {
 		return
 	}
 
@@ -173,15 +210,8 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 
 // GetSchedule handles GET /api/v1/schedules/{scheduleID}.
 func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
-	scheduleID := chi.URLParam(r, "scheduleID")
-
-	sc, err := h.store.GetSchedule(r.Context(), scheduleID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "schedule not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal error")
+	sc := h.authorizeScheduleByID(w, r)
+	if sc == nil {
 		return
 	}
 	writeJSON(w, http.StatusOK, sc)
@@ -189,14 +219,8 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 
 // UpdateSchedule handles PUT /api/v1/schedules/{scheduleID}.
 func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
-	scheduleID := chi.URLParam(r, "scheduleID")
-
-	if _, err := h.store.GetSchedule(r.Context(), scheduleID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "schedule not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "internal error")
+	sc := h.authorizeScheduleByID(w, r)
+	if sc == nil {
 		return
 	}
 
@@ -216,15 +240,21 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := validateTimezone(req.Timezone); err != nil {
+	// Default empty timezone to the existing value to avoid clobbering.
+	tz := req.Timezone
+	if tz == "" {
+		tz = sc.Timezone
+	}
+
+	if err := validateTimezone(tz); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid timezone: "+err.Error())
 		return
 	}
 
 	updated, err := h.store.UpdateSchedule(r.Context(), store.UpdateScheduleParams{
-		ScheduleID: scheduleID,
+		ScheduleID: sc.ScheduleID,
 		CronExpr:   req.CronExpr,
-		Timezone:   req.Timezone,
+		Timezone:   tz,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -235,8 +265,8 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.scheduler.ReloadSchedule(r.Context(), scheduleID); err != nil {
-		slog.Warn("failed to reload schedule after update", "schedule_id", scheduleID, "error", err)
+	if err := h.scheduler.ReloadSchedule(r.Context(), sc.ScheduleID); err != nil {
+		slog.Warn("failed to reload schedule after update", "schedule_id", sc.ScheduleID, "error", err)
 	}
 
 	writeJSON(w, http.StatusOK, updated)
@@ -244,9 +274,12 @@ func (h *ScheduleHandler) UpdateSchedule(w http.ResponseWriter, r *http.Request)
 
 // DeleteSchedule handles DELETE /api/v1/schedules/{scheduleID}.
 func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
-	scheduleID := chi.URLParam(r, "scheduleID")
+	sc := h.authorizeScheduleByID(w, r)
+	if sc == nil {
+		return
+	}
 
-	if err := h.store.DeleteSchedule(r.Context(), scheduleID); err != nil {
+	if err := h.store.DeleteSchedule(r.Context(), sc.ScheduleID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "schedule not found")
 			return
@@ -255,7 +288,7 @@ func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.scheduler.RemoveSchedule(scheduleID)
+	h.scheduler.RemoveSchedule(sc.ScheduleID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -271,9 +304,12 @@ func (h *ScheduleHandler) ResumeSchedule(w http.ResponseWriter, r *http.Request)
 
 // setEnabled is a shared implementation for pause/resume.
 func (h *ScheduleHandler) setEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
-	scheduleID := chi.URLParam(r, "scheduleID")
+	sc := h.authorizeScheduleByID(w, r)
+	if sc == nil {
+		return
+	}
 
-	if err := h.store.SetScheduleEnabled(r.Context(), scheduleID, enabled); err != nil {
+	if err := h.store.SetScheduleEnabled(r.Context(), sc.ScheduleID, enabled); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "schedule not found")
 			return
@@ -282,14 +318,14 @@ func (h *ScheduleHandler) setEnabled(w http.ResponseWriter, r *http.Request, ena
 		return
 	}
 
-	if err := h.scheduler.ReloadSchedule(r.Context(), scheduleID); err != nil {
-		slog.Warn("failed to reload schedule after enable/disable", "schedule_id", scheduleID, "enabled", enabled, "error", err)
+	if err := h.scheduler.ReloadSchedule(r.Context(), sc.ScheduleID); err != nil {
+		slog.Warn("failed to reload schedule after enable/disable", "schedule_id", sc.ScheduleID, "enabled", enabled, "error", err)
 	}
 
-	sc, err := h.store.GetSchedule(r.Context(), scheduleID)
+	result, err := h.store.GetSchedule(r.Context(), sc.ScheduleID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, sc)
+	writeJSON(w, http.StatusOK, result)
 }
