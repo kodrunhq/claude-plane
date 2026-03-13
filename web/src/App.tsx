@@ -12,6 +12,7 @@ import { RunDetail } from './views/RunDetail.tsx'
 import { RunsPage } from './views/RunsPage.tsx'
 import { LoginPage } from './views/LoginPage.tsx'
 import { WebhooksPage, WebhookDeliveriesPage } from './views/WebhooksPage.tsx'
+import { EventsPage } from './views/EventsPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { useAuthStore } from './stores/auth.ts'
 
@@ -71,6 +72,7 @@ function App() {
             <Route path="/runs/:id" element={<RunDetail />} />
             <Route path="/webhooks" element={<WebhooksPage />} />
             <Route path="/webhooks/:id/deliveries" element={<WebhookDeliveriesPage />} />
+            <Route path="/events" element={<EventsPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>
