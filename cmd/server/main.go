@@ -340,6 +340,17 @@ func newServeCmd() *cobra.Command {
 			ingestHandler := handler.NewIngestHandler(eventBus, ingestSecrets, slog.Default())
 
 			scheduleHandler := handler.NewScheduleHandler(s, s, sched, handlerClaimsGetter)
+			userHandler := handler.NewUserHandler(s, handlerClaimsGetter)
+
+			// Credentials vault handler — encryption key is optional.
+			// If not configured, credential endpoints are not registered.
+			var credentialHandler *handler.CredentialHandler
+			encryptionKey, err := cfg.Secrets.ParseEncryptionKey()
+			if err != nil {
+				slog.Warn("Credentials vault disabled: encryption key not configured", "error", err)
+			} else {
+				credentialHandler = handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
+			}
 
 			// Provisioning service
 			httpAddr := cfg.Provision.ExternalHTTPAddress
@@ -355,7 +366,7 @@ func newServeCmd() *cobra.Command {
 
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
-			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler)
+			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler)
 
 			// Agent binary download endpoint (public, no JWT required).
 			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)

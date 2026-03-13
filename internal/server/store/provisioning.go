@@ -133,6 +133,77 @@ func (s *Store) RedeemProvisioningToken(ctx context.Context, token string) error
 	return fmt.Errorf("redeem provisioning token: %w", ErrTokenAlreadyRedeemed)
 }
 
+// ProvisioningTokenSummary is a lightweight view of a provisioning token used for listing.
+// It omits the embedded certificates to keep response payloads small.
+type ProvisioningTokenSummary struct {
+	Token         string     `json:"token"`
+	MachineID     string     `json:"machine_id"`
+	TargetOS      string     `json:"target_os"`
+	TargetArch    string     `json:"target_arch"`
+	ServerAddress string     `json:"server_address"`
+	GRPCAddress   string     `json:"grpc_address"`
+	CreatedBy     string     `json:"created_by"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ExpiresAt     time.Time  `json:"expires_at"`
+	RedeemedAt    *time.Time `json:"redeemed_at,omitempty"`
+}
+
+// ListProvisioningTokens returns all provisioning tokens ordered by creation time
+// (newest first). Certificates are omitted from the result.
+func (s *Store) ListProvisioningTokens(ctx context.Context) ([]ProvisioningTokenSummary, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT token, machine_id, target_os, target_arch, server_address, grpc_address,
+		        created_by, created_at, expires_at, redeemed_at
+		 FROM provisioning_tokens
+		 ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list provisioning tokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []ProvisioningTokenSummary
+	for rows.Next() {
+		var t ProvisioningTokenSummary
+		var redeemedAt sql.NullTime
+		if err := rows.Scan(
+			&t.Token, &t.MachineID, &t.TargetOS, &t.TargetArch,
+			&t.ServerAddress, &t.GRPCAddress, &t.CreatedBy,
+			&t.CreatedAt, &t.ExpiresAt, &redeemedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan provisioning token row: %w", err)
+		}
+		if redeemedAt.Valid {
+			t.RedeemedAt = &redeemedAt.Time
+		}
+		tokens = append(tokens, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate provisioning tokens: %w", err)
+	}
+	return tokens, nil
+}
+
+// RevokeProvisioningToken deletes a provisioning token by its value.
+// Returns ErrNotFound if the token does not exist.
+func (s *Store) RevokeProvisioningToken(ctx context.Context, token string) error {
+	result, err := s.writer.ExecContext(ctx,
+		`DELETE FROM provisioning_tokens WHERE token = ?`,
+		token,
+	)
+	if err != nil {
+		return fmt.Errorf("revoke provisioning token: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("revoke provisioning token rows affected: %w", err)
+	}
+	if affected == 0 {
+		return fmt.Errorf("revoke provisioning token: %w", ErrNotFound)
+	}
+	return nil
+}
+
 // CleanExpiredProvisioningTokens deletes all provisioning tokens whose expiry time
 // is in the past. Returns the number of rows deleted.
 func (s *Store) CleanExpiredProvisioningTokens(ctx context.Context) (int64, error) {

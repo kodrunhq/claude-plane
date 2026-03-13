@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
@@ -25,13 +26,13 @@ const (
 
 // User represents a row in the users table.
 type User struct {
-	UserID       string
-	Email        string
-	DisplayName  string
-	PasswordHash string
-	Role         string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	UserID       string    `json:"user_id"`
+	Email        string    `json:"email"`
+	DisplayName  string    `json:"display_name"`
+	PasswordHash string    `json:"-"`
+	Role         string    `json:"role"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // HashPassword hashes a password using Argon2id with OWASP-recommended parameters.
@@ -169,4 +170,83 @@ func (s *Store) GetUserByEmail(email string) (*User, error) {
 		return nil, fmt.Errorf("query user by email: %w", err)
 	}
 	return &u, nil
+}
+
+// ListUsers retrieves all users from the database, ordered by creation time.
+func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.reader.QueryContext(ctx, `
+		SELECT user_id, email, display_name, password_hash, role, created_at, updated_at
+		FROM users ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.UserID, &u.Email, &u.DisplayName, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list users rows: %w", err)
+	}
+	return users, nil
+}
+
+// GetUserByID retrieves a single user by ID.
+// Returns ErrNotFound if the user does not exist.
+func (s *Store) GetUserByID(ctx context.Context, userID string) (*User, error) {
+	var u User
+	err := s.reader.QueryRowContext(ctx, `
+		SELECT user_id, email, display_name, password_hash, role, created_at, updated_at
+		FROM users WHERE user_id = ?
+	`, userID).Scan(&u.UserID, &u.Email, &u.DisplayName, &u.PasswordHash, &u.Role, &u.CreatedAt, &u.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query user by id: %w", err)
+	}
+	return &u, nil
+}
+
+// UpdateUser updates the display name and role of an existing user.
+// Returns ErrNotFound if no row was affected.
+func (s *Store) UpdateUser(ctx context.Context, userID, displayName, role string) error {
+	result, err := s.writer.ExecContext(ctx, `
+		UPDATE users SET display_name = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE user_id = ?
+	`, displayName, role, userID)
+	if err != nil {
+		return fmt.Errorf("update user %q: %w", userID, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteUser removes a user by ID.
+// Returns ErrNotFound if no row was deleted.
+func (s *Store) DeleteUser(ctx context.Context, userID string) error {
+	result, err := s.writer.ExecContext(ctx, `DELETE FROM users WHERE user_id = ?`, userID)
+	if err != nil {
+		return fmt.Errorf("delete user %q: %w", userID, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
