@@ -209,9 +209,13 @@ func (d *WebhookDeliverer) retryPending(ctx context.Context) {
 
 // deliver posts event to webhook and updates the delivery record.
 func (d *WebhookDeliverer) deliver(ctx context.Context, wh Webhook, e Event, delivery *WebhookDelivery) {
+	// Increment attempts first so all failure paths have the correct count
+	// for backoff calculation and max-attempts cutoff.
+	delivery.Attempts++
+
 	body, err := json.Marshal(e)
 	if err != nil {
-		d.logger.Warn("webhook deliverer: marshal event", "event_id", e.EventID, "error", err)
+		d.recordFailure(ctx, delivery, 0, fmt.Sprintf("marshal event: %s", err))
 		return
 	}
 
@@ -228,11 +232,8 @@ func (d *WebhookDeliverer) deliver(ctx context.Context, wh Webhook, e Event, del
 	}
 
 	resp, err := d.httpClient.Do(req)
-	delivery.Attempts++
 
 	if err != nil {
-		next := nextRetryTime(delivery.Attempts)
-		delivery.NextRetryAt = &next
 		d.recordFailure(ctx, delivery, 0, err.Error())
 		return
 	}
@@ -261,13 +262,20 @@ func (d *WebhookDeliverer) deliver(ctx context.Context, wh Webhook, e Event, del
 	}
 }
 
-// recordFailure marks a delivery as pending with an error and next retry time.
+// recordFailure persists a delivery failure. If max attempts is reached, the
+// delivery is marked as "failed"; otherwise it stays "pending" with a next retry time.
 func (d *WebhookDeliverer) recordFailure(ctx context.Context, delivery *WebhookDelivery, code int, errMsg string) {
-	delivery.Status = "pending"
 	delivery.ResponseCode = code
 	delivery.LastError = errMsg
-	next := nextRetryTime(delivery.Attempts)
-	delivery.NextRetryAt = &next
+
+	if delivery.Attempts >= maxDeliveryAttempts {
+		delivery.Status = "failed"
+		delivery.NextRetryAt = nil
+	} else {
+		delivery.Status = "pending"
+		next := nextRetryTime(delivery.Attempts)
+		delivery.NextRetryAt = &next
+	}
 
 	if err := d.store.UpdateDelivery(ctx, *delivery); err != nil {
 		d.logger.Warn("webhook deliverer: record failure",

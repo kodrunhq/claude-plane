@@ -190,8 +190,8 @@ func TestTriggerSubscriber_LoopPrevention(t *testing.T) {
 
 	handler := sub.Handler()
 
-	// Event payload has trigger_job_id matching the trigger's job_id — should be skipped.
-	payload := map[string]any{"trigger_job_id": "job-loop"}
+	// Event payload has job_id matching the trigger's job_id — should be skipped.
+	payload := map[string]any{"job_id": "job-loop"}
 	if err := handler(context.Background(), makeTriggerEvent("run.completed", payload)); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -211,8 +211,8 @@ func TestTriggerSubscriber_LoopPrevention_DifferentJob(t *testing.T) {
 
 	handler := sub.Handler()
 
-	// trigger_job_id is a DIFFERENT job — should NOT be blocked.
-	payload := map[string]any{"trigger_job_id": "job-B"}
+	// job_id is a DIFFERENT job — should NOT be blocked.
+	payload := map[string]any{"job_id": "job-B"}
 	if err := handler(context.Background(), makeTriggerEvent("run.completed", payload)); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
