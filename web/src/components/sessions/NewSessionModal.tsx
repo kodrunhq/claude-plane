@@ -5,6 +5,14 @@ import { toast } from 'sonner';
 import { useCreateSession } from '../../hooks/useSessions.ts';
 import { useMachines } from '../../hooks/useMachines.ts';
 
+// Estimated terminal font metrics and layout offsets.
+// These must match the configuration used by the xterm.js Terminal
+// (e.g. fontSize 14, JetBrains Mono) and the surrounding UI chrome.
+const TERMINAL_FONT_CHAR_WIDTH_PX = 8.4;
+const TERMINAL_FONT_LINE_HEIGHT_PX = 18;
+const TERMINAL_SIDEBAR_WIDTH_PX = 56;   // w-14 = 3.5rem = 56px
+const TERMINAL_CHROME_HEIGHT_PX = 120;  // top bar + status bar + terminal status bar + padding
+
 interface NewSessionModalProps {
   open: boolean;
   onClose: () => void;
@@ -45,13 +53,19 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
     try {
       // Estimate terminal dimensions from the viewport so the PTY starts
       // at the right size instead of the 80x24 default. Uses the same font
-      // metrics as the xterm.js Terminal (fontSize 14, JetBrains Mono).
-      const charWidth = 8.4;
-      const lineHeight = 18;
-      const sidebarWidth = 56;   // w-14 = 3.5rem = 56px
-      const chromeHeight = 120;  // top bar + status bar + terminal status bar + padding
-      const cols = Math.max(80, Math.floor((window.innerWidth - sidebarWidth - 32) / charWidth));
-      const rows = Math.max(24, Math.floor((window.innerHeight - chromeHeight) / lineHeight));
+      // metrics as the xterm.js Terminal.
+      const cols = Math.max(
+        80,
+        Math.floor(
+          (window.innerWidth - TERMINAL_SIDEBAR_WIDTH_PX - 32) / TERMINAL_FONT_CHAR_WIDTH_PX,
+        ),
+      );
+      const rows = Math.max(
+        24,
+        Math.floor(
+          (window.innerHeight - TERMINAL_CHROME_HEIGHT_PX) / TERMINAL_FONT_LINE_HEIGHT_PX,
+        ),
+      );
 
       const session = await createSession.mutateAsync({
         machine_id: machineId,

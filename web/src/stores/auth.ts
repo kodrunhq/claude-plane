@@ -9,6 +9,7 @@ interface User {
 interface AuthStore {
   user: User | null;
   loading: boolean;
+  authenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkSession: () => Promise<void>;
@@ -17,6 +18,7 @@ interface AuthStore {
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   loading: true,
+  authenticated: false,
 
   login: async (email: string, password: string) => {
     const res = await fetch('/api/v1/auth/login', {
@@ -32,7 +34,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
 
     const data = await res.json() as { user_id: string; email: string; role: string };
-    set({ user: { userId: data.user_id, email: data.email, role: data.role } });
+    set({
+      user: { userId: data.user_id, email: data.email, role: data.role },
+      authenticated: true,
+    });
   },
 
   logout: async () => {
@@ -40,7 +45,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       method: 'POST',
       credentials: 'same-origin',
     }).catch(() => {});
-    set({ user: null });
+    set({ user: null, authenticated: false });
   },
 
   checkSession: async () => {
@@ -50,13 +55,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
       });
       if (res.ok) {
         // Session cookie is valid — we don't have a /me endpoint,
-        // so we just mark the user as authenticated with minimal info.
-        set({ user: { userId: '', email: '', role: '' }, loading: false });
+        // so we just mark the session as authenticated.
+        set({ user: null, authenticated: true, loading: false });
       } else {
-        set({ user: null, loading: false });
+        set({ user: null, authenticated: false, loading: false });
       }
     } catch {
-      set({ user: null, loading: false });
+      set({ user: null, authenticated: false, loading: false });
     }
   },
 }));
