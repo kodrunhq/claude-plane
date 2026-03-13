@@ -11,11 +11,15 @@ interface TriggerBuilderProps {
 
 interface FormState {
   event_type: string;
+  custom_event_type: string;
   filter: string;
 }
 
+const CUSTOM_OPTION = '__custom__';
+
 const DEFAULT_FORM: FormState = {
   event_type: KNOWN_EVENT_TYPES[0],
+  custom_event_type: '',
   filter: '',
 };
 
@@ -32,8 +36,10 @@ function isValidJson(value: string): boolean {
 export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderProps) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
 
+  const isCustom = form.event_type === CUSTOM_OPTION;
+  const resolvedEventType = isCustom ? form.custom_event_type.trim() : form.event_type;
   const filterValid = isValidJson(form.filter);
-  const canSave = form.event_type.trim().length > 0 && filterValid;
+  const canSave = resolvedEventType.length > 0 && filterValid;
 
   function handleEventTypeChange(value: string) {
     setForm((prev) => ({ ...prev, event_type: value }));
@@ -45,7 +51,7 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
 
   async function handleSave() {
     if (!canSave) return;
-    await onSave({ event_type: form.event_type.trim(), filter: form.filter });
+    await onSave({ event_type: resolvedEventType, filter: form.filter });
   }
 
   return (
@@ -62,14 +68,15 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
               {et}
             </option>
           ))}
-          <option value="custom">Custom (type below)</option>
+          <option value={CUSTOM_OPTION}>Custom (type below)</option>
         </select>
-        {form.event_type === 'custom' && (
+        {isCustom && (
           <input
             type="text"
+            value={form.custom_event_type}
             placeholder="e.g. run.completed"
             className="w-full bg-bg-secondary border border-gray-700 rounded-md px-2 py-1.5 text-sm text-text-primary font-mono focus:outline-none focus:border-accent-primary"
-            onChange={(e) => handleEventTypeChange(e.target.value)}
+            onChange={(e) => setForm((prev) => ({ ...prev, custom_event_type: e.target.value }))}
           />
         )}
       </div>

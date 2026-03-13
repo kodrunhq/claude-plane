@@ -3,6 +3,7 @@ import {
   getStatusDotClass,
   getStatusIcon,
   getStatusPulse,
+  getStatusTextClass,
   type StatusIconType,
 } from '../../lib/statusColors';
 
@@ -33,32 +34,34 @@ function StatusIcon({
   iconType,
   size,
   dotColorClass,
+  textColorClass,
 }: {
   iconType: StatusIconType;
   size: NonNullable<StatusBadgeProps['size']>;
   dotColorClass: string;
+  textColorClass: string;
 }) {
   const px = SIZE_ICON[size];
 
   if (iconType === 'check') {
-    return <CheckCircle2 size={px} className="text-status-success shrink-0" />;
+    return <CheckCircle2 size={px} className={`${textColorClass} shrink-0`} />;
   }
 
   if (iconType === 'x') {
-    return <XCircle size={px} className="text-status-error shrink-0" />;
+    return <XCircle size={px} className={`${textColorClass} shrink-0`} />;
   }
 
   if (iconType === 'spinner') {
-    return <Loader2 size={px} className="text-status-running animate-spin shrink-0" />;
+    return <Loader2 size={px} className={`${textColorClass} animate-spin shrink-0`} />;
   }
 
   // Fallback: plain dot indicator
-  const pulseClass = ''; // dots only pulse when no icon, handled in StatusBadge
-  return <span className={`${SIZE_DOT[size]} rounded-full ${dotColorClass} ${pulseClass} shrink-0`} />;
+  return <span className={`${SIZE_DOT[size]} rounded-full ${dotColorClass} shrink-0`} />;
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   const dotColorClass = getStatusDotClass(status);
+  const textColorClass = getStatusTextClass(status);
   const iconType = getStatusIcon(status);
   const pulse = getStatusPulse(status);
   const textSize = SIZE_TEXT[size];
@@ -72,7 +75,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
           className={`${SIZE_DOT[size]} rounded-full ${dotColorClass} shrink-0 ${pulse ? 'animate-pulse' : ''}`}
         />
       ) : (
-        <StatusIcon iconType={iconType} size={size} dotColorClass={dotColorClass} />
+        <StatusIcon iconType={iconType} size={size} dotColorClass={dotColorClass} textColorClass={textColorClass} />
       )}
       <span className="capitalize text-text-secondary">{status}</span>
     </span>

@@ -158,8 +158,8 @@ export function CommandCenter() {
         />
         <StatCard
           icon={<Clock size={24} />}
-          label="Active Schedules"
-          value={isJobsRunsLoading ? '--' : String(countJobsWithSchedules(jobs ?? []))}
+          label="Jobs Run"
+          value={isJobsRunsLoading ? '--' : String(countJobsWithRuns(jobs ?? []))}
           href="/jobs"
         />
       </div>
@@ -305,15 +305,7 @@ export function CommandCenter() {
   );
 }
 
-/**
- * Count jobs that have ever been run (as a proxy for "has schedules").
- * Since there is no global schedules endpoint, we use last_run_status presence
- * as a heuristic. This is intentionally conservative.
- */
-function countJobsWithSchedules(jobs: Job[]): number {
-  // We can't know schedule count without per-job fetches.
-  // Return the number of jobs that have a last_run_status, which implies
-  // they were triggered at least once (by schedule or manually).
+function countJobsWithRuns(jobs: Job[]): number {
   return jobs.filter((j) => j.last_run_status !== undefined && j.last_run_status !== null).length;
 }
 

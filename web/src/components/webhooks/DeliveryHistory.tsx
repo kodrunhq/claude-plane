@@ -124,7 +124,7 @@ export function DeliveryHistory({ webhookId }: DeliveryHistoryProps) {
               Attempts
             </th>
             <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
-              Delivered
+              Created
             </th>
             <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
               Event ID

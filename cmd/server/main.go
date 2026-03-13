@@ -343,7 +343,7 @@ func newServeCmd() *cobra.Command {
 			userHandler := handler.NewUserHandler(s, handlerClaimsGetter)
 
 			// Credentials vault handler — encryption key is optional.
-			// If not configured, credential endpoints will return 503.
+			// If not configured, credential endpoints are not registered.
 			var credentialHandler *handler.CredentialHandler
 			encryptionKey, err := cfg.Secrets.ParseEncryptionKey()
 			if err != nil {
