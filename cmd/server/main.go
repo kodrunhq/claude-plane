@@ -28,13 +28,12 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/scheduler"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/buildinfo"
 	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 
 	// Prove generated proto package compiles.
 	_ "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
-
-var version = "0.1.0-dev"
 
 // noopExecutor is a stub StepExecutor that logs instead of executing.
 // Used until the real session-backed executor is wired up.
@@ -49,7 +48,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "claude-plane-server",
 		Short:   "Control plane for Claude CLI sessions",
-		Version: version,
+		Version: buildinfo.String(),
 	}
 
 	rootCmd.AddCommand(
