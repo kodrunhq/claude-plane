@@ -17,6 +17,10 @@ import (
 // message from the client before defaulting to "*".
 const subscriptionTimeout = 5 * time.Second
 
+// maxSubscriptionPatterns is the maximum number of event patterns a client may
+// subscribe to. Requests exceeding this cap fall back to ["*"].
+const maxSubscriptionPatterns = 20
+
 // heartbeatInterval is the interval between WebSocket ping frames.
 const heartbeatInterval = 30 * time.Second
 
@@ -147,38 +151,47 @@ func runEventsLoop(conn *websocket.Conn, reqCtx context.Context, fanout *event.W
 
 // negotiatePatterns reads an optional subscribe message within subscriptionTimeout.
 // If none arrives, it returns the default wildcard pattern.
+//
+// The read runs in a background goroutine so that a timeout does NOT cancel the
+// context passed to conn.Read — which would close the underlying connection with
+// the coder/websocket library. The goroutine is bounded by the parent ctx (i.e.
+// it exits when the connection is eventually torn down by runEventsLoop).
 func negotiatePatterns(conn *websocket.Conn, ctx context.Context, logger *slog.Logger) []string {
-	subCtx, subCancel := context.WithTimeout(ctx, subscriptionTimeout)
-	defer subCancel()
-
-	// Use a goroutine so we can fall back to default without blocking the main loop.
-	type result struct {
-		patterns []string
-	}
-	ch := make(chan result, 1)
+	ch := make(chan []string, 1)
 
 	go func() {
-		_, msg, err := conn.Read(subCtx)
+		// Use the parent ctx so cancelling it does not close the connection
+		// prematurely; the timeout is handled via time.After below.
+		_, msg, err := conn.Read(ctx)
 		if err != nil {
-			// Timeout or closed — use default.
-			ch <- result{patterns: []string{"*"}}
+			ch <- []string{"*"}
 			return
 		}
 		var sub subscribeMsg
 		if err := json.Unmarshal(msg, &sub); err != nil || sub.Type != "subscribe" || len(sub.Events) == 0 {
 			logger.Debug("events websocket: ignoring non-subscribe first message, defaulting to '*'")
-			ch <- result{patterns: []string{"*"}}
+			ch <- []string{"*"}
 			return
 		}
-		ch <- result{patterns: sub.Events}
+		if len(sub.Events) > maxSubscriptionPatterns {
+			logger.Debug("events websocket: too many subscription patterns, defaulting to '*'",
+				"count", len(sub.Events), "max", maxSubscriptionPatterns)
+			ch <- []string{"*"}
+			return
+		}
+		ch <- sub.Events
 	}()
 
 	select {
-	case r := <-ch:
-		logger.Debug("events websocket: negotiated patterns", "patterns", r.patterns)
-		return r.patterns
-	case <-subCtx.Done():
+	case patterns := <-ch:
+		logger.Debug("events websocket: negotiated patterns", "patterns", patterns)
+		return patterns
+	case <-time.After(subscriptionTimeout):
+		// The goroutine remains alive until the next read or connection close,
+		// which is driven by the reader goroutine in runEventsLoop.
 		logger.Debug("events websocket: subscription timeout, defaulting to '*'")
+		return []string{"*"}
+	case <-ctx.Done():
 		return []string{"*"}
 	}
 }
