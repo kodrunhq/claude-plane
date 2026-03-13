@@ -15,6 +15,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	"github.com/kodrunhq/claude-plane/internal/shared/version"
 
 	"google.golang.org/grpc"
@@ -31,12 +32,19 @@ type GRPCServer struct {
 	logger       *slog.Logger
 }
 
+// SessionStore is the interface the gRPC server uses to persist session status changes.
+type SessionStore interface {
+	UpdateSessionStatus(id, status string) error
+	UpdateSessionStatusIfNotTerminal(id, status string) error
+}
+
 // agentService implements the AgentServiceServer interface.
 type agentService struct {
 	pb.UnimplementedAgentServiceServer
 	streams      *StreamRegistry
 	agentConnMgr *connmgr.ConnectionManager
 	registry     *session.Registry
+	sessionStore SessionStore
 	logger       *slog.Logger
 }
 
@@ -84,6 +92,11 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 // SetRegistry sets the session registry for routing agent events to WebSocket subscribers.
 func (s *GRPCServer) SetRegistry(r *session.Registry) {
 	s.agentSvc.registry = r
+}
+
+// SetSessionStore sets the session store for persisting session status changes.
+func (s *GRPCServer) SetSessionStore(store SessionStore) {
+	s.agentSvc.sessionStore = store
 }
 
 // Serve starts the gRPC server on the given listener.
@@ -255,6 +268,35 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						s.registry.PublishControl(sc.GetSessionId(), []byte(`{"type":"scrollback_end"}`))
 					}
 				}
+			}
+
+			// Handle session lifecycle events to update DB status.
+			if ss := res.event.GetSessionStatus(); ss != nil {
+				if s.sessionStore != nil {
+					newStatus := ss.GetStatus()
+					if err := s.sessionStore.UpdateSessionStatus(ss.GetSessionId(), newStatus); err != nil {
+						s.logger.Warn("failed to update session status from agent event",
+							"session_id", ss.GetSessionId(), "status", newStatus, "error", err)
+					}
+				}
+			}
+			if se := res.event.GetSessionExit(); se != nil {
+				if s.sessionStore != nil {
+					exitStatus := status.Completed
+					if se.GetExitCode() != 0 {
+						exitStatus = status.Failed
+					}
+					// Only update if not already in a terminal state (e.g., user-initiated "terminated").
+					if err := s.sessionStore.UpdateSessionStatusIfNotTerminal(se.GetSessionId(), exitStatus); err != nil {
+						s.logger.Warn("failed to update session status on exit",
+							"session_id", se.GetSessionId(), "exit_code", se.GetExitCode(), "error", err)
+					}
+				}
+				s.logger.Info("session exit event",
+					"machine_id", machineID,
+					"session_id", se.GetSessionId(),
+					"exit_code", se.GetExitCode(),
+				)
 			}
 		}
 	}

@@ -373,6 +373,16 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 							},
 						},
 					})
+					// Send exit event with exit code so the server can persist the final status.
+					sm.sendEvent(&pb.AgentEvent{
+						Event: &pb.AgentEvent_SessionExit{
+							SessionExit: &pb.SessionExitEvent{
+								SessionId: sessionID,
+								ExitCode:  int32(sess.ExitCode()),
+								ExitedAt:  timestamppb.Now(),
+							},
+						},
+					})
 					// Clean up maps to prevent leak.
 					sm.removeSession(sessionID)
 					return
