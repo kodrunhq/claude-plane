@@ -175,6 +175,64 @@ CREATE TABLE IF NOT EXISTS revoked_tokens (
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expires_at);
 `,
 	},
+	{
+		Version:     2,
+		Description: "event service layer tables",
+		SQL: `
+-- Events audit trail
+CREATE TABLE events (
+    event_id    TEXT PRIMARY KEY,
+    event_type  TEXT NOT NULL,
+    timestamp   DATETIME NOT NULL,
+    source      TEXT NOT NULL,
+    payload     TEXT NOT NULL,  -- JSON
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_events_type_time ON events(event_type, timestamp DESC);
+CREATE INDEX idx_events_time ON events(timestamp DESC);
+
+-- Outbound webhooks configuration
+CREATE TABLE webhooks (
+    webhook_id  TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    url         TEXT NOT NULL,
+    secret      BLOB,
+    events      TEXT NOT NULL,      -- JSON array of event type patterns
+    enabled     BOOLEAN NOT NULL DEFAULT 1,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Webhook delivery tracking
+CREATE TABLE webhook_deliveries (
+    delivery_id    TEXT PRIMARY KEY,
+    webhook_id     TEXT NOT NULL REFERENCES webhooks(webhook_id) ON DELETE CASCADE,
+    event_id       TEXT NOT NULL REFERENCES events(event_id),
+    status         TEXT NOT NULL DEFAULT 'pending',
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    response_code  INTEGER,
+    last_error     TEXT,
+    next_retry_at  DATETIME,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status, next_retry_at);
+CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
+
+-- Job triggers configuration
+CREATE TABLE job_triggers (
+    trigger_id   TEXT PRIMARY KEY,
+    job_id       TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+    event_type   TEXT NOT NULL,
+    filter       TEXT,
+    enabled      BOOLEAN NOT NULL DEFAULT 1,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_job_triggers_job ON job_triggers(job_id);
+CREATE INDEX idx_job_triggers_event ON job_triggers(event_type, enabled);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
