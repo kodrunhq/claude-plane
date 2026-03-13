@@ -61,12 +61,18 @@ func TestListEvents_All(t *testing.T) {
 	s := newTestStoreForEvents(t)
 	ctx := context.Background()
 
-	events := []event.Event{
-		makeEvent(event.TypeRunCreated, "orchestrator"),
-		makeEvent(event.TypeRunStarted, "orchestrator"),
-		makeEvent(event.TypeSessionStarted, "session"),
+	base := time.Now().UTC().Truncate(time.Second)
+	eventTypes := []struct {
+		typ    string
+		source string
+	}{
+		{event.TypeRunCreated, "orchestrator"},
+		{event.TypeRunStarted, "orchestrator"},
+		{event.TypeSessionStarted, "session"},
 	}
-	for _, e := range events {
+	for i, et := range eventTypes {
+		e := makeEvent(et.typ, et.source)
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
 		if err := s.InsertEvent(ctx, e); err != nil {
 			t.Fatalf("InsertEvent: %v", err)
 		}
@@ -85,14 +91,21 @@ func TestListEvents_TypePattern_Exact(t *testing.T) {
 	s := newTestStoreForEvents(t)
 	ctx := context.Background()
 
-	if err := s.InsertEvent(ctx, makeEvent(event.TypeRunCreated, "orchestrator")); err != nil {
-		t.Fatalf("InsertEvent: %v", err)
+	base := time.Now().UTC().Truncate(time.Second)
+	inserts := []struct {
+		typ    string
+		source string
+	}{
+		{event.TypeRunCreated, "orchestrator"},
+		{event.TypeRunStarted, "orchestrator"},
+		{event.TypeSessionStarted, "session"},
 	}
-	if err := s.InsertEvent(ctx, makeEvent(event.TypeRunStarted, "orchestrator")); err != nil {
-		t.Fatalf("InsertEvent: %v", err)
-	}
-	if err := s.InsertEvent(ctx, makeEvent(event.TypeSessionStarted, "session")); err != nil {
-		t.Fatalf("InsertEvent: %v", err)
+	for i, ins := range inserts {
+		e := makeEvent(ins.typ, ins.source)
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
+		if err := s.InsertEvent(ctx, e); err != nil {
+			t.Fatalf("InsertEvent: %v", err)
+		}
 	}
 
 	result, err := s.ListEvents(ctx, EventFilter{TypePattern: event.TypeRunCreated})
@@ -111,17 +124,18 @@ func TestListEvents_TypePattern_Glob(t *testing.T) {
 	s := newTestStoreForEvents(t)
 	ctx := context.Background()
 
-	runEvents := []event.Event{
-		makeEvent(event.TypeRunCreated, "orchestrator"),
-		makeEvent(event.TypeRunStarted, "orchestrator"),
-		makeEvent(event.TypeRunCompleted, "orchestrator"),
-	}
-	for _, e := range runEvents {
+	base := time.Now().UTC().Truncate(time.Second)
+	runTypes := []string{event.TypeRunCreated, event.TypeRunStarted, event.TypeRunCompleted}
+	for i, et := range runTypes {
+		e := makeEvent(et, "orchestrator")
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
 		if err := s.InsertEvent(ctx, e); err != nil {
 			t.Fatalf("InsertEvent: %v", err)
 		}
 	}
-	if err := s.InsertEvent(ctx, makeEvent(event.TypeSessionStarted, "session")); err != nil {
+	sessionEvt := makeEvent(event.TypeSessionStarted, "session")
+	sessionEvt.Timestamp = base.Add(time.Duration(len(runTypes)) * time.Second)
+	if err := s.InsertEvent(ctx, sessionEvt); err != nil {
 		t.Fatalf("InsertEvent: %v", err)
 	}
 
@@ -206,8 +220,11 @@ func TestListEvents_Pagination(t *testing.T) {
 	s := newTestStoreForEvents(t)
 	ctx := context.Background()
 
+	base := time.Now().UTC().Truncate(time.Second)
 	for i := 0; i < 5; i++ {
-		if err := s.InsertEvent(ctx, makeEvent(event.TypeRunCreated, "orchestrator")); err != nil {
+		e := makeEvent(event.TypeRunCreated, "orchestrator")
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
+		if err := s.InsertEvent(ctx, e); err != nil {
 			t.Fatalf("InsertEvent: %v", err)
 		}
 	}

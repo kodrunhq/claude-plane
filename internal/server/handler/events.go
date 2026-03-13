@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
@@ -28,6 +29,11 @@ type EventHandler struct {
 // NewEventHandler creates a new EventHandler backed by store.
 func NewEventHandler(store EventQueryStore) *EventHandler {
 	return &EventHandler{store: store}
+}
+
+// RegisterEventRoutes mounts all event-related routes on the given router.
+func RegisterEventRoutes(r chi.Router, h *EventHandler) {
+	r.Get("/api/v1/events", h.ListEvents)
 }
 
 // ListEvents handles GET /api/v1/events.
