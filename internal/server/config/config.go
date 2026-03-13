@@ -18,6 +18,33 @@ type ServerConfig struct {
 	Database DatabaseConfig `toml:"database"`
 	Auth     AuthConfig     `toml:"auth"`
 	Shutdown ShutdownConfig `toml:"shutdown"`
+	Webhooks WebhooksConfig `toml:"webhooks"`
+}
+
+// WebhooksConfig groups all webhook-related configuration.
+type WebhooksConfig struct {
+	Inbound WebhookInboundConfig `toml:"inbound"`
+}
+
+// WebhookInboundConfig configures inbound webhook event ingestion.
+type WebhookInboundConfig struct {
+	Sources map[string]WebhookSourceConfig `toml:"sources"`
+}
+
+// WebhookSourceConfig holds the per-source configuration for inbound webhooks.
+type WebhookSourceConfig struct {
+	Secret string `toml:"secret"`
+}
+
+// InboundSecrets returns a flat map of source name → HMAC secret suitable
+// for passing directly to handler.NewIngestHandler.
+// Sources with no configured secret map to an empty string (no auth required).
+func (c *WebhooksConfig) InboundSecrets() map[string]string {
+	secrets := make(map[string]string, len(c.Inbound.Sources))
+	for name, src := range c.Inbound.Sources {
+		secrets[name] = src.Secret
+	}
+	return secrets
 }
 
 // ShutdownConfig controls graceful shutdown behavior.
