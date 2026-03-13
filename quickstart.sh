@@ -20,6 +20,28 @@ info()  { echo -e "${CYAN}==>${NC} $*"; }
 ok()    { echo -e "${GREEN}==>${NC} $*"; }
 err()   { echo -e "${RED}ERROR:${NC} $*" >&2; exit 1; }
 
+check_port_in_use() {
+  local port="$1"
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -i :"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :$port" >/dev/null 2>&1
+    return $?
+  fi
+
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$port\$"
+    return $?
+  fi
+
+  info "No suitable tool (lsof/ss/netstat) found to check if port $port is in use; skipping port availability check."
+  return 1
+}
+
 # ── Pre-flight checks ──────────────────────────────────────────────
 
 command -v go >/dev/null 2>&1 || err "Go is not installed. Install it from https://go.dev/dl/"
@@ -41,10 +63,10 @@ go build -o ./claude-plane-agent ./cmd/agent || err "Agent build failed"
 ok "Agent built"
 
 # Check if ports are already in use
-if lsof -i :"$HTTP_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+if check_port_in_use "$HTTP_PORT"; then
   err "Port $HTTP_PORT is already in use. Set CLAUDE_PLANE_HTTP_PORT to use a different port."
 fi
-if lsof -i :"$GRPC_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+if check_port_in_use "$GRPC_PORT"; then
   err "Port $GRPC_PORT is already in use. Set CLAUDE_PLANE_GRPC_PORT to use a different port."
 fi
 

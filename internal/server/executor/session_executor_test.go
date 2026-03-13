@@ -389,7 +389,7 @@ func TestExecuteStep_TransientDBError(t *testing.T) {
 	ms.mu.Unlock()
 
 	// Let a few polls fail with transient error, then recover.
-	time.Sleep(pollInterval * 3)
+	time.Sleep(100 * time.Millisecond)
 	ms.mu.Lock()
 	ms.getErr = nil
 	ms.mu.Unlock()
