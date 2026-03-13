@@ -272,6 +272,8 @@ CREATE TABLE IF NOT EXISTS provisioning_tokens (
     expires_at      DATETIME NOT NULL,
     redeemed_at     DATETIME
 );
+
+CREATE INDEX IF NOT EXISTS idx_provisioning_tokens_expires ON provisioning_tokens(expires_at);
 `,
 	},
 }

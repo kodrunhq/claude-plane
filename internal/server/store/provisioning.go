@@ -91,27 +91,45 @@ func (s *Store) GetProvisioningToken(ctx context.Context, token string) (*Provis
 // RedeemProvisioningToken marks a token as redeemed by setting redeemed_at to the
 // current time. Returns ErrNotFound if the token does not exist, ErrTokenExpired
 // if it has expired, and ErrTokenAlreadyRedeemed if it was already used.
+// The operation is atomic — a single UPDATE with predicates avoids TOCTOU races.
 func (s *Store) RedeemProvisioningToken(ctx context.Context, token string) error {
-	// Validate before mutating to provide meaningful errors.
-	if _, err := s.GetProvisioningToken(ctx, token); err != nil {
-		return fmt.Errorf("redeem provisioning token: %w", err)
-	}
-
 	now := time.Now().UTC()
 	result, err := s.writer.ExecContext(ctx,
-		`UPDATE provisioning_tokens SET redeemed_at = ? WHERE token = ? AND redeemed_at IS NULL`,
-		now, token,
+		`UPDATE provisioning_tokens SET redeemed_at = ?
+		 WHERE token = ? AND redeemed_at IS NULL AND expires_at >= ?`,
+		now, token, now,
 	)
 	if err != nil {
 		return fmt.Errorf("redeem provisioning token: %w", err)
 	}
 
 	affected, _ := result.RowsAffected()
-	if affected == 0 {
-		// Race: another request redeemed the token between our check and the update.
+	if affected == 1 {
+		return nil
+	}
+
+	// No rows updated — determine why by checking the token's current state.
+	var exists bool
+	var redeemedAt sql.NullTime
+	var expiresAt time.Time
+	err = s.reader.QueryRowContext(ctx,
+		`SELECT 1, redeemed_at, expires_at FROM provisioning_tokens WHERE token = ?`,
+		token,
+	).Scan(&exists, &redeemedAt, &expiresAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("redeem provisioning token: %w", ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("redeem provisioning token: %w", err)
+	}
+	if redeemedAt.Valid {
 		return fmt.Errorf("redeem provisioning token: %w", ErrTokenAlreadyRedeemed)
 	}
-	return nil
+	if now.After(expiresAt.UTC()) {
+		return fmt.Errorf("redeem provisioning token: %w", ErrTokenExpired)
+	}
+	// Shouldn't reach here, but cover it defensively.
+	return fmt.Errorf("redeem provisioning token: %w", ErrTokenAlreadyRedeemed)
 }
 
 // CleanExpiredProvisioningTokens deletes all provisioning tokens whose expiry time

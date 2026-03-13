@@ -3,6 +3,7 @@ package provision
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,12 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 )
+
+// ErrInvalidMachineID is returned when the machine ID fails validation.
+var ErrInvalidMachineID = errors.New("invalid machine ID")
+
+// ErrUnsupportedPlatform is returned when the OS/arch combination is not supported.
+var ErrUnsupportedPlatform = errors.New("unsupported platform")
 
 // ProvisionResult is the result returned after successfully creating a provisioning token.
 type ProvisionResult struct {
@@ -49,7 +56,7 @@ var validPlatforms = map[string]bool{
 // returns the token along with a ready-to-run curl install command.
 func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetOS, targetArch, createdBy string, ttl time.Duration) (*ProvisionResult, error) {
 	if !tlsutil.ValidMachineID.MatchString(machineID) {
-		return nil, fmt.Errorf("invalid machine ID %q", machineID)
+		return nil, fmt.Errorf("%w: %q", ErrInvalidMachineID, machineID)
 	}
 
 	if targetOS == "" {
@@ -60,10 +67,11 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	}
 
 	if !validPlatforms[targetOS+"-"+targetArch] {
-		return nil, fmt.Errorf("unsupported platform %s-%s", targetOS, targetArch)
+		return nil, fmt.Errorf("%w: %s-%s", ErrUnsupportedPlatform, targetOS, targetArch)
 	}
 
-	certPEM, keyPEM, err := tlsutil.IssueAgentCertPEM(svc.caDir, machineID)
+	// gRPC mTLS auth requires CN="agent-{machineID}", so prefix the CN accordingly.
+	certPEM, keyPEM, err := tlsutil.IssueAgentCertPEM(svc.caDir, "agent-"+machineID)
 	if err != nil {
 		return nil, fmt.Errorf("issue agent cert: %w", err)
 	}

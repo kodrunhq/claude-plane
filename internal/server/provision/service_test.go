@@ -2,6 +2,7 @@ package provision_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -144,8 +145,8 @@ func TestCreateAgentProvision_InvalidMachineID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid machine ID")
 	}
-	if !strings.Contains(err.Error(), "invalid machine ID") {
-		t.Errorf("unexpected error: %v", err)
+	if !errors.Is(err, provision.ErrInvalidMachineID) {
+		t.Errorf("expected ErrInvalidMachineID, got %v", err)
 	}
 }
 
@@ -157,8 +158,8 @@ func TestCreateAgentProvision_UnsupportedPlatform(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unsupported platform")
 	}
-	if !strings.Contains(err.Error(), "unsupported platform") {
-		t.Errorf("unexpected error: %v", err)
+	if !errors.Is(err, provision.ErrUnsupportedPlatform) {
+		t.Errorf("expected ErrUnsupportedPlatform, got %v", err)
 	}
 }
 
