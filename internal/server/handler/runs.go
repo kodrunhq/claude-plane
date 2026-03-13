@@ -90,7 +90,8 @@ func (h *RunHandler) authorizeRunAccess(w http.ResponseWriter, r *http.Request, 
 
 // triggerRunRequest is the JSON body for POST /api/v1/jobs/{jobID}/runs.
 type triggerRunRequest struct {
-	TriggerType string `json:"trigger_type"`
+	TriggerType   string `json:"trigger_type"`
+	TriggerDetail string `json:"trigger_detail,omitempty"`
 }
 
 // TriggerRun handles POST /api/v1/jobs/{jobID}/runs.
@@ -110,7 +111,7 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 		req.TriggerType = "manual"
 	}
 
-	run, err := h.orch.CreateRun(r.Context(), jobID, req.TriggerType)
+	run, err := h.orch.CreateRun(r.Context(), jobID, req.TriggerType, req.TriggerDetail)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")

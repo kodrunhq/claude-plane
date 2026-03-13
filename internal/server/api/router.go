@@ -56,7 +56,7 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 // Protected routes (logout, machines, sessions) require a valid JWT, checked
 // via httpOnly cookie first, then Authorization: Bearer header as fallback.
 // WebSocket routes support cookie auth (preferred) and first-message auth.
-func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler) chi.Router {
+func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler, eventHandler *handler.EventHandler, webhookHandler *handler.WebhookHandler, triggerHandler *handler.TriggerHandler, ingestHandler *handler.IngestHandler) chi.Router {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -101,7 +101,7 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 	})
 
 	// Job system routes (flat paths, JWT-protected)
-	if jobHandler != nil || runHandler != nil {
+	if jobHandler != nil || runHandler != nil || eventHandler != nil || webhookHandler != nil || triggerHandler != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware(h.authSvc))
 			if jobHandler != nil {
@@ -110,7 +110,21 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 			if runHandler != nil {
 				handler.RegisterRunRoutes(r, runHandler)
 			}
+			if eventHandler != nil {
+				handler.RegisterEventRoutes(r, eventHandler)
+			}
+			if webhookHandler != nil {
+				handler.RegisterWebhookRoutes(r, webhookHandler)
+			}
+			if triggerHandler != nil {
+				handler.RegisterTriggerRoutes(r, triggerHandler)
+			}
 		})
+	}
+
+	// Ingest routes are public (auth is handled via HMAC signatures).
+	if ingestHandler != nil {
+		handler.RegisterIngestRoutes(r, ingestHandler)
 	}
 
 	return r
