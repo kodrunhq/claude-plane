@@ -4,6 +4,7 @@
 package tlsutil
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -164,9 +165,12 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 		return nil, nil, fmt.Errorf("read CA cert: %w", err)
 	}
 
-	block, _ := pem.Decode(certPEM)
+	block, rest := pem.Decode(certPEM)
 	if block == nil {
 		return nil, nil, fmt.Errorf("decode CA cert PEM: no PEM data found")
+	}
+	if len(bytes.TrimSpace(rest)) != 0 {
+		return nil, nil, fmt.Errorf("decode CA cert PEM: unexpected additional data")
 	}
 
 	cert, err := x509.ParseCertificate(block.Bytes)
@@ -179,9 +183,12 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 		return nil, nil, fmt.Errorf("read CA key: %w", err)
 	}
 
-	keyBlock, _ := pem.Decode(keyPEM)
+	keyBlock, rest := pem.Decode(keyPEM)
 	if keyBlock == nil {
 		return nil, nil, fmt.Errorf("decode CA key PEM: no PEM data found")
+	}
+	if len(bytes.TrimSpace(rest)) != 0 {
+		return nil, nil, fmt.Errorf("decode CA key PEM: unexpected additional data")
 	}
 	if keyBlock.Type != "EC PRIVATE KEY" {
 		return nil, nil, fmt.Errorf("unexpected CA key PEM type %q, want %q", keyBlock.Type, "EC PRIVATE KEY")
