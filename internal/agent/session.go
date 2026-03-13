@@ -47,15 +47,26 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 	// Build a clean environment, stripping CLAUDECODE= env vars to prevent
 	// "nested session" detection when spawning Claude CLI processes.
 	environ := os.Environ()
-	cmd.Env = make([]string, 0, len(environ)+len(envVars))
+	cmd.Env = make([]string, 0, len(environ)+len(envVars)+1)
+	hasTERM := false
 	for _, e := range environ {
 		if strings.HasPrefix(e, "CLAUDECODE=") {
 			continue
 		}
+		if strings.HasPrefix(e, "TERM=") {
+			hasTERM = true
+		}
 		cmd.Env = append(cmd.Env, e)
 	}
 	for k, v := range envVars {
+		if k == "TERM" {
+			hasTERM = true
+		}
 		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	// Default to xterm-256color so CLI tools render Unicode and colors correctly.
+	if !hasTERM {
+		cmd.Env = append(cmd.Env, "TERM=xterm-256color")
 	}
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: rows, Cols: cols})
