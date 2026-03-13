@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router';
-import { LayoutDashboard, Terminal, Server, Workflow, LogOut } from 'lucide-react';
+import { LayoutDashboard, Terminal, Server, Workflow, Play, LogOut } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
 
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/sessions', label: 'Sessions', icon: Terminal },
   { to: '/machines', label: 'Machines', icon: Server },
   { to: '/jobs', label: 'Jobs', icon: Workflow },
+  { to: '/runs', label: 'Runs', icon: Play },
 ] as const;
 
 export function Sidebar() {

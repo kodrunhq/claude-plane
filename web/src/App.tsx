@@ -9,6 +9,7 @@ import { MachinesPage } from './views/MachinesPage.tsx'
 import { JobsPage } from './views/JobsPage.tsx'
 import { JobEditor } from './views/JobEditor.tsx'
 import { RunDetail } from './views/RunDetail.tsx'
+import { RunsPage } from './views/RunsPage.tsx'
 import { LoginPage } from './views/LoginPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { useAuthStore } from './stores/auth.ts'
@@ -65,6 +66,7 @@ function App() {
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/new" element={<JobEditor />} />
             <Route path="/jobs/:id" element={<JobEditor />} />
+            <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:id" element={<RunDetail />} />
           </Routes>
         </AppShell>
