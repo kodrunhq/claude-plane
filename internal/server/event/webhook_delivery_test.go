@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,13 +19,15 @@ import (
 
 // mockWebhookStore implements WebhookStore for testing.
 type mockWebhookStore struct {
-	mu               sync.Mutex
-	webhooks         []Webhook
-	createdDelivery  *WebhookDelivery
-	updatedDelivery  *WebhookDelivery
-	pendingList      []WebhookDelivery
-	listWebhooksErr  error
+	mu                sync.Mutex
+	webhooks          []Webhook
+	events            map[string]Event
+	createdDelivery   *WebhookDelivery
+	updatedDelivery   *WebhookDelivery
+	pendingList       []WebhookDelivery
+	listWebhooksErr   error
 	createDeliveryErr error
+	getEventErr       error
 }
 
 func (m *mockWebhookStore) ListWebhooks(_ context.Context) ([]Webhook, error) {
@@ -63,6 +66,21 @@ func (m *mockWebhookStore) PendingDeliveries(_ context.Context) ([]WebhookDelive
 	out := make([]WebhookDelivery, len(m.pendingList))
 	copy(out, m.pendingList)
 	return out, nil
+}
+
+func (m *mockWebhookStore) GetEventByID(_ context.Context, eventID string) (*Event, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.getEventErr != nil {
+		return nil, m.getEventErr
+	}
+	if m.events != nil {
+		if e, ok := m.events[eventID]; ok {
+			cp := e
+			return &cp, nil
+		}
+	}
+	return nil, fmt.Errorf("event %s not found", eventID)
 }
 
 func (m *mockWebhookStore) lastUpdated() *WebhookDelivery {
@@ -362,6 +380,112 @@ func TestHandlerDisabledWebhookSkipsDelivery(t *testing.T) {
 	}
 	if store.createdDelivery != nil {
 		t.Error("delivery row was created for disabled webhook")
+	}
+}
+
+// TestRetryPendingDeliversFullEvent verifies that retryPending looks up the
+// full event from the store and delivers it (not a stub with only EventID).
+func TestRetryPendingDeliversFullEvent(t *testing.T) {
+	ev := webhookTestEvent(TypeRunCreated)
+
+	var receivedBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	ms := &mockWebhookStore{
+		webhooks: []Webhook{
+			{
+				WebhookID: "wh-retry",
+				URL:       srv.URL,
+				Secret:    nil,
+				Events:    []string{"*"},
+				Enabled:   true,
+			},
+		},
+		events: map[string]Event{ev.EventID: ev},
+		pendingList: []WebhookDelivery{
+			{
+				DeliveryID: "del-1",
+				WebhookID:  "wh-retry",
+				EventID:    ev.EventID,
+				Status:     "pending",
+				Attempts:   1,
+			},
+		},
+	}
+
+	deliverer := NewWebhookDeliverer(ms, nil, nullLogger())
+	deliverer.retryPending(context.Background())
+
+	// Wait for the HTTP call and UpdateDelivery to complete.
+	ok := waitForCondition(t, 2*time.Second, func() bool {
+		return ms.lastUpdated() != nil
+	})
+	if !ok {
+		t.Fatal("timed out waiting for UpdateDelivery after retry")
+	}
+
+	if receivedBody == nil {
+		t.Fatal("test server did not receive a request")
+	}
+
+	var got Event
+	if err := json.Unmarshal(receivedBody, &got); err != nil {
+		t.Fatalf("unmarshal received body: %v", err)
+	}
+	// Ensure the full event was sent, not just the EventID stub.
+	if got.Type != ev.Type {
+		t.Errorf("Type = %q, want %q", got.Type, ev.Type)
+	}
+	if got.Source != ev.Source {
+		t.Errorf("Source = %q, want %q", got.Source, ev.Source)
+	}
+}
+
+// TestRecordFailureOnUnreachableURL verifies that when the target host is
+// unreachable, recordFailure is called and the delivery is updated with
+// status "pending" and a non-empty LastError.
+func TestRecordFailureOnUnreachableURL(t *testing.T) {
+	ms := &mockWebhookStore{
+		webhooks: []Webhook{
+			{
+				WebhookID: "wh-unreachable",
+				URL:       "http://127.0.0.1:1", // port 1 is always unreachable
+				Secret:    nil,
+				Events:    []string{"*"},
+				Enabled:   true,
+			},
+		},
+	}
+
+	deliverer := NewWebhookDeliverer(ms, &http.Client{Timeout: 500 * time.Millisecond}, nullLogger())
+	handler := deliverer.Handler()
+
+	ev := webhookTestEvent(TypeRunFailed)
+	if err := handler(context.Background(), ev); err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+
+	ok := waitForCondition(t, 3*time.Second, func() bool {
+		updated := ms.lastUpdated()
+		return updated != nil && updated.LastError != ""
+	})
+	if !ok {
+		t.Fatal("timed out waiting for failure to be recorded")
+	}
+
+	updated := ms.lastUpdated()
+	if updated.Status != "pending" {
+		t.Errorf("status = %q, want %q", updated.Status, "pending")
+	}
+	if updated.LastError == "" {
+		t.Error("LastError must be non-empty after connection failure")
+	}
+	if updated.NextRetryAt == nil {
+		t.Error("NextRetryAt must be set after connection failure")
 	}
 }
 

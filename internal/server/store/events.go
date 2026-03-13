@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -89,6 +90,27 @@ func (s *Store) ListEvents(ctx context.Context, filter EventFilter) ([]event.Eve
 		events = append(events, e)
 	}
 	return events, rows.Err()
+}
+
+// GetEventByID retrieves a single event by its primary key.
+func (s *Store) GetEventByID(ctx context.Context, eventID string) (*event.Event, error) {
+	var e event.Event
+	var payloadStr string
+
+	err := s.reader.QueryRowContext(ctx,
+		`SELECT event_id, event_type, timestamp, source, payload FROM events WHERE event_id = ?`, eventID,
+	).Scan(&e.EventID, &e.Type, &e.Timestamp, &e.Source, &payloadStr)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("event %s: %w", eventID, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get event by id: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(payloadStr), &e.Payload); err != nil {
+		return nil, fmt.Errorf("unmarshal event payload: %w", err)
+	}
+	return &e, nil
 }
 
 // PurgeEvents deletes events older than before and returns the number deleted.
