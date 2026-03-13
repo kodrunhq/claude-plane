@@ -116,9 +116,12 @@ export function RunDetail() {
         }
       }
       return (
-        <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-blue-600/20 text-blue-400">
+        <span
+          className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-blue-600/20 text-blue-400 max-w-[200px]"
+          title={cronExpr ?? undefined}
+        >
           <Clock size={10} />
-          {cronExpr ?? 'Scheduled'}
+          <span className="truncate">{cronExpr ?? 'Scheduled'}</span>
         </span>
       );
     }
