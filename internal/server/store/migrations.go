@@ -233,6 +233,26 @@ CREATE INDEX IF NOT EXISTS idx_job_triggers_job ON job_triggers(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_triggers_event ON job_triggers(event_type, enabled);
 `,
 	},
+	{
+		Version:     3,
+		Description: "cron schedules",
+		SQL: `
+CREATE TABLE IF NOT EXISTS cron_schedules (
+    schedule_id       TEXT PRIMARY KEY,
+    job_id            TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
+    cron_expr         TEXT NOT NULL,
+    timezone          TEXT NOT NULL DEFAULT 'UTC',
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    next_run_at       DATETIME,
+    last_triggered_at DATETIME,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_cron_schedules_job ON cron_schedules(job_id);
+CREATE INDEX IF NOT EXISTS idx_cron_schedules_enabled ON cron_schedules(enabled, next_run_at);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
