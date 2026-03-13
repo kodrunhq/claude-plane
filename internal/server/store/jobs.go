@@ -679,7 +679,7 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 		args = append(args, opts.TriggerType)
 	}
 
-	query += ` ORDER BY r.created_at DESC LIMIT ? OFFSET ?`
+	query += ` ORDER BY r.created_at DESC, r.run_id DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, opts.Offset)
 
 	rows, err := s.reader.QueryContext(ctx, query, args...)
