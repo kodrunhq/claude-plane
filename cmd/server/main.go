@@ -160,6 +160,7 @@ func newServeCmd() *cobra.Command {
 			// WebSocket fan-out for the /ws/events endpoint.
 			wsFanout := event.NewWSFanout(eventBus, slog.Default())
 			wsFanout.Start()
+			defer wsFanout.Close()
 
 			// Outbound webhook deliverer — adapter translates store types to event types.
 			webhookStore := &event.WebhookStoreFuncs{

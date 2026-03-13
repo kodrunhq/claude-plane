@@ -52,10 +52,11 @@ type createWebhookRequest struct {
 }
 
 // updateWebhookRequest is the JSON body for PUT /api/v1/webhooks/{id}.
+// Secret is a *string: nil (or absent) preserves existing, "" clears, non-empty replaces.
 type updateWebhookRequest struct {
 	Name    string   `json:"name"`
 	URL     string   `json:"url"`
-	Secret  string   `json:"secret"`
+	Secret  *string  `json:"secret"`
 	Events  []string `json:"events"`
 	Enabled *bool    `json:"enabled"`
 }
@@ -173,10 +174,10 @@ func (h *WebhookHandler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Preserve existing secret if none supplied.
+	// Secret: nil = preserve existing, "" = clear, non-empty = replace.
 	secret := existing.Secret
-	if req.Secret != "" {
-		secret = []byte(req.Secret)
+	if req.Secret != nil {
+		secret = []byte(*req.Secret)
 	}
 
 	enabled := existing.Enabled
