@@ -48,7 +48,7 @@ func GenerateCA(outDir string) error {
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-		MaxPathLen:            1,
+		MaxPathLen:            0,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
