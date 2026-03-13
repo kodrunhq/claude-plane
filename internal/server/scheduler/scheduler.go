@@ -90,7 +90,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	s.mu.Lock()
 	for _, sc := range schedules {
-		if addErr := s.addEntryLocked(sc); addErr != nil {
+		if _, addErr := s.addEntryLocked(sc); addErr != nil {
 			s.logger.Error("failed to add schedule entry",
 				"schedule_id", sc.ScheduleID,
 				"error", addErr,
@@ -111,23 +111,24 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	return nil
 }
 
-// addEntry registers a single CronSchedule with the underlying cron runner.
-// Must be called with s.mu held.
-func (s *Scheduler) addEntryLocked(schedule CronSchedule) error {
+// addEntryLocked registers a single CronSchedule with the underlying cron runner
+// and returns the computed next run time. Must be called with s.mu held.
+func (s *Scheduler) addEntryLocked(schedule CronSchedule) (time.Time, error) {
 	if _, err := time.LoadLocation(schedule.Timezone); err != nil {
-		return fmt.Errorf("invalid timezone %q for schedule %s: %w", schedule.Timezone, schedule.ScheduleID, err)
+		return time.Time{}, fmt.Errorf("invalid timezone %q for schedule %s: %w", schedule.Timezone, schedule.ScheduleID, err)
 	}
 
 	spec := "CRON_TZ=" + schedule.Timezone + " " + schedule.CronExpr
 
 	entryID, err := s.cron.AddFunc(spec, s.buildFuncJob(schedule))
 	if err != nil {
-		return fmt.Errorf("add cron entry for schedule %s: %w", schedule.ScheduleID, err)
+		return time.Time{}, fmt.Errorf("add cron entry for schedule %s: %w", schedule.ScheduleID, err)
 	}
 
 	s.entries[schedule.ScheduleID] = entryID
-	s.logger.Debug("registered schedule", "schedule_id", schedule.ScheduleID, "spec", spec)
-	return nil
+	nextRun := s.cron.Entry(entryID).Next
+	s.logger.Debug("registered schedule", "schedule_id", schedule.ScheduleID, "spec", spec, "next_run", nextRun)
+	return nextRun, nil
 }
 
 // buildFuncJob returns the closure executed by the cron runner each time the
@@ -179,17 +180,19 @@ func (s *Scheduler) buildFuncJob(schedule CronSchedule) func() {
 	}
 }
 
-// ReloadSchedule atomically removes any existing cron entry for scheduleID,
-// fetches the current schedule from the store, and re-registers it if enabled.
+// ReloadSchedule removes any existing cron entry for scheduleID, fetches
+// the current schedule from the store, and re-registers it if enabled.
+// The mutex is released during the store call to avoid blocking fire callbacks.
 func (s *Scheduler) ReloadSchedule(ctx context.Context, scheduleID string) error {
+	// Step 1: remove old entry under lock.
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if entryID, ok := s.entries[scheduleID]; ok {
 		s.cron.Remove(entryID)
 		delete(s.entries, scheduleID)
 	}
+	s.mu.Unlock()
 
+	// Step 2: fetch from store without holding the lock.
 	sc, err := s.store.GetSchedule(ctx, scheduleID)
 	if err != nil {
 		return fmt.Errorf("reload schedule %s: get from store: %w", scheduleID, err)
@@ -213,8 +216,25 @@ func (s *Scheduler) ReloadSchedule(ctx context.Context, scheduleID string) error
 		LastTriggeredAt: sc.LastTriggeredAt,
 	}
 
-	if err := s.addEntryLocked(cronSched); err != nil {
-		return fmt.Errorf("reload schedule %s: add entry: %w", scheduleID, err)
+	// Step 3: re-add entry under lock.
+	s.mu.Lock()
+	nextRun, addErr := s.addEntryLocked(cronSched)
+	s.mu.Unlock()
+
+	if addErr != nil {
+		return fmt.Errorf("reload schedule %s: add entry: %w", scheduleID, addErr)
+	}
+
+	// Step 4: persist computed next_run_at so the UI shows it immediately.
+	if !nextRun.IsZero() {
+		lastTriggered := time.Time{}
+		if sc.LastTriggeredAt != nil {
+			lastTriggered = *sc.LastTriggeredAt
+		}
+		if err := s.store.UpdateScheduleTimestamps(ctx, scheduleID, lastTriggered, nextRun); err != nil {
+			s.logger.Warn("failed to persist next_run_at after reload",
+				"schedule_id", scheduleID, "error", err)
+		}
 	}
 
 	s.logger.Info("schedule reloaded", "schedule_id", scheduleID)

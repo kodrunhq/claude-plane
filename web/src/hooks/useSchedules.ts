@@ -35,10 +35,10 @@ export function useUpdateSchedule() {
 export function useDeleteSchedule() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, jobId }: { id: string; jobId: string }) =>
+    mutationFn: ({ id }: { id: string; jobId: string }) =>
       schedulesApi.delete(id),
-    onSuccess: (_, { jobId }) => {
-      qc.invalidateQueries({ queryKey: ['schedules', jobId] });
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ['schedules', variables.jobId] });
     },
   });
 }

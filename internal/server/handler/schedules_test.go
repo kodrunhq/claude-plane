@@ -482,6 +482,7 @@ func TestScheduleHandler_GetSchedule(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
 
+	fix.addJob("job-1")
 	fix.addSchedule("sched-1", "job-1", "0 * * * *")
 
 	resp, err := http.Get(fix.srv.URL + "/api/v1/schedules/sched-1")
@@ -524,6 +525,7 @@ func TestScheduleHandler_UpdateSchedule(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
 
+	fix.addJob("job-1")
 	fix.addSchedule("sched-1", "job-1", "0 * * * *")
 
 	body := map[string]interface{}{
@@ -578,6 +580,7 @@ func TestScheduleHandler_UpdateSchedule_InvalidCronExpr(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
 
+	fix.addJob("job-1")
 	fix.addSchedule("sched-1", "job-1", "0 * * * *")
 
 	body := map[string]interface{}{"cron_expr": "bad-expr"}
@@ -601,6 +604,7 @@ func TestScheduleHandler_DeleteSchedule(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
 
+	fix.addJob("job-1")
 	schedID := uuid.New().String()
 	fix.addSchedule(schedID, "job-1", "0 * * * *")
 
@@ -644,6 +648,7 @@ func TestScheduleHandler_PauseSchedule(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
 
+	fix.addJob("job-1")
 	fix.addSchedule("sched-1", "job-1", "0 * * * *")
 
 	resp, err := http.Post(fix.srv.URL+"/api/v1/schedules/sched-1/pause", "application/json", nil)
@@ -689,6 +694,7 @@ func TestScheduleHandler_ResumeSchedule(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
 
+	fix.addJob("job-1")
 	fix.addSchedule("sched-1", "job-1", "0 * * * *")
 	fix.schedStore.schedules["sched-1"].Enabled = false
 
