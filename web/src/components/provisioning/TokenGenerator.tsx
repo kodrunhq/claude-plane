@@ -69,7 +69,7 @@ export function TokenGenerator() {
               required
               pattern="[a-zA-Z0-9][a-zA-Z0-9\-]{0,57}"
               title="Alphanumeric and hyphens, 1–58 characters"
-              className="w-full px-3 py-2 text-sm rounded-md border border-gray-700 bg-bg-primary text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent-primary transition-colors"
+              className="w-full px-3 py-2 text-sm rounded-md border border-gray-700 bg-bg-primary text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary transition-colors"
             />
           </div>
 

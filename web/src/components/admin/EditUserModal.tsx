@@ -74,7 +74,7 @@ function EditUserForm({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Optional"
-          className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-gray-700 rounded-md text-text-primary placeholder-text-secondary focus:outline-none focus:border-accent-primary"
+          className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-gray-700 rounded-md text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary"
         />
       </div>
 

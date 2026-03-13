@@ -24,6 +24,7 @@ export function AdminPage() {
       setShowCreate(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create user');
+      throw err;
     }
   }
 
