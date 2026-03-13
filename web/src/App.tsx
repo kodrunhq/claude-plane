@@ -11,6 +11,7 @@ import { JobEditor } from './views/JobEditor.tsx'
 import { RunDetail } from './views/RunDetail.tsx'
 import { RunsPage } from './views/RunsPage.tsx'
 import { LoginPage } from './views/LoginPage.tsx'
+import { WebhooksPage, WebhookDeliveriesPage } from './views/WebhooksPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { useAuthStore } from './stores/auth.ts'
 
@@ -68,6 +69,8 @@ function App() {
             <Route path="/jobs/:id" element={<JobEditor />} />
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:id" element={<RunDetail />} />
+            <Route path="/webhooks" element={<WebhooksPage />} />
+            <Route path="/webhooks/:id/deliveries" element={<WebhookDeliveriesPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>
