@@ -311,6 +311,162 @@ func TestJobStore_ListRuns(t *testing.T) {
 	}
 }
 
+func TestJobStore_ListAllRuns(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	jobA, _ := s.CreateJob(ctx, "Job A", "", "")
+	jobB, _ := s.CreateJob(ctx, "Job B", "", "")
+	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
+	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
+	_, _ = s.CreateRun(ctx, jobB.JobID, "scheduled")
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	if err != nil {
+		t.Fatalf("ListAllRuns: %v", err)
+	}
+	if len(runs) != 3 {
+		t.Errorf("ListAllRuns count = %d, want 3", len(runs))
+	}
+}
+
+func TestJobStore_ListAllRuns_FilterByStatus(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	job, _ := s.CreateJob(ctx, "Job", "", "")
+	run1, _ := s.CreateRun(ctx, job.JobID, "manual")
+	_, _ = s.CreateRun(ctx, job.JobID, "manual")
+
+	_ = s.UpdateRunStatus(ctx, run1.RunID, StatusCompleted)
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{Status: StatusCompleted})
+	if err != nil {
+		t.Fatalf("ListAllRuns filter by status: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Errorf("ListAllRuns completed count = %d, want 1", len(runs))
+	}
+	if runs[0].Status != StatusCompleted {
+		t.Errorf("Status = %q, want %q", runs[0].Status, StatusCompleted)
+	}
+}
+
+func TestJobStore_ListAllRuns_FilterByJobID(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	jobA, _ := s.CreateJob(ctx, "Job A", "", "")
+	jobB, _ := s.CreateJob(ctx, "Job B", "", "")
+	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
+	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
+	_, _ = s.CreateRun(ctx, jobB.JobID, "manual")
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{JobID: jobA.JobID})
+	if err != nil {
+		t.Fatalf("ListAllRuns filter by job: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Errorf("ListAllRuns job A count = %d, want 2", len(runs))
+	}
+	for _, r := range runs {
+		if r.JobID != jobA.JobID {
+			t.Errorf("unexpected JobID %q, want %q", r.JobID, jobA.JobID)
+		}
+	}
+}
+
+func TestJobStore_ListAllRuns_Pagination(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	job, _ := s.CreateJob(ctx, "Job", "", "")
+	for i := 0; i < 5; i++ {
+		_, _ = s.CreateRun(ctx, job.JobID, "manual")
+	}
+
+	page1, err := s.ListAllRuns(ctx, ListRunsOptions{Limit: 3, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListAllRuns page 1: %v", err)
+	}
+	if len(page1) != 3 {
+		t.Errorf("page 1 count = %d, want 3", len(page1))
+	}
+
+	page2, err := s.ListAllRuns(ctx, ListRunsOptions{Limit: 3, Offset: 3})
+	if err != nil {
+		t.Fatalf("ListAllRuns page 2: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Errorf("page 2 count = %d, want 2", len(page2))
+	}
+
+	// Ensure pages don't overlap
+	seen := map[string]bool{}
+	for _, r := range page1 {
+		seen[r.RunID] = true
+	}
+	for _, r := range page2 {
+		if seen[r.RunID] {
+			t.Errorf("run %q appeared in both pages", r.RunID)
+		}
+	}
+}
+
+func TestJobStore_ListAllRuns_IncludesJobName(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	job, _ := s.CreateJob(ctx, "Named Job", "", "")
+	_, _ = s.CreateRun(ctx, job.JobID, "manual")
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	if err != nil {
+		t.Fatalf("ListAllRuns: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("ListAllRuns count = %d, want 1", len(runs))
+	}
+	if runs[0].JobName != "Named Job" {
+		t.Errorf("JobName = %q, want %q", runs[0].JobName, "Named Job")
+	}
+}
+
+func TestJobStore_ListAllRuns_DefaultLimit(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	job, _ := s.CreateJob(ctx, "Job", "", "")
+	// Insert 55 runs — more than the default limit of 50.
+	for i := 0; i < 55; i++ {
+		_, _ = s.CreateRun(ctx, job.JobID, "manual")
+	}
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	if err != nil {
+		t.Fatalf("ListAllRuns default limit: %v", err)
+	}
+	if len(runs) != 50 {
+		t.Errorf("default limit count = %d, want 50", len(runs))
+	}
+}
+
+func TestJobStore_ListAllRuns_EmptyResult(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	if err != nil {
+		t.Fatalf("ListAllRuns empty: %v", err)
+	}
+	if runs == nil {
+		t.Error("expected non-nil slice for empty result")
+	}
+	if len(runs) != 0 {
+		t.Errorf("empty count = %d, want 0", len(runs))
+	}
+}
+
 func TestJobStore_DeleteJobCascades(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()

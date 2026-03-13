@@ -41,6 +41,21 @@ type UpdateStepParams struct {
 	OnFailure      string
 }
 
+// ListRunsOptions holds optional filters and pagination for ListAllRuns.
+type ListRunsOptions struct {
+	JobID       string
+	Status      string
+	TriggerType string
+	Limit       int
+	Offset      int
+}
+
+// RunWithJobName embeds Run and adds the human-readable job name.
+type RunWithJobName struct {
+	Run
+	JobName string `json:"job_name"`
+}
+
 // JobStoreIface defines the interface for job-related database operations.
 // Used by the orchestrator package for dependency injection and testability.
 type JobStoreIface interface {
@@ -62,6 +77,7 @@ type JobStoreIface interface {
 	UpdateRunStepStatus(ctx context.Context, runStepID, status, sessionID string, exitCode int) error
 	UpdateRunStatus(ctx context.Context, runID, status string) error
 	ListRuns(ctx context.Context, jobID string) ([]Run, error)
+	ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWithJobName, error)
 }
 
 // Compile-time check that Store implements JobStoreIface.
@@ -631,6 +647,66 @@ func (s *Store) ListRuns(ctx context.Context, jobID string) ([]Run, error) {
 		runs = append(runs, r)
 	}
 	return runs, rows.Err()
+}
+
+// ListAllRuns returns runs across all jobs with optional filtering and pagination.
+// Results are ordered by created_at DESC. Defaults to limit 50 when Limit is 0.
+func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWithJobName, error) {
+	const defaultLimit = 50
+
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+
+	query := `SELECT r.run_id, r.job_id, r.status, r.trigger_type, r.started_at, r.ended_at, r.created_at, j.name
+	           FROM runs r
+	           JOIN jobs j ON r.job_id = j.job_id
+	           WHERE 1=1`
+
+	args := make([]interface{}, 0, 5)
+
+	if opts.JobID != "" {
+		query += ` AND r.job_id = ?`
+		args = append(args, opts.JobID)
+	}
+	if opts.Status != "" {
+		query += ` AND r.status = ?`
+		args = append(args, opts.Status)
+	}
+	if opts.TriggerType != "" {
+		query += ` AND r.trigger_type = ?`
+		args = append(args, opts.TriggerType)
+	}
+
+	query += ` ORDER BY r.created_at DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, opts.Offset)
+
+	rows, err := s.reader.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list all runs: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]RunWithJobName, 0)
+	for rows.Next() {
+		var rj RunWithJobName
+		var startedAt, endedAt sql.NullTime
+		if err := rows.Scan(
+			&rj.RunID, &rj.JobID, &rj.Status, &rj.TriggerType,
+			&startedAt, &endedAt, &rj.CreatedAt, &rj.JobName,
+		); err != nil {
+			return nil, fmt.Errorf("scan run with job name: %w", err)
+		}
+		if startedAt.Valid {
+			rj.StartedAt = &startedAt.Time
+		}
+		if endedAt.Valid {
+			rj.CompletedAt = &endedAt.Time
+		}
+		results = append(results, rj)
+	}
+	return results, rows.Err()
 }
 
 // nullIfEmpty returns nil for empty strings to satisfy SQL NULL constraints.
