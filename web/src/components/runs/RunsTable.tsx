@@ -34,7 +34,15 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
           <tr
             key={run.run_id}
             onClick={() => onRowClick(run.run_id)}
-            className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-gray-700/50 transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onRowClick(run.run_id);
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-gray-700/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
           >
             <td className="px-4 py-2">
               <RunStatusBadge status={run.status} size={badgeSize} />
