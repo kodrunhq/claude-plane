@@ -48,7 +48,7 @@ func GenerateCA(outDir string) error {
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-		MaxPathLen:            1,
+		MaxPathLen:            0,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
@@ -183,6 +183,9 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	if keyBlock == nil {
 		return nil, nil, fmt.Errorf("decode CA key PEM: no PEM data found")
 	}
+	if keyBlock.Type != "EC PRIVATE KEY" {
+		return nil, nil, fmt.Errorf("unexpected CA key PEM type %q, want %q", keyBlock.Type, "EC PRIVATE KEY")
+	}
 
 	key, err := x509.ParseECPrivateKey(keyBlock.Bytes)
 	if err != nil {
@@ -194,7 +197,7 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 
 // writePEMFiles writes a certificate and ECDSA private key as PEM files.
 func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.PrivateKey) (err error) {
-	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", certName, err)
 	}
