@@ -27,6 +27,9 @@ jobs:
           version: latest
           args: check
 
+      - name: Stub frontend dist for embed
+        run: mkdir -p internal/server/frontend/dist && touch internal/server/frontend/dist/.gitkeep
+
       - name: Vet
         run: go vet ./...
 

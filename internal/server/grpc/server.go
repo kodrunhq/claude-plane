@@ -302,6 +302,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	}
 }
 
+const (
+	defaultScannerBufSize = 64 * 1024  // 64 KiB
+	maxScannerBufSize     = 1024 * 1024 // 1 MiB
+)
+
 // parseAsciicastData extracts raw terminal output bytes from asciicast v2 JSONL data.
 // It skips the header line ({"version":2,...}) and parses each event line
 // [timestamp, "o", "data"] to extract the data field.
@@ -310,7 +315,7 @@ func parseAsciicastData(raw []byte) []byte {
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 	// Asciicast lines can be large (e.g. big output bursts); raise the
 	// default 64 KiB token limit to 1 MiB to avoid silent truncation.
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, defaultScannerBufSize), maxScannerBufSize)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
