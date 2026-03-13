@@ -12,15 +12,14 @@ import (
 
 	"github.com/kodrunhq/claude-plane/internal/agent"
 	"github.com/kodrunhq/claude-plane/internal/agent/config"
+	"github.com/kodrunhq/claude-plane/internal/shared/buildinfo"
 )
-
-var version = "0.1.0-dev"
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "claude-plane-agent",
 		Short:   "Agent for Claude CLI session management on worker machines",
-		Version: version,
+		Version: buildinfo.String(),
 	}
 
 	rootCmd.AddCommand(

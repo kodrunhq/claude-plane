@@ -253,6 +253,29 @@ CREATE INDEX IF NOT EXISTS idx_cron_schedules_job ON cron_schedules(job_id);
 CREATE INDEX IF NOT EXISTS idx_cron_schedules_enabled ON cron_schedules(enabled, next_run_at);
 `,
 	},
+	{
+		Version:     4,
+		Description: "provisioning tokens",
+		SQL: `
+CREATE TABLE IF NOT EXISTS provisioning_tokens (
+    token           TEXT PRIMARY KEY,
+    machine_id      TEXT NOT NULL,
+    target_os       TEXT NOT NULL DEFAULT 'linux',
+    target_arch     TEXT NOT NULL DEFAULT 'amd64',
+    ca_cert_pem     TEXT NOT NULL,
+    agent_cert_pem  TEXT NOT NULL,
+    agent_key_pem   TEXT NOT NULL,
+    server_address  TEXT NOT NULL,
+    grpc_address    TEXT NOT NULL,
+    created_by      TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at      DATETIME NOT NULL,
+    redeemed_at     DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_provisioning_tokens_expires ON provisioning_tokens(expires_at);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

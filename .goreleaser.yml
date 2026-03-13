@@ -1,0 +1,57 @@
+version: 2
+project_name: claude-plane
+
+before:
+  hooks:
+    - bash -c "cd web && npm ci && npm run build"
+    - bash -c "VERSION={{ .Version }} COMMIT={{ .ShortCommit }} DATE={{ .Date }} bash scripts/build-agent-binaries.sh"
+
+builds:
+  - id: server
+    binary: claude-plane-server
+    main: ./cmd/server
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Version={{ .Version }}
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Commit={{ .ShortCommit }}
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Date={{ .Date }}
+
+  - id: agent
+    binary: claude-plane-agent
+    main: ./cmd/agent
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Version={{ .Version }}
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Commit={{ .ShortCommit }}
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Date={{ .Date }}
+
+archives:
+  - id: server
+    ids: [server]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: darwin
+        formats: [zip]
+    name_template: "claude-plane-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: agent
+    ids: [agent]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: darwin
+        formats: [zip]
+    name_template: "claude-plane-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

@@ -38,6 +38,10 @@ go.work.sum
 internal/server/frontend/dist/*
 !internal/server/frontend/dist/.gitkeep
 
+# Agent binaries (cross-compiled, embedded into server binary)
+internal/server/agentdl/binaries/*
+!internal/server/agentdl/binaries/.gitkeep
+
 # Runtime data (quickstart, local dev)
 data/
 ca/
