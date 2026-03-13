@@ -20,6 +20,9 @@ type Publisher interface {
 
 // HandlerFunc is the callback invoked for each matched event.
 // Returning a non-nil error causes a Warn-level log entry; the bus does not retry.
+//
+// Handlers always receive context.Background() because delivery is asynchronous.
+// The context passed to Publish may be cancelled before the handler runs.
 type HandlerFunc func(ctx context.Context, event Event) error
 
 // SubscriberOptions configures delivery behaviour for a single subscription.
@@ -63,8 +66,8 @@ func NewBus(logger *slog.Logger) *Bus {
 
 // Publish delivers event to every subscriber whose pattern matches event.Type.
 // Fan-out is non-blocking: if a subscriber's buffer is full the event is dropped
-// and a Warn-level message is emitted. Publish returns an error only if the bus
-// is already closed.
+// and a Warn-level message is emitted. If the bus is already closed, Publish
+// silently discards the event and returns nil.
 func (b *Bus) Publish(ctx context.Context, event Event) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -121,6 +124,14 @@ func (b *Bus) Subscribe(pattern string, handler HandlerFunc, opts SubscriberOpti
 	}
 
 	b.mu.Lock()
+	if b.closed {
+		// Bus was closed between sub creation and registration; clean up and
+		// return a no-op unsubscribe so the caller never sees a leaked goroutine.
+		b.mu.Unlock()
+		sub.once.Do(func() { close(sub.ch) })
+		sub.wg.Wait()
+		return func() {}
+	}
 	b.subscribers = append(b.subscribers, sub)
 	b.mu.Unlock()
 
