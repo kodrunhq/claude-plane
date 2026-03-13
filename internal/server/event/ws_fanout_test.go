@@ -3,7 +3,6 @@ package event
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -339,5 +338,3 @@ func TestWSFanoutClosedClientRemovedAutomatically(t *testing.T) {
 	}
 }
 
-// Ensure the package compiles even without importing net/http (used transitively).
-var _ net.Conn // keep net import used

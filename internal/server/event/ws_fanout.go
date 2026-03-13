@@ -33,6 +33,7 @@ type WSFanout struct {
 	mu          sync.RWMutex
 	clients     map[*wsClient]struct{}
 	unsubscribe func()
+	startOnce   sync.Once
 }
 
 // NewWSFanout constructs a WSFanout. Call Start() to begin receiving events.
@@ -49,11 +50,14 @@ func NewWSFanout(bus *Bus, logger *slog.Logger) *WSFanout {
 }
 
 // Start subscribes the fan-out to all events on the bus ("*" pattern).
-// It is safe to call Start exactly once.
+// It is idempotent: only the first call has any effect; subsequent calls are
+// silently ignored, preventing a double-subscription from leaking a subscriber.
 func (f *WSFanout) Start() {
-	f.unsubscribe = f.bus.Subscribe("*", f.handle, SubscriberOptions{
-		BufferSize:  512,
-		Concurrency: 1,
+	f.startOnce.Do(func() {
+		f.unsubscribe = f.bus.Subscribe("*", f.handle, SubscriberOptions{
+			BufferSize:  512,
+			Concurrency: 1,
+		})
 	})
 }
 
