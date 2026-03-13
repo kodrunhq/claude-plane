@@ -1,11 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '../api/jobs.ts';
+import type { ListRunsParams, Run } from '../types/job.ts';
 
-export function useRuns(jobId: string | undefined) {
+function hasActiveRuns(runs: Run[] | undefined): boolean {
+  return runs?.some((r) => r.status === 'pending' || r.status === 'running') ?? false;
+}
+
+export function useRuns(params?: ListRunsParams) {
   return useQuery({
-    queryKey: ['runs', 'list', jobId],
-    queryFn: () => jobsApi.listRuns({ job_id: jobId! }),
-    enabled: !!jobId,
+    queryKey: ['runs', 'list', params],
+    queryFn: () => jobsApi.listRuns(params),
+    refetchInterval: (query) => hasActiveRuns(query.state.data) ? 5_000 : false,
   });
 }
 
@@ -14,7 +19,7 @@ export function useRun(id: string | undefined) {
     queryKey: ['runs', 'detail', id],
     queryFn: () => jobsApi.getRun(id!),
     enabled: !!id,
-    refetchInterval: 5_000, // Fallback polling; WebSocket is primary
+    refetchInterval: 5_000,
   });
 }
 
