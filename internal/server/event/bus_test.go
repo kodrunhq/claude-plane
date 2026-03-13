@@ -178,8 +178,7 @@ func TestMultipleSubscribersReceiveSameEvent(t *testing.T) {
 	for i := range channels {
 		ch := make(chan Event, 1)
 		channels[i] = ch
-		idx := i
-		unsubs[idx] = b.Subscribe("*", func(_ context.Context, ev Event) error {
+		unsubs[i] = b.Subscribe("*", func(_ context.Context, ev Event) error {
 			ch <- ev
 			return nil
 		}, SubscriberOptions{})
@@ -309,7 +308,7 @@ func TestCloseDrainsPendingEvents(t *testing.T) {
 	b := NewBus(nullLogger())
 
 	var count atomic.Int64
-	b.Subscribe("*", func(_ context.Context, _ Event) error {
+	_ = b.Subscribe("*", func(_ context.Context, _ Event) error {
 		// Small sleep to ensure events are in-flight when Close is called.
 		time.Sleep(5 * time.Millisecond)
 		count.Add(1)
@@ -325,6 +324,128 @@ func TestCloseDrainsPendingEvents(t *testing.T) {
 
 	if got := count.Load(); got != total {
 		t.Errorf("processed %d events, want %d", got, total)
+	}
+}
+
+// --- Builder function tests ---
+
+func TestNewRunEvent(t *testing.T) {
+	ev := NewRunEvent(TypeRunCreated, "run-1", "job-2", "running", "manual")
+
+	if ev.EventID == "" {
+		t.Error("EventID must be populated")
+	}
+	if ev.Type != TypeRunCreated {
+		t.Errorf("Type = %q, want %q", ev.Type, TypeRunCreated)
+	}
+	if ev.Source != "orchestrator" {
+		t.Errorf("Source = %q, want %q", ev.Source, "orchestrator")
+	}
+
+	wantKeys := []string{"run_id", "job_id", "status", "trigger_type"}
+	for _, k := range wantKeys {
+		if _, ok := ev.Payload[k]; !ok {
+			t.Errorf("Payload missing key %q", k)
+		}
+	}
+	if ev.Payload["run_id"] != "run-1" {
+		t.Errorf("run_id = %v, want run-1", ev.Payload["run_id"])
+	}
+	if ev.Payload["job_id"] != "job-2" {
+		t.Errorf("job_id = %v, want job-2", ev.Payload["job_id"])
+	}
+	if ev.Payload["status"] != "running" {
+		t.Errorf("status = %v, want running", ev.Payload["status"])
+	}
+	if ev.Payload["trigger_type"] != "manual" {
+		t.Errorf("trigger_type = %v, want manual", ev.Payload["trigger_type"])
+	}
+}
+
+func TestNewSessionEvent(t *testing.T) {
+	ev := NewSessionEvent(TypeSessionStarted, "sess-1", "machine-1")
+
+	if ev.EventID == "" {
+		t.Error("EventID must be populated")
+	}
+	if ev.Type != TypeSessionStarted {
+		t.Errorf("Type = %q, want %q", ev.Type, TypeSessionStarted)
+	}
+	if ev.Source != "session" {
+		t.Errorf("Source = %q, want %q", ev.Source, "session")
+	}
+
+	wantKeys := []string{"session_id", "machine_id"}
+	for _, k := range wantKeys {
+		if _, ok := ev.Payload[k]; !ok {
+			t.Errorf("Payload missing key %q", k)
+		}
+	}
+	if ev.Payload["session_id"] != "sess-1" {
+		t.Errorf("session_id = %v, want sess-1", ev.Payload["session_id"])
+	}
+	if ev.Payload["machine_id"] != "machine-1" {
+		t.Errorf("machine_id = %v, want machine-1", ev.Payload["machine_id"])
+	}
+}
+
+func TestNewMachineEvent(t *testing.T) {
+	ev := NewMachineEvent(TypeMachineConnected, "machine-42")
+
+	if ev.EventID == "" {
+		t.Error("EventID must be populated")
+	}
+	if ev.Type != TypeMachineConnected {
+		t.Errorf("Type = %q, want %q", ev.Type, TypeMachineConnected)
+	}
+	if ev.Source != "connmgr" {
+		t.Errorf("Source = %q, want %q", ev.Source, "connmgr")
+	}
+	if _, ok := ev.Payload["machine_id"]; !ok {
+		t.Error("Payload missing key machine_id")
+	}
+	if ev.Payload["machine_id"] != "machine-42" {
+		t.Errorf("machine_id = %v, want machine-42", ev.Payload["machine_id"])
+	}
+}
+
+func TestNewTriggerEvent(t *testing.T) {
+	payload := map[string]any{"repo": "acme/app", "ref": "main"}
+	ev := NewTriggerEvent(TypeTriggerWebhook, "webhook:github", payload)
+
+	if ev.EventID == "" {
+		t.Error("EventID must be populated")
+	}
+	if ev.Type != TypeTriggerWebhook {
+		t.Errorf("Type = %q, want %q", ev.Type, TypeTriggerWebhook)
+	}
+	if ev.Source != "webhook:github" {
+		t.Errorf("Source = %q, want %q", ev.Source, "webhook:github")
+	}
+	if ev.Payload["repo"] != "acme/app" {
+		t.Errorf("repo = %v, want acme/app", ev.Payload["repo"])
+	}
+	if ev.Payload["ref"] != "main" {
+		t.Errorf("ref = %v, want main", ev.Payload["ref"])
+	}
+}
+
+func TestNewTriggerEventNilPayload(t *testing.T) {
+	ev := NewTriggerEvent(TypeTriggerCron, "cron", nil)
+
+	if ev.EventID == "" {
+		t.Error("EventID must be populated")
+	}
+	if ev.Payload == nil {
+		t.Error("Payload must not be nil when nil is passed")
+	}
+}
+
+func TestBuilderEventIDsAreUnique(t *testing.T) {
+	ev1 := NewRunEvent(TypeRunCreated, "r1", "j1", "running", "manual")
+	ev2 := NewRunEvent(TypeRunCreated, "r1", "j1", "running", "manual")
+	if ev1.EventID == ev2.EventID {
+		t.Error("successive builder calls must produce distinct EventIDs")
 	}
 }
 
