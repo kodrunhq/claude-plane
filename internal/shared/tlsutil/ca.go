@@ -144,7 +144,7 @@ func IssueAgentCert(caDir, outDir, machineID string) error {
 			CommonName: machineID,
 		},
 		NotBefore:   now,
-		NotAfter:    now.Add(2 * 365 * 24 * time.Hour),
+		NotAfter:    now.AddDate(2, 0, 0),
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
