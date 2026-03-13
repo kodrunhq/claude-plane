@@ -30,8 +30,8 @@ type OrchestratorIface interface {
 // TriggerSubscriber subscribes to all events on the bus and fires job runs
 // when an enabled trigger's pattern matches the incoming event type.
 //
-// Loop prevention: if the event payload contains a "trigger_job_id" key whose
-// value matches the trigger's job_id, the trigger is skipped to prevent direct
+// Loop prevention: if the event payload contains a "job_id" key whose value
+// matches the trigger's job_id, the trigger is skipped to prevent direct
 // recursion (job A completes → triggers job A → infinite loop).
 type TriggerSubscriber struct {
 	store        TriggerStore
@@ -61,7 +61,9 @@ func (t *TriggerSubscriber) Handler() HandlerFunc {
 		}
 
 		// Extract loop-prevention value from the event payload once.
-		triggerJobID := payloadString(e.Payload, "trigger_job_id")
+		// NewRunEvent sets "job_id" in the payload, so we check that to
+		// prevent direct recursion (job A completes → triggers job A).
+		triggerJobID := payloadString(e.Payload, "job_id")
 
 		for _, trigger := range triggers {
 			if !MatchPattern(trigger.EventType, e.Type) {
