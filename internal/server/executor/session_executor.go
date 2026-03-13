@@ -4,6 +4,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -219,18 +220,25 @@ func (e *SessionStepExecutor) monitorSessionExit(
 
 			sess, err := e.store.GetSession(sessionID)
 			if err != nil {
-				notFoundCount++
-				e.logger.Warn("session not found during polling",
-					"session_id", sessionID,
-					"attempt", notFoundCount,
-					"error", err,
-				)
-				if notFoundCount >= maxNotFoundRetries {
-					e.logger.Error("session persistently not found, failing step",
+				if errors.Is(err, store.ErrNotFound) {
+					notFoundCount++
+					e.logger.Warn("session not found during polling",
 						"session_id", sessionID,
+						"attempt", notFoundCount,
+						"error", err,
 					)
-					e.completeStep(sessionID, failureExitCode)
-					return
+					if notFoundCount >= maxNotFoundRetries {
+						e.logger.Error("session persistently not found, failing step",
+							"session_id", sessionID,
+						)
+						e.completeStep(sessionID, failureExitCode)
+						return
+					}
+				} else {
+					e.logger.Warn("transient error polling session",
+						"session_id", sessionID,
+						"error", err,
+					)
 				}
 				continue
 			}
