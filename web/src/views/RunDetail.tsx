@@ -91,7 +91,7 @@ export function RunDetail() {
   const [elapsed, setElapsed] = useState<number | null>(null);
   useEffect(() => {
     if (!run?.started_at) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing derived state from run timestamps
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting derived state when run has no start time
       setElapsed(null);
       return;
     }

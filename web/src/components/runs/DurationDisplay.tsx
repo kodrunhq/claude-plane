@@ -12,6 +12,7 @@ export function DurationDisplay({ startedAt, completedAt, prefix }: DurationDisp
 
   useEffect(() => {
     if (!startedAt) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting derived state when input is absent
       setElapsed(null);
       return;
     }
