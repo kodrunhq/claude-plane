@@ -11,6 +11,7 @@ import {
   Activity,
   Users,
   KeyRound,
+  Lock,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -57,6 +58,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/users', label: 'Users', icon: Users },
       { to: '/provisioning', label: 'Provisioning', icon: KeyRound },
+      { to: '/credentials', label: 'Credentials', icon: Lock },
     ],
   },
 ];
