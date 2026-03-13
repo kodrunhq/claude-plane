@@ -100,6 +100,7 @@ func HandleEventsWS(authSvc *auth.Service, fanout *event.WSFanout, logger *slog.
 }
 
 // runEventsLoop manages the lifecycle of an authenticated events WebSocket:
+//   - starts a single reader goroutine that owns all conn.Read calls
 //   - waits up to 5s for an optional subscribe message; defaults to ["*"]
 //   - registers the connection with the WSFanout (which delivers real events)
 //   - sends periodic heartbeat pings
@@ -111,8 +112,32 @@ func runEventsLoop(conn *websocket.Conn, reqCtx context.Context, fanout *event.W
 
 	logger.Debug("events websocket connected")
 
+	// Single reader goroutine: only one goroutine ever calls conn.Read.
+	// The first message (within subscriptionTimeout) is forwarded to firstMsg
+	// for subscription negotiation; all subsequent reads drain the connection.
+	firstMsg := make(chan []byte, 1)
+	go func() {
+		defer cancel()
+		first := true
+		for {
+			_, msg, err := conn.Read(ctx)
+			if err != nil {
+				if first {
+					close(firstMsg) // signal no message arrived
+				}
+				return
+			}
+			if first {
+				first = false
+				firstMsg <- msg
+				continue
+			}
+			// Drain subsequent frames (future control messages, etc.)
+		}
+	}()
+
 	// --- Optional subscribe message ---
-	patterns := negotiatePatterns(conn, ctx, logger)
+	patterns := negotiatePatterns(firstMsg, ctx, logger)
 
 	// Register with fanout (no-op when fanout is nil to ease integration order).
 	if fanout != nil {
@@ -123,17 +148,6 @@ func runEventsLoop(conn *websocket.Conn, reqCtx context.Context, fanout *event.W
 	// Heartbeat ticker — keeps idle connections alive and detects dropped clients.
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
-
-	// Reader goroutine: drain incoming frames (client may send future control messages).
-	// Signals ctx cancellation when the connection closes.
-	go func() {
-		defer cancel()
-		for {
-			if _, _, err := conn.Read(ctx); err != nil {
-				return
-			}
-		}
-	}()
 
 	for {
 		select {
@@ -149,46 +163,30 @@ func runEventsLoop(conn *websocket.Conn, reqCtx context.Context, fanout *event.W
 	}
 }
 
-// negotiatePatterns reads an optional subscribe message within subscriptionTimeout.
-// If none arrives, it returns the default wildcard pattern.
-//
-// The read runs in a background goroutine so that a timeout does NOT cancel the
-// context passed to conn.Read — which would close the underlying connection with
-// the coder/websocket library. The goroutine is bounded by the parent ctx (i.e.
-// it exits when the connection is eventually torn down by runEventsLoop).
-func negotiatePatterns(conn *websocket.Conn, ctx context.Context, logger *slog.Logger) []string {
-	ch := make(chan []string, 1)
-
-	go func() {
-		// Use the parent ctx so cancelling it does not close the connection
-		// prematurely; the timeout is handled via time.After below.
-		_, msg, err := conn.Read(ctx)
-		if err != nil {
-			ch <- []string{"*"}
-			return
+// negotiatePatterns waits up to subscriptionTimeout for an optional subscribe
+// message on the firstMsg channel. If none arrives it returns the default
+// wildcard pattern. This function never calls conn.Read itself — all reading
+// is done by the single reader goroutine in runEventsLoop.
+func negotiatePatterns(firstMsg <-chan []byte, ctx context.Context, logger *slog.Logger) []string {
+	select {
+	case msg, ok := <-firstMsg:
+		if !ok {
+			// Channel closed — reader hit an error before sending anything.
+			return []string{"*"}
 		}
 		var sub subscribeMsg
 		if err := json.Unmarshal(msg, &sub); err != nil || sub.Type != "subscribe" || len(sub.Events) == 0 {
 			logger.Debug("events websocket: ignoring non-subscribe first message, defaulting to '*'")
-			ch <- []string{"*"}
-			return
+			return []string{"*"}
 		}
 		if len(sub.Events) > maxSubscriptionPatterns {
 			logger.Debug("events websocket: too many subscription patterns, defaulting to '*'",
 				"count", len(sub.Events), "max", maxSubscriptionPatterns)
-			ch <- []string{"*"}
-			return
+			return []string{"*"}
 		}
-		ch <- sub.Events
-	}()
-
-	select {
-	case patterns := <-ch:
-		logger.Debug("events websocket: negotiated patterns", "patterns", patterns)
-		return patterns
+		logger.Debug("events websocket: negotiated patterns", "patterns", sub.Events)
+		return sub.Events
 	case <-time.After(subscriptionTimeout):
-		// The goroutine remains alive until the next read or connection close,
-		// which is driven by the reader goroutine in runEventsLoop.
 		logger.Debug("events websocket: subscription timeout, defaulting to '*'")
 		return []string{"*"}
 	case <-ctx.Done():

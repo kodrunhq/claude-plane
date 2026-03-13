@@ -180,7 +180,7 @@ CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expires_
 		Description: "event service layer tables",
 		SQL: `
 -- Events audit trail
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
     event_id    TEXT PRIMARY KEY,
     event_type  TEXT NOT NULL,
     timestamp   DATETIME NOT NULL,
@@ -188,11 +188,11 @@ CREATE TABLE events (
     payload     TEXT NOT NULL,  -- JSON
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_events_type_time ON events(event_type, timestamp DESC);
-CREATE INDEX idx_events_time ON events(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_events_type_time ON events(event_type, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_events_time ON events(timestamp DESC);
 
 -- Outbound webhooks configuration
-CREATE TABLE webhooks (
+CREATE TABLE IF NOT EXISTS webhooks (
     webhook_id  TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     url         TEXT NOT NULL,
@@ -204,7 +204,7 @@ CREATE TABLE webhooks (
 );
 
 -- Webhook delivery tracking
-CREATE TABLE webhook_deliveries (
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
     delivery_id    TEXT PRIMARY KEY,
     webhook_id     TEXT NOT NULL REFERENCES webhooks(webhook_id) ON DELETE CASCADE,
     event_id       TEXT NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
@@ -216,11 +216,11 @@ CREATE TABLE webhook_deliveries (
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status, next_retry_at);
-CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_status ON webhook_deliveries(status, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 
 -- Job triggers configuration
-CREATE TABLE job_triggers (
+CREATE TABLE IF NOT EXISTS job_triggers (
     trigger_id   TEXT PRIMARY KEY,
     job_id       TEXT NOT NULL REFERENCES jobs(job_id) ON DELETE CASCADE,
     event_type   TEXT NOT NULL,
@@ -229,8 +229,8 @@ CREATE TABLE job_triggers (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_job_triggers_job ON job_triggers(job_id);
-CREATE INDEX idx_job_triggers_event ON job_triggers(event_type, enabled);
+CREATE INDEX IF NOT EXISTS idx_job_triggers_job ON job_triggers(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_triggers_event ON job_triggers(event_type, enabled);
 `,
 	},
 }

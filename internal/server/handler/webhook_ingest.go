@@ -86,6 +86,12 @@ func (h *IngestHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 		payload,
 	)
 
+	if h.publisher == nil {
+		h.logger.Error("webhook ingest: publisher not configured", "source", source)
+		writeError(w, http.StatusInternalServerError, "event publishing not available")
+		return
+	}
+
 	if err := h.publisher.Publish(r.Context(), evt); err != nil {
 		h.logger.Error("webhook ingest: failed to publish event", "source", source, "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to publish event")
