@@ -71,7 +71,7 @@ type JobStoreIface interface {
 	AddDependency(ctx context.Context, stepID, dependsOn string) error
 	RemoveDependency(ctx context.Context, stepID, dependsOn string) error
 	GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []StepDependency, error)
-	CreateRun(ctx context.Context, jobID, triggerType string) (*Run, error)
+	CreateRun(ctx context.Context, jobID, triggerType string, triggerDetail ...string) (*Run, error)
 	InsertRunSteps(ctx context.Context, runID string, steps []Step) error
 	GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, error)
 	UpdateRunStepStatus(ctx context.Context, runStepID, status, sessionID string, exitCode int) error
@@ -116,13 +116,14 @@ type StepDependency struct {
 
 // Run represents a specific execution of a job.
 type Run struct {
-	RunID       string     `json:"run_id"`
-	JobID       string     `json:"job_id"`
-	Status      string     `json:"status"`
-	TriggerType string     `json:"trigger_type"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	RunID         string     `json:"run_id"`
+	JobID         string     `json:"job_id"`
+	Status        string     `json:"status"`
+	TriggerType   string     `json:"trigger_type"`
+	TriggerDetail string     `json:"trigger_detail,omitempty"`
+	StartedAt     *time.Time `json:"started_at,omitempty"`
+	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
 }
 
 // RunStep represents an instance of a step within a specific run.
@@ -464,22 +465,30 @@ func (s *Store) GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []S
 }
 
 // CreateRun inserts a run row for a job.
-func (s *Store) CreateRun(ctx context.Context, jobID, triggerType string) (*Run, error) {
+// An optional triggerDetail string may be passed as the fourth argument to
+// populate the trigger_detail column (e.g. a webhook source name or cron expression).
+func (s *Store) CreateRun(ctx context.Context, jobID, triggerType string, triggerDetail ...string) (*Run, error) {
+	detail := ""
+	if len(triggerDetail) > 0 {
+		detail = triggerDetail[0]
+	}
+
 	id := uuid.New().String()
 	now := time.Now().UTC()
 	_, err := s.writer.ExecContext(ctx,
-		`INSERT INTO runs (run_id, job_id, status, trigger_type, created_at) VALUES (?, ?, 'pending', ?, ?)`,
-		id, jobID, triggerType, now,
+		`INSERT INTO runs (run_id, job_id, status, trigger_type, trigger_detail, created_at) VALUES (?, ?, 'pending', ?, ?, ?)`,
+		id, jobID, triggerType, nullIfEmpty(detail), now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create run: %w", err)
 	}
 	return &Run{
-		RunID:       id,
-		JobID:       jobID,
-		Status:      StatusPending,
-		TriggerType: triggerType,
-		CreatedAt:   now,
+		RunID:         id,
+		JobID:         jobID,
+		Status:        StatusPending,
+		TriggerType:   triggerType,
+		TriggerDetail: detail,
+		CreatedAt:     now,
 	}, nil
 }
 
@@ -512,15 +521,19 @@ func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) 
 func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, error) {
 	var run Run
 	var startedAt, completedAt sql.NullTime
+	var triggerDetail sql.NullString
 	err := s.reader.QueryRowContext(ctx,
-		`SELECT run_id, job_id, status, trigger_type, started_at, ended_at, created_at
+		`SELECT run_id, job_id, status, trigger_type, COALESCE(trigger_detail, ''), started_at, ended_at, created_at
 		 FROM runs WHERE run_id = ?`, runID,
-	).Scan(&run.RunID, &run.JobID, &run.Status, &run.TriggerType, &startedAt, &completedAt, &run.CreatedAt)
+	).Scan(&run.RunID, &run.JobID, &run.Status, &run.TriggerType, &triggerDetail, &startedAt, &completedAt, &run.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("run %s: %w", runID, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get run: %w", err)
+	}
+	if triggerDetail.Valid {
+		run.TriggerDetail = triggerDetail.String
 	}
 	if startedAt.Valid {
 		run.StartedAt = &startedAt.Time
@@ -623,7 +636,7 @@ func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error
 // ListRuns returns runs for a job ordered by created_at DESC.
 func (s *Store) ListRuns(ctx context.Context, jobID string) ([]Run, error) {
 	rows, err := s.reader.QueryContext(ctx,
-		`SELECT run_id, job_id, status, trigger_type, started_at, ended_at, created_at
+		`SELECT run_id, job_id, status, trigger_type, COALESCE(trigger_detail, ''), started_at, ended_at, created_at
 		 FROM runs WHERE job_id = ? ORDER BY created_at DESC`, jobID,
 	)
 	if err != nil {
@@ -635,8 +648,12 @@ func (s *Store) ListRuns(ctx context.Context, jobID string) ([]Run, error) {
 	for rows.Next() {
 		var r Run
 		var startedAt, completedAt sql.NullTime
-		if err := rows.Scan(&r.RunID, &r.JobID, &r.Status, &r.TriggerType, &startedAt, &completedAt, &r.CreatedAt); err != nil {
+		var triggerDetail sql.NullString
+		if err := rows.Scan(&r.RunID, &r.JobID, &r.Status, &r.TriggerType, &triggerDetail, &startedAt, &completedAt, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		if triggerDetail.Valid {
+			r.TriggerDetail = triggerDetail.String
 		}
 		if startedAt.Valid {
 			r.StartedAt = &startedAt.Time
@@ -659,7 +676,7 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 		limit = defaultLimit
 	}
 
-	query := `SELECT r.run_id, r.job_id, r.status, r.trigger_type, r.started_at, r.ended_at, r.created_at, j.name
+	query := `SELECT r.run_id, r.job_id, r.status, r.trigger_type, COALESCE(r.trigger_detail, ''), r.started_at, r.ended_at, r.created_at, j.name
 	           FROM runs r
 	           JOIN jobs j ON r.job_id = j.job_id
 	           WHERE 1=1`
@@ -692,11 +709,15 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 	for rows.Next() {
 		var rj RunWithJobName
 		var startedAt, endedAt sql.NullTime
+		var triggerDetail sql.NullString
 		if err := rows.Scan(
-			&rj.RunID, &rj.JobID, &rj.Status, &rj.TriggerType,
+			&rj.RunID, &rj.JobID, &rj.Status, &rj.TriggerType, &triggerDetail,
 			&startedAt, &endedAt, &rj.CreatedAt, &rj.JobName,
 		); err != nil {
 			return nil, fmt.Errorf("scan run with job name: %w", err)
+		}
+		if triggerDetail.Valid {
+			rj.TriggerDetail = triggerDetail.String
 		}
 		if startedAt.Valid {
 			rj.StartedAt = &startedAt.Time

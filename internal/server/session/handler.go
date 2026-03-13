@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
@@ -31,6 +33,21 @@ type SessionHandler struct {
 	registry  *Registry
 	getClaims ClaimsGetter
 	logger    *slog.Logger
+	publisher event.Publisher
+}
+
+// SetPublisher sets the event publisher used to emit session lifecycle events.
+func (h *SessionHandler) SetPublisher(p event.Publisher) {
+	h.publisher = p
+}
+
+// publishEvent emits an event if a publisher is configured.
+func (h *SessionHandler) publishEvent(ctx context.Context, e event.Event) {
+	if h.publisher != nil {
+		if err := h.publisher.Publish(ctx, e); err != nil {
+			h.logger.Warn("failed to publish event", "event_type", e.Type, "error", err)
+		}
+	}
 }
 
 // NewSessionHandler creates a new SessionHandler.
@@ -140,6 +157,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionStarted, sessionID, req.MachineID))
 	httputil.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"session_id": sessionID,
 		"machine_id": req.MachineID,
@@ -225,6 +243,7 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 	if err := h.store.UpdateSessionStatus(sessionID, store.StatusTerminated); err != nil {
 		h.logger.Error("failed to update session status", "error", err)
 	}
+	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionExited, sessionID, sess.MachineID))
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": store.StatusTerminated})
 }
