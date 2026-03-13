@@ -183,6 +183,9 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	if keyBlock == nil {
 		return nil, nil, fmt.Errorf("decode CA key PEM: no PEM data found")
 	}
+	if keyBlock.Type != "EC PRIVATE KEY" {
+		return nil, nil, fmt.Errorf("unexpected CA key PEM type %q, want %q", keyBlock.Type, "EC PRIVATE KEY")
+	}
 
 	key, err := x509.ParseECPrivateKey(keyBlock.Bytes)
 	if err != nil {
