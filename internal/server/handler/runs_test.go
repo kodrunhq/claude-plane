@@ -256,6 +256,183 @@ func TestRunHandler_RetryStep(t *testing.T) {
 	exec.completeStep(stepID, 0)
 }
 
+func TestRunHandler_ListRuns_Global(t *testing.T) {
+	srv, _, _, exec := newRunRouter(t)
+	defer srv.Close()
+
+	// Create two jobs each with one step.
+	jobID1, stepID1 := createJobWithStep(t, srv.URL)
+	jobID2, stepID2 := createJobWithStep(t, srv.URL)
+
+	// Trigger a run on each job.
+	triggerRun := func(jobID string) {
+		body, _ := json.Marshal(map[string]string{"trigger_type": "manual"})
+		resp, _ := http.Post(srv.URL+"/api/v1/jobs/"+jobID+"/runs", "application/json", bytes.NewReader(body))
+		resp.Body.Close()
+	}
+	triggerRun(jobID1)
+	exec.completeStep(stepID1, 0)
+	triggerRun(jobID2)
+	exec.completeStep(stepID2, 0)
+
+	// List runs without job_id — should return runs from both jobs.
+	resp, err := http.Get(srv.URL + "/api/v1/runs")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var runs []store.RunWithJobName
+	if err := json.NewDecoder(resp.Body).Decode(&runs); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Errorf("expected 2 runs across jobs, got %d", len(runs))
+	}
+	for _, r := range runs {
+		if r.JobName == "" {
+			t.Error("expected job_name to be populated in global listing")
+		}
+	}
+}
+
+func TestRunHandler_ListRuns_GlobalWithFilters(t *testing.T) {
+	srv, _, _, exec := newRunRouter(t)
+	defer srv.Close()
+
+	jobID, stepID := createJobWithStep(t, srv.URL)
+
+	// Trigger one manual run and complete it successfully.
+	body, _ := json.Marshal(map[string]string{"trigger_type": "manual"})
+	resp1, _ := http.Post(srv.URL+"/api/v1/jobs/"+jobID+"/runs", "application/json", bytes.NewReader(body))
+	resp1.Body.Close()
+	exec.completeStep(stepID, 0)
+
+	// Trigger a second run but leave it running.
+	body2, _ := json.Marshal(map[string]string{"trigger_type": "scheduled"})
+	resp2, _ := http.Post(srv.URL+"/api/v1/jobs/"+jobID+"/runs", "application/json", bytes.NewReader(body2))
+	resp2.Body.Close()
+	// Don't complete — it stays in "running" state.
+
+	// Filter by status=completed — should get 1 run.
+	resp, err := http.Get(srv.URL + "/api/v1/runs?status=completed")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var completedRuns []store.RunWithJobName
+	json.NewDecoder(resp.Body).Decode(&completedRuns)
+	if len(completedRuns) != 1 {
+		t.Errorf("expected 1 completed run, got %d", len(completedRuns))
+	}
+
+	// Filter by trigger_type=scheduled — should get 1 run.
+	resp3, err := http.Get(srv.URL + "/api/v1/runs?trigger_type=scheduled")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp3.Body.Close()
+
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp3.StatusCode)
+	}
+
+	var scheduledRuns []store.RunWithJobName
+	json.NewDecoder(resp3.Body).Decode(&scheduledRuns)
+	if len(scheduledRuns) != 1 {
+		t.Errorf("expected 1 scheduled run, got %d", len(scheduledRuns))
+	}
+	if scheduledRuns[0].TriggerType != "scheduled" {
+		t.Errorf("expected trigger_type=scheduled, got %s", scheduledRuns[0].TriggerType)
+	}
+}
+
+func TestRunHandler_ListRuns_WithJobID(t *testing.T) {
+	srv, _, _, exec := newRunRouter(t)
+	defer srv.Close()
+
+	jobID1, stepID1 := createJobWithStep(t, srv.URL)
+	jobID2, stepID2 := createJobWithStep(t, srv.URL)
+
+	// Trigger one run per job.
+	triggerAndComplete := func(jobID, stepID string) {
+		body, _ := json.Marshal(map[string]string{"trigger_type": "manual"})
+		resp, _ := http.Post(srv.URL+"/api/v1/jobs/"+jobID+"/runs", "application/json", bytes.NewReader(body))
+		resp.Body.Close()
+		exec.completeStep(stepID, 0)
+	}
+	triggerAndComplete(jobID1, stepID1)
+	triggerAndComplete(jobID2, stepID2)
+
+	// List runs for job1 only — should return []Run (not RunWithJobName), exactly 1.
+	resp, err := http.Get(srv.URL + "/api/v1/runs?job_id=" + jobID1)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var runs []store.Run
+	json.NewDecoder(resp.Body).Decode(&runs)
+	if len(runs) != 1 {
+		t.Errorf("expected 1 run for job1, got %d", len(runs))
+	}
+	if runs[0].JobID != jobID1 {
+		t.Errorf("expected job_id=%s, got %s", jobID1, runs[0].JobID)
+	}
+}
+
+func TestRunHandler_ListRuns_ReturnEmptyArrayNotNull(t *testing.T) {
+	srv, _, _, _ := newRunRouter(t)
+	defer srv.Close()
+
+	// Global list with no runs.
+	resp, err := http.Get(srv.URL + "/api/v1/runs")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Ensure body is a JSON array, not null.
+	var raw json.RawMessage
+	json.NewDecoder(resp.Body).Decode(&raw)
+	if string(raw) == "null" {
+		t.Error("expected empty array [], got null")
+	}
+}
+
+func TestRunHandler_ListRuns_LimitCapped(t *testing.T) {
+	srv, _, _, _ := newRunRouter(t)
+	defer srv.Close()
+
+	// Requesting limit > 200 should not error — just return up to max.
+	resp, err := http.Get(srv.URL + "/api/v1/runs?limit=9999")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for oversized limit, got %d", resp.StatusCode)
+	}
+}
+
 func TestRunHandler_RetryStep_NonFailed(t *testing.T) {
 	srv, _, _, exec := newRunRouter(t)
 	defer srv.Close()
