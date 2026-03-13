@@ -15,6 +15,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	"github.com/kodrunhq/claude-plane/internal/shared/version"
 
 	"google.golang.org/grpc"
@@ -280,9 +281,9 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			}
 			if se := res.event.GetSessionExit(); se != nil {
 				if s.sessionStore != nil {
-					exitStatus := "completed"
+					exitStatus := status.Completed
 					if se.GetExitCode() != 0 {
-						exitStatus = "failed"
+						exitStatus = status.Failed
 					}
 					if err := s.sessionStore.UpdateSessionStatus(se.GetSessionId(), exitStatus); err != nil {
 						s.logger.Warn("failed to update session status on exit",

@@ -48,7 +48,7 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	).Scan(&sess.SessionID, &sess.MachineID, &userID, &sess.Command,
 		&sess.WorkingDir, &sess.Status, &sess.CreatedAt, &endedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("session not found: %s", id)
+		return nil, fmt.Errorf("session %s: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get session: %w", err)
