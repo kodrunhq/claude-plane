@@ -28,7 +28,7 @@ function TerminalRoute() {
 }
 
 function App() {
-  const user = useAuthStore((s) => s.user)
+  const authenticated = useAuthStore((s) => s.authenticated)
   const loading = useAuthStore((s) => s.loading)
   const checkSession = useAuthStore((s) => s.checkSession)
 
@@ -44,7 +44,7 @@ function App() {
     )
   }
 
-  if (!user) {
+  if (!authenticated) {
     return (
       <>
         <LoginPage />
