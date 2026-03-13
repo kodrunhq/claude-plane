@@ -147,7 +147,7 @@ export function CommandCenter() {
         />
         <StatCard
           icon={<Play size={24} />}
-          label="Total Runs"
+          label="Recent Runs"
           value={isJobsRunsLoading ? '--' : String(runs?.length ?? 0)}
           href="/runs"
         />

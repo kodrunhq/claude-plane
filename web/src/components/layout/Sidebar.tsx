@@ -7,7 +7,6 @@ import {
   Play,
   LogOut,
   Webhook,
-  Clock,
   Activity,
   Users,
   KeyRound,
@@ -43,7 +42,6 @@ const navSections: NavSection[] = [
     title: 'Automation',
     items: [
       { to: '/webhooks', label: 'Webhooks', icon: Webhook },
-      { to: '/schedules', label: 'Schedules', icon: Clock },
     ],
   },
   {

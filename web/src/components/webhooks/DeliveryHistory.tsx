@@ -80,7 +80,7 @@ export function DeliveryHistory({ webhookId }: DeliveryHistoryProps) {
   const { data: deliveries, isLoading, error, refetch } = useWebhookDeliveries(webhookId);
 
   if (isLoading) {
-    return <SkeletonTable rows={5} columns={5} />;
+    return <SkeletonTable rows={5} columns={6} />;
   }
 
   if (error) {

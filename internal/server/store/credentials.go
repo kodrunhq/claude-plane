@@ -110,7 +110,10 @@ func (s *Store) DeleteCredential(ctx context.Context, credentialID string) error
 		return fmt.Errorf("delete credential: %w", err)
 	}
 
-	affected, _ := result.RowsAffected()
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete credential rows affected: %w", err)
+	}
 	if affected == 0 {
 		return fmt.Errorf("credential %s: %w", credentialID, ErrNotFound)
 	}

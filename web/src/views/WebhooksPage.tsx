@@ -128,7 +128,7 @@ export function WebhooksPage() {
       </div>
 
       {isLoading ? (
-        <SkeletonTable rows={4} columns={5} />
+        <SkeletonTable rows={4} columns={6} />
       ) : !webhooks || webhooks.length === 0 ? (
         <EmptyState
           icon={<Webhook size={40} />}
