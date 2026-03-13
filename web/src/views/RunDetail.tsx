@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, XCircle, RotateCcw, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { RunDAGView } from '../components/runs/RunDAGView.tsx';
+import { RunStatusBadge } from '../components/runs/RunStatusBadge.tsx';
 import { TerminalView } from '../components/terminal/TerminalView.tsx';
 import { useRun, useCancelRun, useRetryStep } from '../hooks/useRuns.ts';
 import { useJob } from '../hooks/useJobs.ts';
@@ -208,21 +209,5 @@ export function RunDetail() {
         )}
       </div>
     </div>
-  );
-}
-
-function RunStatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    pending: 'bg-gray-500/20 text-gray-400',
-    running: 'bg-blue-500/20 text-blue-400',
-    completed: 'bg-green-500/20 text-green-400',
-    failed: 'bg-red-500/20 text-red-400',
-    cancelled: 'bg-yellow-500/20 text-yellow-400',
-  };
-
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs ${colors[status] ?? colors.pending}`}>
-      {status}
-    </span>
   );
 }

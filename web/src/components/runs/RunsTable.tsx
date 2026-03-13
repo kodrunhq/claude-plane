@@ -1,0 +1,57 @@
+import type { Run } from '../../types/job.ts';
+import { RunStatusBadge } from './RunStatusBadge.tsx';
+import { DurationDisplay } from './DurationDisplay.tsx';
+import { EmptyState } from '../shared/EmptyState.tsx';
+import { formatTimeAgo } from '../../lib/format.ts';
+
+interface RunsTableProps {
+  runs: Run[];
+  showJobName?: boolean;
+  compact?: boolean;
+  onRowClick: (runId: string) => void;
+}
+
+export function RunsTable({ runs, showJobName = false, compact = false, onRowClick }: RunsTableProps) {
+  if (runs.length === 0) {
+    return <EmptyState title="No runs found" description="No runs match the current filters." />;
+  }
+
+  const badgeSize = compact ? 'sm' as const : 'md' as const;
+
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-xs text-text-secondary border-b border-gray-700">
+          <th className="px-4 py-2">Status</th>
+          {showJobName && !compact && <th className="px-4 py-2">Job Name</th>}
+          <th className="px-4 py-2">Trigger</th>
+          <th className="px-4 py-2">Started</th>
+          <th className="px-4 py-2">Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {runs.map((run) => (
+          <tr
+            key={run.run_id}
+            onClick={() => onRowClick(run.run_id)}
+            className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-gray-700/50 transition-colors"
+          >
+            <td className="px-4 py-2">
+              <RunStatusBadge status={run.status} size={badgeSize} />
+            </td>
+            {showJobName && !compact && (
+              <td className="px-4 py-2 text-text-primary">{run.job_name ?? run.job_id.slice(0, 8)}</td>
+            )}
+            <td className="px-4 py-2 text-text-secondary">{run.trigger_type ?? 'manual'}</td>
+            <td className="px-4 py-2 text-text-secondary">
+              {run.started_at ? formatTimeAgo(run.started_at) : formatTimeAgo(run.created_at)}
+            </td>
+            <td className="px-4 py-2 text-text-secondary">
+              <DurationDisplay startedAt={run.started_at} completedAt={run.completed_at} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
