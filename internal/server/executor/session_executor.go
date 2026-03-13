@@ -197,9 +197,11 @@ func (e *SessionStepExecutor) monitorSessionExit(
 	for {
 		select {
 		case <-ctx.Done():
-			e.logger.Info("session monitor context cancelled",
+			e.logger.Info("session monitor context cancelled, killing session",
 				"session_id", sessionID,
+				"machine_id", machineID,
 			)
+			e.sendKill(machineID, sessionID)
 			e.completeStep(sessionID, failureExitCode)
 			return
 
