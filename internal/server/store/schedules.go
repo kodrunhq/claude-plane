@@ -105,7 +105,7 @@ func (s *Store) ListSchedulesByJob(ctx context.Context, jobID string) ([]CronSch
 	rows, err := s.reader.QueryContext(ctx,
 		`SELECT schedule_id, job_id, cron_expr, timezone, enabled,
 		        next_run_at, last_triggered_at, created_at, updated_at
-		 FROM cron_schedules WHERE job_id = ? ORDER BY created_at DESC`,
+		 FROM cron_schedules WHERE job_id = ? ORDER BY created_at DESC, schedule_id DESC`,
 		jobID,
 	)
 	if err != nil {

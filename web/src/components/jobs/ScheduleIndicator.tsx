@@ -28,6 +28,8 @@ export function ScheduleIndicator({ jobId }: ScheduleIndicatorProps) {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: enabledSchedule.timezone,
+        timeZoneName: 'short',
       })
     : 'Scheduled';
 
