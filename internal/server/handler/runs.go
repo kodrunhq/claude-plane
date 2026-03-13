@@ -123,31 +123,18 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListRuns handles GET /api/v1/runs.
-// Optional query param ?job_id filters by job (returns []Run).
-// Without job_id, returns []RunWithJobName across all jobs.
-// Supports ?status, ?trigger_type, ?limit (default 50, max 200), ?offset (default 0).
+// All query params are optional: ?job_id, ?status, ?trigger_type, ?limit (default 50, max 200), ?offset (default 0).
+// Always returns []RunWithJobName.
 func (h *RunHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
-	jobID := r.URL.Query().Get("job_id")
+	q := r.URL.Query()
+	jobID := q.Get("job_id")
 
 	if jobID != "" {
 		if !h.authorizeJobAccess(w, r, jobID) {
 			return
 		}
-
-		runs, err := h.store.ListRuns(r.Context(), jobID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		if runs == nil {
-			runs = []store.Run{}
-		}
-		writeJSON(w, http.StatusOK, runs)
-		return
 	}
 
-	// Global listing: parse filters and pagination.
-	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	if limit <= 0 {
 		limit = defaultListRunsLimit
@@ -161,6 +148,7 @@ func (h *RunHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := store.ListRunsOptions{
+		JobID:       jobID,
 		Status:      q.Get("status"),
 		TriggerType: q.Get("trigger_type"),
 		Limit:       limit,

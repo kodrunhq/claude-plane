@@ -140,7 +140,7 @@ func TestRunHandler_ListRuns(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var runs []store.Run
+	var runs []store.RunWithJobName
 	json.NewDecoder(resp.Body).Decode(&runs)
 	if len(runs) != 1 {
 		t.Errorf("expected 1 run, got %d", len(runs))
@@ -373,7 +373,7 @@ func TestRunHandler_ListRuns_WithJobID(t *testing.T) {
 	triggerAndComplete(jobID1, stepID1)
 	triggerAndComplete(jobID2, stepID2)
 
-	// List runs for job1 only — should return []Run (not RunWithJobName), exactly 1.
+	// List runs for job1 only — should return []RunWithJobName, exactly 1.
 	resp, err := http.Get(srv.URL + "/api/v1/runs?job_id=" + jobID1)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -384,13 +384,16 @@ func TestRunHandler_ListRuns_WithJobID(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var runs []store.Run
+	var runs []store.RunWithJobName
 	json.NewDecoder(resp.Body).Decode(&runs)
 	if len(runs) != 1 {
 		t.Errorf("expected 1 run for job1, got %d", len(runs))
 	}
 	if runs[0].JobID != jobID1 {
 		t.Errorf("expected job_id=%s, got %s", jobID1, runs[0].JobID)
+	}
+	if runs[0].JobName == "" {
+		t.Error("expected job_name to be populated when filtering by job_id")
 	}
 }
 
