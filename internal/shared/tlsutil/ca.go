@@ -44,7 +44,7 @@ func GenerateCA(outDir string) error {
 			CommonName: "claude-plane-ca",
 		},
 		NotBefore:             now,
-		NotAfter:              now.Add(10 * 365 * 24 * time.Hour),
+		NotAfter:              now.AddDate(10, 0, 0),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
