@@ -15,6 +15,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/version"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -130,7 +131,7 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 
 	return &pb.RegisterResponse{
 		Accepted:      true,
-		ServerVersion: "0.1.0",
+		ServerVersion: version.Version,
 	}, nil
 }
 
