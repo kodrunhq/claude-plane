@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/kodrunhq/claude-plane/internal/server/agentdl"
 	"github.com/kodrunhq/claude-plane/internal/server/api"
 	"github.com/kodrunhq/claude-plane/internal/server/auth"
 	"github.com/kodrunhq/claude-plane/internal/server/config"
@@ -346,6 +347,10 @@ func newServeCmd() *cobra.Command {
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
 			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler)
+
+			// Agent binary download endpoint (public, no JWT required).
+			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)
+			agentdl.RegisterRoutes(router, dlHandler)
 
 			// Mount SPA frontend as catch-all
 			router.Handle("/*", frontend.NewSPAHandler())
