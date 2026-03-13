@@ -87,23 +87,19 @@ export function RunDetail() {
   }
 
   // Elapsed time — ticks every second for active runs
-  const [elapsed, setElapsed] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!run?.started_at) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting derived state when run has no start time
-      setElapsed(null);
-      return;
-    }
-    const start = new Date(run.started_at).getTime();
-    if (run.completed_at) {
-      setElapsed(Math.floor((new Date(run.completed_at).getTime() - start) / 1000));
-      return;
-    }
-    const update = () => setElapsed(Math.floor((Date.now() - start) / 1000));
-    update();
-    const interval = setInterval(update, 1000);
+    if (!run?.started_at || run?.completed_at) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [run?.started_at, run?.completed_at]);
+
+  let displayElapsed: number | null = null;
+  if (run?.started_at) {
+    const start = new Date(run.started_at).getTime();
+    const end = run.completed_at ? new Date(run.completed_at).getTime() : now;
+    displayElapsed = Math.floor((end - start) / 1000);
+  }
 
   const isLoading = runLoading || jobLoading;
 
@@ -144,10 +140,10 @@ export function RunDetail() {
             </span>
             <RunStatusBadge status={run.status} />
           </div>
-          {elapsed !== null && (
+          {displayElapsed !== null && (
             <div className="flex items-center gap-1 text-xs text-text-secondary mt-0.5">
               <Clock size={12} />
-              <span>{formatDuration(elapsed)}</span>
+              <span>{formatDuration(displayElapsed)}</span>
             </div>
           )}
         </div>

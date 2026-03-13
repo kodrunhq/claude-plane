@@ -28,6 +28,10 @@ var validMachineID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 // Files written: ca.pem (certificate), ca-key.pem (ECDSA P-256 private key).
 // The CA cert has a 10-year validity period and CN="claude-plane-ca".
 func GenerateCA(outDir string) error {
+	if err := os.MkdirAll(outDir, 0o700); err != nil {
+		return fmt.Errorf("ensure CA output directory %q: %w", outDir, err)
+	}
+
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return fmt.Errorf("generate CA key: %w", err)
@@ -68,6 +72,10 @@ func IssueServerCert(caDir, outDir string, hostnames []string) error {
 	caCert, caKey, err := loadCA(caDir)
 	if err != nil {
 		return err
+	}
+
+	if err := os.MkdirAll(outDir, 0o700); err != nil {
+		return fmt.Errorf("ensure server output directory %q: %w", outDir, err)
 	}
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -121,6 +129,10 @@ func IssueServerCert(caDir, outDir string, hostnames []string) error {
 func IssueAgentCert(caDir, outDir, machineID string) error {
 	if !validMachineID.MatchString(machineID) {
 		return fmt.Errorf("invalid machineID %q: must match %s", machineID, validMachineID.String())
+	}
+
+	if err := os.MkdirAll(outDir, 0o700); err != nil {
+		return fmt.Errorf("create output directory %q: %w", outDir, err)
 	}
 
 	caCert, caKey, err := loadCA(caDir)
@@ -204,7 +216,12 @@ func loadCA(caDir string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 
 // writePEMFiles writes a certificate and ECDSA private key as PEM files.
 func writePEMFiles(dir, certName, keyName string, certDER []byte, key *ecdsa.PrivateKey) (err error) {
-	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	// Ensure the output directory exists before writing files.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
+
+	certFile, err := os.OpenFile(filepath.Join(dir, certName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", certName, err)
 	}
