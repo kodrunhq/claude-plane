@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -19,6 +20,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/auth"
 	"github.com/kodrunhq/claude-plane/internal/server/config"
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/frontend"
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
@@ -140,19 +142,148 @@ func newServeCmd() *cobra.Command {
 				return &handler.UserClaims{UserID: c.UserID, Role: c.Role}
 			}
 
-			// Handlers
-			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
-			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
-			eventsWSHandler := session.HandleEventsWS(authSvc, nil, slog.Default()) // fanout wired in Task 7
-
 			// Orchestrator (stub executor until session-backed execution is wired)
 			orch := orchestrator.NewOrchestrator(ctx, s, noopExecutor{})
+
+			// ---- Event bus and subscribers ----
+			eventBus := event.NewBus(slog.Default())
+			defer eventBus.Close()
+
+			// Persist every event to SQLite.
+			persistSub := event.NewPersistSubscriber(s, slog.Default())
+			persistSub.Subscribe(eventBus)
+
+			// Periodic event retention cleanup.
+			retentionCleaner := event.NewRetentionCleaner(s, slog.Default())
+			retentionCleaner.Start(ctx)
+
+			// WebSocket fan-out for the /ws/events endpoint.
+			wsFanout := event.NewWSFanout(eventBus, slog.Default())
+			wsFanout.Start()
+
+			// Outbound webhook deliverer — adapter translates store types to event types.
+			webhookStore := &event.WebhookStoreFuncs{
+				ListWebhooksFn: func(c context.Context) ([]event.Webhook, error) {
+					storeWebhooks, err := s.ListWebhooks(c)
+					if err != nil {
+						return nil, err
+					}
+					result := make([]event.Webhook, len(storeWebhooks))
+					for i, sw := range storeWebhooks {
+						result[i] = event.Webhook{
+							WebhookID: sw.WebhookID,
+							URL:       sw.URL,
+							Secret:    sw.Secret,
+							Events:    sw.Events,
+							Enabled:   sw.Enabled,
+						}
+					}
+					return result, nil
+				},
+				CreateDeliveryFn: func(c context.Context, d event.WebhookDelivery) error {
+					return s.CreateDelivery(c, store.WebhookDelivery{
+						DeliveryID:   d.DeliveryID,
+						WebhookID:    d.WebhookID,
+						EventID:      d.EventID,
+						Status:       d.Status,
+						Attempts:     d.Attempts,
+						ResponseCode: d.ResponseCode,
+						LastError:    d.LastError,
+						NextRetryAt:  d.NextRetryAt,
+					})
+				},
+				UpdateDeliveryFn: func(c context.Context, d event.WebhookDelivery) error {
+					return s.UpdateDelivery(c, store.WebhookDelivery{
+						DeliveryID:   d.DeliveryID,
+						WebhookID:    d.WebhookID,
+						EventID:      d.EventID,
+						Status:       d.Status,
+						Attempts:     d.Attempts,
+						ResponseCode: d.ResponseCode,
+						LastError:    d.LastError,
+						NextRetryAt:  d.NextRetryAt,
+					})
+				},
+				PendingDeliveriesFn: func(c context.Context) ([]event.WebhookDelivery, error) {
+					storeDeliveries, err := s.PendingDeliveries(c)
+					if err != nil {
+						return nil, err
+					}
+					result := make([]event.WebhookDelivery, len(storeDeliveries))
+					for i, sd := range storeDeliveries {
+						result[i] = event.WebhookDelivery{
+							DeliveryID:   sd.DeliveryID,
+							WebhookID:    sd.WebhookID,
+							EventID:      sd.EventID,
+							Status:       sd.Status,
+							Attempts:     sd.Attempts,
+							ResponseCode: sd.ResponseCode,
+							LastError:    sd.LastError,
+							NextRetryAt:  sd.NextRetryAt,
+						}
+					}
+					return result, nil
+				},
+				GetEventByIDFn: func(c context.Context, eventID string) (*event.Event, error) {
+					return s.GetEventByID(c, eventID)
+				},
+			}
+			webhookDeliverer := event.NewWebhookDeliverer(webhookStore, &http.Client{Timeout: 10 * time.Second}, slog.Default())
+			eventBus.Subscribe("*", webhookDeliverer.Handler(), event.SubscriberOptions{Concurrency: 4, BufferSize: 256})
+			webhookDeliverer.StartRetryLoop(ctx)
+
+			// Trigger subscriber — fires job runs when matching events arrive.
+			triggerStore := &event.TriggerStoreFuncs{
+				ListEnabledTriggersFn: func(c context.Context) ([]event.JobTrigger, error) {
+					storeTriggers, err := s.ListEnabledTriggers(c)
+					if err != nil {
+						return nil, err
+					}
+					result := make([]event.JobTrigger, len(storeTriggers))
+					for i, st := range storeTriggers {
+						result[i] = event.JobTrigger{
+							TriggerID: st.TriggerID,
+							JobID:     st.JobID,
+							EventType: st.EventType,
+							Filter:    st.Filter,
+							Enabled:   st.Enabled,
+						}
+					}
+					return result, nil
+				},
+			}
+			orchAdapter := &event.OrchestratorFuncs{
+				CreateRunFn: func(c context.Context, jobID, triggerType string) error {
+					return orch.CreateRunErr(c, jobID, triggerType)
+				},
+			}
+			triggerSub := event.NewTriggerSubscriber(triggerStore, orchAdapter, slog.Default())
+			eventBus.Subscribe("*", triggerSub.Handler(), event.SubscriberOptions{Concurrency: 2, BufferSize: 256})
+
+			// Wire event publisher into components.
+			connMgr.SetPublisher(eventBus)
+			orch.SetPublisher(eventBus)
+
+			// Handlers
+			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
+			sessionHandler.SetPublisher(eventBus)
+
+			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
+			eventsWSHandler := session.HandleEventsWS(authSvc, wsFanout, slog.Default())
+
 			jobHandler := handler.NewJobHandler(s, handlerClaimsGetter)
 			runHandler := handler.NewRunHandler(s, orch, handlerClaimsGetter)
 
+			// New event/webhook/trigger/ingest handlers.
+			eventHandler := handler.NewEventHandler(s)
+			webhookHandler := handler.NewWebhookHandler(s)
+			triggerHandler := handler.NewTriggerHandler(s)
+			ingestSecrets := cfg.Webhooks.InboundSecrets()
+			ingestHandler := handler.NewIngestHandler(eventBus, ingestSecrets, slog.Default())
+
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
-			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler)
+			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler)
 
 			// Mount SPA frontend as catch-all
 			router.Handle("/*", frontend.NewSPAHandler())

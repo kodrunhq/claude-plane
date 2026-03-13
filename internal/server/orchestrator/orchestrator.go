@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -16,6 +17,22 @@ type Orchestrator struct {
 	activeRuns map[string]*DAGRunner
 	store      store.JobStoreIface
 	executor   StepExecutor
+	publisher  event.Publisher
+}
+
+// SetPublisher sets the event publisher used to emit run lifecycle events.
+func (o *Orchestrator) SetPublisher(p event.Publisher) {
+	o.publisher = p
+}
+
+// publishEvent publishes an event if a publisher is configured. Errors are
+// logged at Warn level and do not affect the caller.
+func (o *Orchestrator) publishEvent(ctx context.Context, e event.Event) {
+	if o.publisher != nil {
+		if err := o.publisher.Publish(ctx, e); err != nil {
+			slog.Warn("failed to publish event", "event_type", e.Type, "error", err)
+		}
+	}
 }
 
 // NewOrchestrator creates an Orchestrator. The provided context is used as the
@@ -31,7 +48,8 @@ func NewOrchestrator(ctx context.Context, s store.JobStoreIface, executor StepEx
 
 // CreateRun validates the DAG, creates a run in the DB, snapshots steps
 // into run_steps, builds a DAGRunner, and starts execution.
-func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string) (*store.Run, error) {
+// An optional triggerDetail string provides extra context about what triggered the run.
+func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string, triggerDetail ...string) (*store.Run, error) {
 	// Get steps and dependencies
 	steps, deps, err := o.store.GetStepsWithDeps(ctx, jobID)
 	if err != nil {
@@ -44,10 +62,11 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	}
 
 	// Create run in DB
-	run, err := o.store.CreateRun(ctx, jobID, triggerType)
+	run, err := o.store.CreateRun(ctx, jobID, triggerType, triggerDetail...)
 	if err != nil {
 		return nil, fmt.Errorf("create run: %w", err)
 	}
+	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCreated, run.RunID, jobID, store.StatusPending, triggerType))
 
 	// Snapshot steps into run_steps
 	if err := o.store.InsertRunSteps(ctx, run.RunID, steps); err != nil {
@@ -72,6 +91,8 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	}
 
 	// Build and start DAGRunner
+	capturedJobID := jobID
+	capturedTriggerType := triggerType
 	onComplete := func(runID string, status string) {
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
@@ -79,6 +100,11 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		o.mu.Lock()
 		delete(o.activeRuns, runID)
 		o.mu.Unlock()
+		evType := event.TypeRunCompleted
+		if status == store.StatusFailed {
+			evType = event.TypeRunFailed
+		}
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType))
 	}
 
 	runner := NewDAGRunner(run.RunID, detail.RunSteps, deps, o.executor, o.store, onComplete)
@@ -91,6 +117,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	if err := o.store.UpdateRunStatus(ctx, run.RunID, store.StatusRunning); err != nil {
 		slog.Warn("failed to mark run as running", "error", err, "run_id", run.RunID)
 	}
+	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunStarted, run.RunID, jobID, store.StatusRunning, triggerType))
 
 	runner.Start(o.rootCtx)
 
@@ -168,6 +195,7 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 	}
 
 	// Build new DAGRunner from current DB state
+	retryJobID := detail.Run.JobID
 	onComplete := func(runID string, status string) {
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
@@ -175,6 +203,11 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		o.mu.Lock()
 		delete(o.activeRuns, runID)
 		o.mu.Unlock()
+		evType := event.TypeRunCompleted
+		if status == store.StatusFailed {
+			evType = event.TypeRunFailed
+		}
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, retryJobID, status, "manual"))
 	}
 
 	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, onComplete)
@@ -232,7 +265,21 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 	}
 
 	// Mark run as cancelled
-	return o.store.UpdateRunStatus(ctx, runID, store.StatusCancelled)
+	if err := o.store.UpdateRunStatus(ctx, runID, store.StatusCancelled); err != nil {
+		return err
+	}
+	cancelDetail, err := o.store.GetRunWithSteps(ctx, runID)
+	if err == nil {
+		o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCancelled, runID, cancelDetail.Run.JobID, store.StatusCancelled, cancelDetail.Run.TriggerType))
+	}
+	return nil
+}
+
+// CreateRunErr is a thin wrapper around CreateRun that discards the returned
+// *store.Run, satisfying the event.OrchestratorIface interface.
+func (o *Orchestrator) CreateRunErr(ctx context.Context, jobID string, triggerType string) error {
+	_, err := o.CreateRun(ctx, jobID, triggerType)
+	return err
 }
 
 // OnStepCompleted routes step completion to the correct DAGRunner.
