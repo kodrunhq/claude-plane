@@ -10,39 +10,37 @@ import (
 // The raw bytes are: E2 9D AF 20 (❯ = U+276F, then a space).
 var idlePromptMarker = []byte{0xE2, 0x9D, 0xAF, 0x20}
 
-// IdleDetector watches PTY output for Claude CLI's idle prompt indicator.
-// After the initial prompt is submitted, it waits for the CLI to return to
-// its input prompt (❯), which signals that the response is complete.
+// IdleDetector watches PTY output for Claude CLI's idle prompt indicator (❯).
+// It operates in two phases:
+//  1. Waiting for the startup prompt — when detected, calls onReady (e.g., to
+//     submit the initial prompt). This replaces a hardcoded sleep.
+//  2. Waiting for the completion prompt — when detected, calls onIdle (e.g., to
+//     send /exit). Fires only once.
 type IdleDetector struct {
 	mu        sync.Mutex
-	armed     bool     // true after the initial prompt has been submitted
-	triggered bool     // true after idle prompt detected (fires only once)
-	seenFirst bool     // true after first idle prompt (the startup one) is skipped
-	onIdle    func()   // callback when idle detected
-	buf       []byte   // rolling buffer for cross-chunk detection
+	phase     int    // 0 = waiting for startup prompt, 1 = waiting for completion
+	triggered bool   // true after onIdle fired (prevents double-fire)
+	onReady   func() // called when startup prompt detected (phase 0 → 1)
+	onIdle    func() // called when completion prompt detected (phase 1)
+	buf       []byte // rolling buffer for cross-chunk detection
 }
 
-// NewIdleDetector creates a detector that calls onIdle when Claude CLI
-// returns to its input prompt after completing a response.
-func NewIdleDetector(onIdle func()) *IdleDetector {
+// NewIdleDetector creates a detector that watches for Claude CLI's idle prompt.
+// onReady is called when the CLI first shows its input prompt (ready for input).
+// onIdle is called when the CLI returns to its input prompt after completing a
+// response (ready to exit).
+func NewIdleDetector(onReady, onIdle func()) *IdleDetector {
 	return &IdleDetector{
-		onIdle: onIdle,
-		buf:    make([]byte, 0, len(idlePromptMarker)),
+		onReady: onReady,
+		onIdle:  onIdle,
+		buf:     make([]byte, 0, len(idlePromptMarker)),
 	}
-}
-
-// Arm enables detection. Call this after the initial prompt has been submitted
-// to the PTY. Before arming, the detector ignores all output.
-func (d *IdleDetector) Arm() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.armed = true
 }
 
 // Feed processes a chunk of PTY output, looking for the idle prompt marker.
 func (d *IdleDetector) Feed(data []byte) {
 	d.mu.Lock()
-	if !d.armed || d.triggered {
+	if d.triggered {
 		d.mu.Unlock()
 		return
 	}
@@ -56,21 +54,24 @@ func (d *IdleDetector) Feed(data []byte) {
 		d.buf = d.buf[len(d.buf)-maxKeep:]
 	}
 
-	if bytes.Contains(d.buf, idlePromptMarker) {
-		if !d.seenFirst {
-			// Skip the first idle prompt — it's the startup prompt before
-			// the initial input is submitted. The second one signals completion.
-			d.seenFirst = true
-			// Reset buffer so we start fresh for next detection.
-			d.buf = d.buf[:0]
-			d.mu.Unlock()
-			return
-		}
-		d.triggered = true
+	if !bytes.Contains(d.buf, idlePromptMarker) {
 		d.mu.Unlock()
-		d.onIdle()
 		return
 	}
 
+	// Reset buffer after each detection so we start fresh.
+	d.buf = d.buf[:0]
+
+	if d.phase == 0 {
+		// Phase 0: startup prompt detected — CLI is ready for input.
+		d.phase = 1
+		d.mu.Unlock()
+		d.onReady()
+		return
+	}
+
+	// Phase 1: completion prompt detected — response is done.
+	d.triggered = true
 	d.mu.Unlock()
+	d.onIdle()
 }
