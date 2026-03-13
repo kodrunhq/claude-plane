@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -51,7 +52,12 @@ func (h *ProvisionHandler) CreateProvision(w http.ResponseWriter, r *http.Reques
 
 	result, err := h.service.CreateAgentProvision(r.Context(), req.MachineID, req.OS, req.Arch, claims.UserID, 1*time.Hour)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, provision.ErrInvalidMachineID) || errors.Is(err, provision.ErrUnsupportedPlatform) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		slog.Error("create provision failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
@@ -81,6 +87,18 @@ func (h *ProvisionHandler) ServeScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.RedeemProvisioningToken(r.Context(), tokenID); err != nil {
+		if errors.Is(err, store.ErrTokenAlreadyRedeemed) {
+			writeError(w, http.StatusGone, "token already used")
+			return
+		}
+		if errors.Is(err, store.ErrTokenExpired) {
+			writeError(w, http.StatusGone, "token expired")
+			return
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "token not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to redeem token")
 		return
 	}

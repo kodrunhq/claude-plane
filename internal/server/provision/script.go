@@ -15,6 +15,7 @@ set -euo pipefail
 # claude-plane agent install script
 # Machine: {{.MachineID}}
 # Server: {{.ServerAddress}}
+# OS: {{.TargetOS}}
 
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/claude-plane"
@@ -52,8 +53,41 @@ TOML
 
 # Create data directory
 mkdir -p /var/lib/claude-plane
+{{if eq .TargetOS "darwin"}}
+# Create launchd service (macOS)
+echo "==> Creating launchd service..."
+cat > /Library/LaunchDaemons/com.claude-plane.agent.plist << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude-plane.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/claude-plane-agent</string>
+        <string>run</string>
+        <string>--config</string>
+        <string>/etc/claude-plane/agent.toml</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/claude-plane-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/claude-plane-agent.log</string>
+</dict>
+</plist>
+PLIST
 
-# Create systemd service
+launchctl load /Library/LaunchDaemons/com.claude-plane.agent.plist
+
+echo "==> claude-plane-agent installed and started for {{.MachineID}}"
+echo "==> Check status: launchctl list | grep claude-plane"
+{{else}}
+# Create systemd service (Linux)
 echo "==> Creating systemd service..."
 cat > /etc/systemd/system/claude-plane-agent.service << 'UNIT'
 [Unit]
@@ -79,16 +113,17 @@ systemctl start claude-plane-agent
 
 echo "==> claude-plane-agent installed and started for {{.MachineID}}"
 echo "==> Check status: systemctl status claude-plane-agent"
-`))
+{{end}}`))
 
 type scriptData struct {
-	MachineID     string
+	MachineID    string
+	TargetOS     string
 	ServerAddress string
-	GRPCAddress   string
-	DownloadURL   string
-	CACertB64     string
-	AgentCertB64  string
-	AgentKeyB64   string
+	GRPCAddress  string
+	DownloadURL  string
+	CACertB64    string
+	AgentCertB64 string
+	AgentKeyB64  string
 }
 
 // RenderInstallScript generates the install script for a provisioning token.
@@ -96,13 +131,14 @@ func RenderInstallScript(token *store.ProvisioningToken) (string, error) {
 	downloadURL := token.ServerAddress + "/dl/agent/" + token.TargetOS + "-" + token.TargetArch
 
 	data := scriptData{
-		MachineID:     token.MachineID,
+		MachineID:    token.MachineID,
+		TargetOS:     token.TargetOS,
 		ServerAddress: token.ServerAddress,
-		GRPCAddress:   token.GRPCAddress,
-		DownloadURL:   downloadURL,
-		CACertB64:     base64.StdEncoding.EncodeToString([]byte(token.CACertPEM)),
-		AgentCertB64:  base64.StdEncoding.EncodeToString([]byte(token.AgentCertPEM)),
-		AgentKeyB64:   base64.StdEncoding.EncodeToString([]byte(token.AgentKeyPEM)),
+		GRPCAddress:  token.GRPCAddress,
+		DownloadURL:  downloadURL,
+		CACertB64:    base64.StdEncoding.EncodeToString([]byte(token.CACertPEM)),
+		AgentCertB64: base64.StdEncoding.EncodeToString([]byte(token.AgentCertPEM)),
+		AgentKeyB64:  base64.StdEncoding.EncodeToString([]byte(token.AgentKeyPEM)),
 	}
 
 	var buf bytes.Buffer

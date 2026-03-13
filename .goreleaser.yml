@@ -3,12 +3,8 @@ project_name: claude-plane
 
 before:
   hooks:
-    - cmd: bash -c "cd web && npm ci && npm run build"
-    - cmd: bash scripts/build-agent-binaries.sh
-      env:
-        - VERSION={{ .Version }}
-        - COMMIT={{ .ShortCommit }}
-        - DATE={{ .Date }}
+    - bash -c "cd web && npm ci && npm run build"
+    - bash -c "VERSION={{ .Version }} COMMIT={{ .ShortCommit }} DATE={{ .Date }} bash scripts/build-agent-binaries.sh"
 
 builds:
   - id: server
