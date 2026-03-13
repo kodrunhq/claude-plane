@@ -48,7 +48,7 @@ function parseCronDescription(expr: string): string {
 
 function getNextRuns(expr: string, tz: string, count: number): Date[] {
   try {
-    const interval = CronExpressionParser.parseExpression(expr, { tz });
+    const interval = CronExpressionParser.parse(expr, { tz });
     const runs: Date[] = [];
     for (let i = 0; i < count; i++) {
       runs.push(interval.next().toDate());
@@ -59,12 +59,13 @@ function getNextRuns(expr: string, tz: string, count: number): Date[] {
   }
 }
 
-function formatDateTime(date: Date): string {
+function formatDateTime(date: Date, tz?: string): string {
   return date.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: tz,
     timeZoneName: 'short',
   });
 }
@@ -132,7 +133,7 @@ function ScheduleForm({ initial, onSave, onCancel, isSaving }: ScheduleFormProps
           <ul className="space-y-0.5">
             {nextRuns.map((d, i) => (
               <li key={i} className="text-xs text-text-secondary pl-1">
-                {formatDateTime(d)}
+                {formatDateTime(d, form.timezone)}
               </li>
             ))}
           </ul>
@@ -184,7 +185,7 @@ function ScheduleRow({ schedule, onPause, onResume, onDelete, onEdit, isToggling
           <p className="text-xs text-text-secondary">{schedule.timezone}</p>
           {schedule.next_run_at && (
             <p className="text-xs text-text-secondary mt-0.5">
-              Next: {formatDateTime(new Date(schedule.next_run_at))}
+              Next: {formatDateTime(new Date(schedule.next_run_at), schedule.timezone)}
             </p>
           )}
         </div>

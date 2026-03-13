@@ -88,16 +88,35 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		return fmt.Errorf("scheduler start: list enabled schedules: %w", err)
 	}
 
+	type nextRunUpdate struct {
+		scheduleID string
+		nextRun    time.Time
+	}
+	var updates []nextRunUpdate
+
 	s.mu.Lock()
 	for _, sc := range schedules {
-		if _, addErr := s.addEntryLocked(sc); addErr != nil {
+		nextRun, addErr := s.addEntryLocked(sc)
+		if addErr != nil {
 			s.logger.Error("failed to add schedule entry",
 				"schedule_id", sc.ScheduleID,
 				"error", addErr,
 			)
+			continue
+		}
+		if !nextRun.IsZero() {
+			updates = append(updates, nextRunUpdate{scheduleID: sc.ScheduleID, nextRun: nextRun})
 		}
 	}
 	s.mu.Unlock()
+
+	// Persist computed next_run_at for each schedule so the UI is accurate after restart.
+	for _, u := range updates {
+		if err := s.store.UpdateScheduleTimestamps(ctx, u.scheduleID, time.Time{}, u.nextRun); err != nil {
+			s.logger.Warn("failed to persist next_run_at on start",
+				"schedule_id", u.scheduleID, "error", err)
+		}
+	}
 
 	s.cron.Start()
 

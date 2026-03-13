@@ -189,15 +189,27 @@ func (s *Store) SetScheduleEnabled(ctx context.Context, scheduleID string, enabl
 
 // UpdateScheduleTimestamps updates last_triggered_at and next_run_at for a schedule.
 // This is a lightweight update called by the scheduler after triggering a run.
+// If lastTriggered is zero, last_triggered_at is left unchanged (not set to year-0001).
 // Returns ErrNotFound if no schedule exists with that ID.
 func (s *Store) UpdateScheduleTimestamps(ctx context.Context, scheduleID string, lastTriggered, nextRun time.Time) error {
 	now := time.Now().UTC()
 
-	result, err := s.writer.ExecContext(ctx,
-		`UPDATE cron_schedules SET last_triggered_at = ?, next_run_at = ?, updated_at = ?
-		 WHERE schedule_id = ?`,
-		lastTriggered.UTC(), nextRun.UTC(), now, scheduleID,
-	)
+	var result sql.Result
+	var err error
+
+	if lastTriggered.IsZero() {
+		result, err = s.writer.ExecContext(ctx,
+			`UPDATE cron_schedules SET next_run_at = ?, updated_at = ?
+			 WHERE schedule_id = ?`,
+			nextRun.UTC(), now, scheduleID,
+		)
+	} else {
+		result, err = s.writer.ExecContext(ctx,
+			`UPDATE cron_schedules SET last_triggered_at = ?, next_run_at = ?, updated_at = ?
+			 WHERE schedule_id = ?`,
+			lastTriggered.UTC(), nextRun.UTC(), now, scheduleID,
+		)
+	}
 	if err != nil {
 		return fmt.Errorf("update schedule timestamps: %w", err)
 	}

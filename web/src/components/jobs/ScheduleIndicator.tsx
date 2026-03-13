@@ -9,10 +9,16 @@ interface ScheduleIndicatorProps {
 export function ScheduleIndicator({ jobId }: ScheduleIndicatorProps) {
   const { data: schedules } = useSchedules(jobId);
 
-  const enabledSchedule = useMemo(
-    () => schedules?.find((s) => s.enabled) ?? null,
-    [schedules],
-  );
+  const enabledSchedule = useMemo(() => {
+    const enabled = schedules?.filter((s) => s.enabled) ?? [];
+    if (enabled.length === 0) return null;
+    // Pick the schedule with the earliest non-null next_run_at.
+    const withNext = enabled.filter((s) => s.next_run_at);
+    if (withNext.length === 0) return enabled[0];
+    return withNext.reduce((a, b) =>
+      new Date(a.next_run_at!).getTime() < new Date(b.next_run_at!).getTime() ? a : b,
+    );
+  }, [schedules]);
 
   if (!enabledSchedule) return null;
 
