@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Plus, Save, Play, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { JobRunHistory } from '../components/jobs/JobRunHistory.tsx';
@@ -45,6 +45,7 @@ export function JobEditor() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
   const [rightTab, setRightTab] = useState<'steps' | 'schedules' | 'triggers'>('steps');
+  const stepDirtyRef = useRef(false);
 
   // Sync job data when loaded
   useEffect(() => {
@@ -61,10 +62,28 @@ export function JobEditor() {
     return () => selectStep(null);
   }, [selectStep]);
 
+  const handleStepDirtyChange = useCallback((dirty: boolean) => {
+    stepDirtyRef.current = dirty;
+  }, []);
+
+  function confirmIfDirty(): boolean {
+    if (!stepDirtyRef.current) return true;
+    return window.confirm('You have unsaved step changes. Discard them?');
+  }
+
   const effectiveJobId = isNew ? jobId : id;
   const steps = jobDetail?.steps ?? [];
   const dependencies = jobDetail?.dependencies ?? [];
   const selectedStep = steps.find((s) => s.step_id === selectedStepId) ?? null;
+
+  const handleNodeClick = useCallback(
+    (stepId: string) => {
+      if (stepId === selectedStepId) return;
+      if (!confirmIfDirty()) return;
+      selectStep(stepId);
+    },
+    [selectedStepId, selectStep],
+  );
 
   async function ensureJobCreated(): Promise<string | null> {
     if (effectiveJobId) return effectiveJobId;
@@ -136,6 +155,10 @@ export function JobEditor() {
   async function handleRun() {
     if (!effectiveJobId) {
       toast.error('Save the job first');
+      return;
+    }
+    if (stepDirtyRef.current) {
+      toast.error('Save your step changes before running');
       return;
     }
     try {
@@ -254,7 +277,7 @@ export function JobEditor() {
                 dependencies={dependencies}
                 editable
                 selectedStepId={selectedStepId}
-                onNodeClick={selectStep}
+                onNodeClick={handleNodeClick}
                 onConnect={handleConnect}
               />
             )}
@@ -303,6 +326,7 @@ export function JobEditor() {
                     machines={machines ?? []}
                     onSave={handleStepSave}
                     onDelete={handleStepDelete}
+                    onDirtyChange={handleStepDirtyChange}
                   />
                 )}
                 {rightTab === 'schedules' && <SchedulePanel jobId={effectiveJobId} />}
