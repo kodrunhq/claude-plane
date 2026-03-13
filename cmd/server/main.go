@@ -26,6 +26,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/frontend"
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
+	"github.com/kodrunhq/claude-plane/internal/server/executor"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/provision"
 	"github.com/kodrunhq/claude-plane/internal/server/scheduler"
@@ -37,15 +38,6 @@ import (
 	// Prove generated proto package compiles.
 	_ "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
-
-// noopExecutor is a stub StepExecutor that logs instead of executing.
-// Used until the real session-backed executor is wired up.
-type noopExecutor struct{}
-
-func (noopExecutor) ExecuteStep(_ context.Context, step store.RunStep, onComplete func(string, int)) {
-	slog.Warn("step execution not implemented yet", "step_id", step.StepID)
-	onComplete(step.StepID, 1)
-}
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -118,6 +110,7 @@ func newServeCmd() *cobra.Command {
 			// gRPC server
 			grpcSrv := grpcserver.NewGRPCServer(tlsCfg, connMgr, slog.Default())
 			grpcSrv.SetRegistry(registry)
+			grpcSrv.SetSessionStore(s)
 
 			grpcLis, err := net.Listen("tcp", cfg.GRPC.Listen)
 			if err != nil {
@@ -146,8 +139,9 @@ func newServeCmd() *cobra.Command {
 				return &handler.UserClaims{UserID: c.UserID, Role: c.Role}
 			}
 
-			// Orchestrator (stub executor until session-backed execution is wired)
-			orch := orchestrator.NewOrchestrator(ctx, s, noopExecutor{})
+			// Step executor — creates real PTY sessions on agents.
+			stepExecutor := executor.NewSessionStepExecutor(connMgr, s, slog.Default())
+			orch := orchestrator.NewOrchestrator(ctx, s, stepExecutor)
 
 			// ---- Event bus and subscribers ----
 			eventBus := event.NewBus(slog.Default())
