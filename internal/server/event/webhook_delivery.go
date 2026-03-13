@@ -223,7 +223,9 @@ func (d *WebhookDeliverer) deliver(ctx context.Context, wh Webhook, e Event, del
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Signature-256", "sha256="+sig)
+	if sig != "" {
+		req.Header.Set("X-Signature-256", "sha256="+sig)
+	}
 
 	resp, err := d.httpClient.Do(req)
 	delivery.Attempts++

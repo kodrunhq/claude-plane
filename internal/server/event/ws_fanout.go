@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -130,7 +131,10 @@ func (f *WSFanout) handle(_ context.Context, ev Event) error {
 		if !clientMatchesEvent(c.patterns, ev.Type) {
 			continue
 		}
-		if err := c.conn.Write(context.Background(), websocket.MessageText, data); err != nil {
+		writeCtx, writeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := c.conn.Write(writeCtx, websocket.MessageText, data)
+		writeCancel()
+		if err != nil {
 			f.logger.Debug("ws_fanout: write to client failed, removing",
 				"event_id", ev.EventID,
 				"error", err,
