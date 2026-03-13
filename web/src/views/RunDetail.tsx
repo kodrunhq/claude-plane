@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, XCircle, RotateCcw, Clock } from 'lucide-react';
+import { ArrowLeft, XCircle, RotateCcw, Clock, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { RunDAGView } from '../components/runs/RunDAGView.tsx';
 import { RunStatusBadge } from '../components/runs/RunStatusBadge.tsx';
@@ -103,6 +103,40 @@ export function RunDetail() {
 
   const isLoading = runLoading || jobLoading;
 
+  const triggerBadge = useMemo(() => {
+    const type = run?.trigger_type ?? 'manual';
+    if (type === 'cron') {
+      let cronExpr: string | null = null;
+      if (run?.trigger_detail) {
+        try {
+          const detail = JSON.parse(run.trigger_detail) as { schedule_id?: string; cron_expr?: string };
+          cronExpr = detail.cron_expr ?? null;
+        } catch {
+          // ignore parse errors
+        }
+      }
+      return (
+        <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-blue-600/20 text-blue-400">
+          <Clock size={10} />
+          {cronExpr ?? 'Scheduled'}
+        </span>
+      );
+    }
+    if (type === 'manual') {
+      return (
+        <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-gray-600/20 text-gray-400">
+          <Play size={10} />
+          Manual
+        </span>
+      );
+    }
+    return (
+      <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-600/20 text-gray-400">
+        {type}
+      </span>
+    );
+  }, [run?.trigger_type, run?.trigger_detail]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full text-text-secondary">
@@ -139,6 +173,7 @@ export function RunDetail() {
               Run {id?.slice(0, 8)}
             </span>
             <RunStatusBadge status={run.status} />
+            {triggerBadge}
           </div>
           {displayElapsed !== null && (
             <div className="flex items-center gap-1 text-xs text-text-secondary mt-0.5">
