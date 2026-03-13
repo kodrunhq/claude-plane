@@ -27,12 +27,15 @@ echo "==> Downloading agent binary..."
 curl -sfL "{{.DownloadURL}}" -o "${INSTALL_DIR}/claude-plane-agent"
 chmod +x "${INSTALL_DIR}/claude-plane-agent"
 
+# Portable base64 decode (GNU uses -d, BSD/macOS uses -D)
+b64decode() { base64 -d 2>/dev/null || base64 -D; }
+
 # Write certificates
 echo "==> Writing certificates..."
 mkdir -p "${CONFIG_DIR}/certs"
-echo "{{.CACertB64}}" | base64 -d > "${CONFIG_DIR}/certs/ca.pem"
-echo "{{.AgentCertB64}}" | base64 -d > "${CONFIG_DIR}/certs/agent.pem"
-echo "{{.AgentKeyB64}}" | base64 -d > "${CONFIG_DIR}/certs/agent-key.pem"
+echo "{{.CACertB64}}" | b64decode > "${CONFIG_DIR}/certs/ca.pem"
+echo "{{.AgentCertB64}}" | b64decode > "${CONFIG_DIR}/certs/agent.pem"
+echo "{{.AgentKeyB64}}" | b64decode > "${CONFIG_DIR}/certs/agent-key.pem"
 chmod 600 "${CONFIG_DIR}/certs/agent-key.pem"
 
 # Generate agent config

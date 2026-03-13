@@ -110,6 +110,7 @@ func (h *ProvisionHandler) ServeScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/x-shellscript")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(script))
 }

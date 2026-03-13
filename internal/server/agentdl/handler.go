@@ -1,6 +1,7 @@
 package agentdl
 
 import (
+	"io"
 	"io/fs"
 	"net/http"
 
@@ -37,15 +38,16 @@ func (h *Handler) ServeDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := "binaries/claude-plane-agent-" + platform
-	data, err := fs.ReadFile(h.fs, filename)
+	f, err := h.fs.Open(filename)
 	if err != nil {
 		http.Error(w, "agent binary not available for "+platform, http.StatusNotFound)
 		return
 	}
+	defer f.Close()
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", "attachment; filename=claude-plane-agent")
-	if _, err := w.Write(data); err != nil {
+	if _, err := io.Copy(w, f); err != nil {
 		// Connection was likely closed by the client; nothing actionable here.
 		return
 	}
