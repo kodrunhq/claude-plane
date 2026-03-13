@@ -48,7 +48,7 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	).Scan(&sess.SessionID, &sess.MachineID, &userID, &sess.Command,
 		&sess.WorkingDir, &sess.Status, &sess.CreatedAt, &endedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("session not found: %s", id)
+		return nil, fmt.Errorf("session %s: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get session: %w", err)
@@ -110,6 +110,21 @@ func (s *Store) UpdateSessionStatus(id, status string) error {
 	if rows == 0 {
 		return fmt.Errorf("session not found: %s", id)
 	}
+	return nil
+}
+
+// UpdateSessionStatusIfNotTerminal updates the session status only if it is not
+// already in a terminal state (completed, failed, terminated). This prevents
+// agent exit events from overwriting user-initiated terminations.
+func (s *Store) UpdateSessionStatusIfNotTerminal(id, status string) error {
+	query := `UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP
+		WHERE session_id = ? AND status NOT IN (?, ?, ?)`
+	result, err := s.writer.Exec(query, status, id, StatusCompleted, StatusFailed, StatusTerminated)
+	if err != nil {
+		return fmt.Errorf("update session status if not terminal: %w", err)
+	}
+	// Zero rows affected is expected if the session is already terminal — not an error.
+	_ = result
 	return nil
 }
 

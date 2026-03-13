@@ -22,8 +22,23 @@ err()   { echo -e "${RED}ERROR:${NC} $*" >&2; exit 1; }
 
 # ── Pre-flight checks ──────────────────────────────────────────────
 
-command -v ./claude-plane-server >/dev/null 2>&1 || err "claude-plane-server binary not found in current directory. Build it first: go build -o claude-plane-server ./cmd/server"
-command -v ./claude-plane-agent  >/dev/null 2>&1 || err "claude-plane-agent binary not found in current directory. Build it first: go build -o claude-plane-agent ./cmd/agent"
+command -v go >/dev/null 2>&1 || err "Go is not installed. Install it from https://go.dev/dl/"
+
+# Build frontend (must happen before server so it gets embedded via go:embed)
+if [ -d "web" ]; then
+  info "Building frontend..."
+  (cd web && npm install --silent && npm run build --silent) || err "Frontend build failed"
+  ok "Frontend built"
+fi
+
+# Build binaries
+info "Building server..."
+go build -o ./claude-plane-server ./cmd/server || err "Server build failed"
+ok "Server built"
+
+info "Building agent..."
+go build -o ./claude-plane-agent ./cmd/agent || err "Agent build failed"
+ok "Agent built"
 
 # Check if ports are already in use
 if lsof -i :"$HTTP_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
