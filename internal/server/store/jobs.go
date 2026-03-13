@@ -592,8 +592,14 @@ func (s *Store) UpdateRunStepStatus(ctx context.Context, runStepID, status, sess
 		query = `UPDATE run_steps SET status = ?, session_id = ?, started_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
 		args = []interface{}{status, nullIfEmpty(sessionID), runStepID}
 	case StatusCompleted, StatusFailed:
-		query = `UPDATE run_steps SET status = ?, session_id = ?, exit_code = ?, ended_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
-		args = []interface{}{status, nullIfEmpty(sessionID), exitCode, runStepID}
+		if sessionID != "" {
+			query = `UPDATE run_steps SET status = ?, session_id = ?, exit_code = ?, ended_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
+			args = []interface{}{status, sessionID, exitCode, runStepID}
+		} else {
+			// Preserve existing session_id when not provided.
+			query = `UPDATE run_steps SET status = ?, exit_code = ?, ended_at = CURRENT_TIMESTAMP WHERE run_step_id = ?`
+			args = []interface{}{status, exitCode, runStepID}
+		}
 	default:
 		query = `UPDATE run_steps SET status = ? WHERE run_step_id = ?`
 		args = []interface{}{status, runStepID}
