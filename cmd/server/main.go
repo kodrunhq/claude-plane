@@ -350,11 +350,11 @@ func newServeCmd() *cobra.Command {
 			// Provisioning service
 			httpAddr := cfg.Provision.ExternalHTTPAddress
 			if httpAddr == "" {
-				httpAddr = "http://" + cfg.HTTP.Listen
+				httpAddr = "http://" + normalizeListenAddr(cfg.HTTP.Listen)
 			}
 			grpcAddr := cfg.Provision.ExternalGRPCAddress
 			if grpcAddr == "" {
-				grpcAddr = cfg.GRPC.Listen
+				grpcAddr = normalizeListenAddr(cfg.GRPC.Listen)
 			}
 			provisionSvc := provision.NewService(s, cfg.CA.GetCADir(), httpAddr, grpcAddr)
 			provisionHandler := handler.NewProvisionHandler(provisionSvc, s, handlerClaimsGetter)
@@ -628,11 +628,11 @@ func newProvisionAgentCmd() *cobra.Command {
 
 			httpAddr := cfg.Provision.ExternalHTTPAddress
 			if httpAddr == "" {
-				httpAddr = "http://" + cfg.HTTP.Listen
+				httpAddr = "http://" + normalizeListenAddr(cfg.HTTP.Listen)
 			}
 			grpcAddr := cfg.Provision.ExternalGRPCAddress
 			if grpcAddr == "" {
-				grpcAddr = cfg.GRPC.Listen
+				grpcAddr = normalizeListenAddr(cfg.GRPC.Listen)
 			}
 
 			svc := provision.NewService(s, cfg.CA.GetCADir(), httpAddr, grpcAddr)
@@ -655,4 +655,13 @@ func newProvisionAgentCmd() *cobra.Command {
 	cmd.Flags().String("arch", "amd64", "Target architecture (amd64, arm64)")
 	cmd.Flags().String("ttl", "1h", "Token time-to-live")
 	return cmd
+}
+
+// normalizeListenAddr converts bare-port listen addresses like ":8080" to
+// "localhost:8080" so they are usable as remote dial targets.
+func normalizeListenAddr(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "localhost" + addr
+	}
+	return addr
 }

@@ -95,7 +95,8 @@ func (s *Store) GetProvisioningToken(ctx context.Context, token string) (*Provis
 func (s *Store) RedeemProvisioningToken(ctx context.Context, token string) error {
 	now := time.Now().UTC()
 	result, err := s.writer.ExecContext(ctx,
-		`UPDATE provisioning_tokens SET redeemed_at = ?
+		`UPDATE provisioning_tokens
+		 SET redeemed_at = ?, ca_cert_pem = '', agent_cert_pem = '', agent_key_pem = ''
 		 WHERE token = ? AND redeemed_at IS NULL AND expires_at >= ?`,
 		now, token, now,
 	)

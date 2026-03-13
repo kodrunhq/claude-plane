@@ -29,19 +29,19 @@ builds:
 
 archives:
   - id: server
-    builds: [server]
-    format: tar.gz
+    ids: [server]
+    formats: [tar.gz]
     format_overrides:
       - goos: darwin
-        format: zip
+        formats: [zip]
     name_template: "claude-plane-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
   - id: agent
-    builds: [agent]
-    format: tar.gz
+    ids: [agent]
+    formats: [tar.gz]
     format_overrides:
       - goos: darwin
-        format: zip
+        formats: [zip]
     name_template: "claude-plane-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
