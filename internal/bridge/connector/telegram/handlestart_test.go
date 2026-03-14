@@ -23,6 +23,17 @@ func newTestTelegram(t *testing.T, templates []client.Template, session *client.
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/templates/by-name/"):
+			name := strings.TrimPrefix(r.URL.Path, "/api/v1/templates/by-name/")
+			for _, tmpl := range templates {
+				if tmpl.Name == name {
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(tmpl)
+					return
+				}
+			}
+			http.Error(w, `{"error":"template not found"}`, http.StatusNotFound)
+
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/templates"):
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(templates)

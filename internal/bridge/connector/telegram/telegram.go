@@ -343,18 +343,8 @@ func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
 	}
 
 	// Resolve template name to ID.
-	templates, err := t.apiClient.ListTemplates(ctx)
+	matched, err := t.apiClient.GetTemplateByName(ctx, templateName)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to list templates: %s", err.Error())
-	}
-	var matched *client.Template
-	for i, tmpl := range templates {
-		if tmpl.Name == templateName {
-			matched = &templates[i]
-			break
-		}
-	}
-	if matched == nil {
 		return fmt.Sprintf("❌ Template %q not found.", templateName)
 	}
 

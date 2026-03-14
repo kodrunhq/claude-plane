@@ -160,6 +160,15 @@ func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 	return templates, nil
 }
 
+// GetTemplateByName returns a single template by name.
+func (c *Client) GetTemplateByName(ctx context.Context, name string) (*Template, error) {
+	var tmpl Template
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/templates/by-name/"+url.PathEscape(name), nil, &tmpl); err != nil {
+		return nil, fmt.Errorf("get template by name %q: %w", name, err)
+	}
+	return &tmpl, nil
+}
+
 // --- Machine Methods ---
 
 // ListMachines returns all registered agent machines.
