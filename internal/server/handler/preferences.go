@@ -140,17 +140,35 @@ func (h *PreferencesHandler) Patch(w http.ResponseWriter, r *http.Request) {
 
 // preferencesPayload is used for validation only.
 type preferencesPayload struct {
-	MachineOverrides       map[string]machineOverride `json:"machine_overrides"`
-	MaxConcurrentSessions  *int                       `json:"max_concurrent_sessions"`
-	DefaultSessionTimeout  *int                       `json:"default_session_timeout"`
-	DefaultStepTimeout     *int                       `json:"default_step_timeout"`
-	DefaultStepDelay       *int                       `json:"default_step_delay"`
-	Theme                  *string                    `json:"theme"`
+	SkipPermissions       *bool                      `json:"skip_permissions"`
+	DefaultSessionTimeout *int                       `json:"default_session_timeout"`
+	DefaultStepTimeout    *int                       `json:"default_step_timeout"`
+	DefaultStepDelay      *int                       `json:"default_step_delay"`
+	DefaultEnvVars        map[string]string           `json:"default_env_vars"`
+	Notifications         *notificationPrefs          `json:"notifications"`
+	UI                    *uiPrefs                    `json:"ui"`
+	MachineOverrides      map[string]machineOverride  `json:"machine_overrides"`
+}
+
+// notificationPrefs holds notification preferences.
+type notificationPrefs struct {
+	Events []string `json:"events"`
+}
+
+// uiPrefs holds UI preferences.
+type uiPrefs struct {
+	Theme              string   `json:"theme"`
+	TerminalFontSize   int      `json:"terminal_font_size"`
+	AutoAttachSession  bool     `json:"auto_attach_session"`
+	CommandCenterCards []string `json:"command_center_cards"`
 }
 
 // machineOverride holds per-machine preference overrides.
 type machineOverride struct {
-	Model string `json:"model"`
+	WorkingDir            string            `json:"working_dir"`
+	Model                 string            `json:"model"`
+	EnvVars               map[string]string `json:"env_vars"`
+	MaxConcurrentSessions int               `json:"max_concurrent_sessions"`
 }
 
 // validatePreferences checks that known fields satisfy constraints.
@@ -160,16 +178,14 @@ func validatePreferences(raw json.RawMessage) error {
 		return fmt.Errorf("invalid preferences JSON: %w", err)
 	}
 
-	// Validate machine_overrides model values.
+	// Validate machine_overrides.
 	for machineID, override := range p.MachineOverrides {
 		if override.Model != "" && override.Model != "opus" && override.Model != "sonnet" && override.Model != "haiku" {
 			return fmt.Errorf("machine_overrides[%s].model must be one of: opus, sonnet, haiku", machineID)
 		}
-	}
-
-	// Validate max_concurrent_sessions.
-	if p.MaxConcurrentSessions != nil && *p.MaxConcurrentSessions < 0 {
-		return fmt.Errorf("max_concurrent_sessions must be >= 0")
+		if override.MaxConcurrentSessions < 0 {
+			return fmt.Errorf("machine_overrides[%s].max_concurrent_sessions must be >= 0", machineID)
+		}
 	}
 
 	// Validate default_session_timeout.
@@ -187,9 +203,15 @@ func validatePreferences(raw json.RawMessage) error {
 		return fmt.Errorf("default_step_delay must be between 0 and 86400")
 	}
 
-	// Validate theme.
-	if p.Theme != nil && *p.Theme != "" && *p.Theme != "light" && *p.Theme != "dark" && *p.Theme != "system" {
-		return fmt.Errorf("theme must be one of: light, dark, system")
+	// Validate UI preferences.
+	if p.UI != nil {
+		validThemes := map[string]bool{"": true, "light": true, "dark": true, "system": true}
+		if !validThemes[p.UI.Theme] {
+			return fmt.Errorf("ui.theme must be one of: light, dark, system")
+		}
+		if p.UI.TerminalFontSize < 0 || p.UI.TerminalFontSize > 72 {
+			return fmt.Errorf("ui.terminal_font_size must be between 0 and 72")
+		}
 	}
 
 	return nil
