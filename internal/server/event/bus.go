@@ -91,10 +91,21 @@ func (b *Bus) SetPersistHandler(fn func(context.Context, Event) error) {
 // and a Warn-level message is emitted. If the bus is already closed, Publish
 // silently discards the event and returns nil.
 func (b *Bus) Publish(ctx context.Context, event Event) error {
+	// Snapshot closed state and persist handler under the lock so we don't
+	// persist after Close() has been called.
+	b.mu.RLock()
+	closed := b.closed
+	persistFn := b.persistHandler
+	b.mu.RUnlock()
+
+	if closed {
+		return nil
+	}
+
 	// Synchronous persist — called outside the lock to avoid blocking
 	// concurrent publishers on SQLite writes.
-	if b.persistHandler != nil {
-		if err := b.persistHandler(ctx, event); err != nil {
+	if persistFn != nil {
+		if err := persistFn(ctx, event); err != nil {
 			b.logger.Error("persist handler failed",
 				"event_id", event.EventID,
 				"event_type", event.Type,

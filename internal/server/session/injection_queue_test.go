@@ -79,8 +79,8 @@ func (m *mockSessionStore) GetSession(id string) (*store.Session, error) {
 		return nil, fmt.Errorf("session %s: not found", id)
 	}
 	// Return a copy to avoid data races on the Status field.
-	copy := *sess
-	return &copy, nil
+	sessCopy := *sess
+	return &sessCopy, nil
 }
 
 func (m *mockSessionStore) setStatus(id, status string) {

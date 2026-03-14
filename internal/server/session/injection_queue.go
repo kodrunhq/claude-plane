@@ -227,7 +227,14 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 			// delay elapsed, proceed
 		case <-sq.done:
 			timer.Stop()
-			return // session terminated during delay
+			// Mark as failed — item was already dequeued so drainRemaining won't see it.
+			if err := q.auditStore.UpdateInjectionFailed(
+				context.Background(), item.InjectionID, "queue shutdown",
+			); err != nil {
+				q.logger.Error("failed to mark injection failed",
+					"injection_id", item.InjectionID, "error", err)
+			}
+			return
 		}
 	}
 
