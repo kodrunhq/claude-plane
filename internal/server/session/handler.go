@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -66,11 +67,17 @@ func NewSessionHandler(s *store.Store, cm *connmgr.ConnectionManager, r *Registr
 
 // createSessionRequest is the JSON body for POST /api/v1/sessions.
 type createSessionRequest struct {
-	MachineID    string        `json:"machine_id"`
-	Command      string        `json:"command"`
-	Args         []string      `json:"args"`
-	WorkingDir   string        `json:"working_dir"`
-	TerminalSize *terminalSize `json:"terminal_size"`
+	MachineID     string            `json:"machine_id"`
+	Command       string            `json:"command"`
+	Args          []string          `json:"args"`
+	WorkingDir    string            `json:"working_dir"`
+	TerminalSize  *terminalSize     `json:"terminal_size"`
+	EnvVars       map[string]string `json:"env_vars"`
+	InitialPrompt string            `json:"initial_prompt"`
+	// Template fields
+	TemplateID   string            `json:"template_id"`
+	TemplateName string            `json:"template_name"`
+	Variables    map[string]string `json:"variables"`
 }
 
 type terminalSize struct {
@@ -84,6 +91,63 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	// Resolve template if specified
+	var templateID string
+	if req.TemplateID != "" || req.TemplateName != "" {
+		var tmpl *store.SessionTemplate
+		var err error
+
+		if req.TemplateID != "" {
+			tmpl, err = h.store.GetTemplate(r.Context(), req.TemplateID)
+		} else {
+			// Need user ID for name lookup
+			userID := ""
+			if h.getClaims != nil {
+				if claims := h.getClaims(r); claims != nil {
+					userID = claims.UserID
+				}
+			}
+			tmpl, err = h.store.GetTemplateByName(r.Context(), userID, req.TemplateName)
+		}
+
+		if err != nil {
+			httputil.WriteError(w, http.StatusNotFound, "template not found")
+			return
+		}
+
+		templateID = tmpl.TemplateID
+
+		// Merge: template provides defaults, request overrides
+		if req.Command == "" {
+			req.Command = tmpl.Command
+		}
+		if len(req.Args) == 0 && len(tmpl.Args) > 0 {
+			req.Args = tmpl.Args
+		}
+		if req.WorkingDir == "" {
+			req.WorkingDir = tmpl.WorkingDir
+		}
+		if req.InitialPrompt == "" {
+			req.InitialPrompt = tmpl.InitialPrompt
+		}
+		if req.EnvVars == nil && len(tmpl.EnvVars) > 0 {
+			req.EnvVars = tmpl.EnvVars
+		}
+		if req.TerminalSize == nil && (tmpl.TerminalRows > 0 || tmpl.TerminalCols > 0) {
+			req.TerminalSize = &terminalSize{
+				Rows: uint32(tmpl.TerminalRows),
+				Cols: uint32(tmpl.TerminalCols),
+			}
+		}
+
+		// Variable substitution in InitialPrompt
+		if req.InitialPrompt != "" && len(req.Variables) > 0 {
+			for k, v := range req.Variables {
+				req.InitialPrompt = strings.ReplaceAll(req.InitialPrompt, "${"+k+"}", v)
+			}
+		}
 	}
 
 	if req.MachineID == "" {
@@ -120,6 +184,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		SessionID:  sessionID,
 		MachineID:  req.MachineID,
 		UserID:     userID,
+		TemplateID: templateID,
 		Command:    req.Command,
 		WorkingDir: req.WorkingDir,
 		Status:     store.StatusCreated,
@@ -135,10 +200,12 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		cmd := &pb.ServerCommand{
 			Command: &pb.ServerCommand_CreateSession{
 				CreateSession: &pb.CreateSessionCmd{
-					SessionId:  sessionID,
-					Command:    req.Command,
-					Args:       req.Args,
-					WorkingDir: req.WorkingDir,
+					SessionId:     sessionID,
+					Command:       req.Command,
+					Args:          req.Args,
+					WorkingDir:    req.WorkingDir,
+					EnvVars:       req.EnvVars,
+					InitialPrompt: req.InitialPrompt,
 					TerminalSize: &pb.TerminalSize{
 						Rows: req.TerminalSize.Rows,
 						Cols: req.TerminalSize.Cols,

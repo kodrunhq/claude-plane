@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -43,6 +44,15 @@ func (cr *commandRecorder) count() int {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	return len(cr.commands)
+}
+
+func (cr *commandRecorder) last() *pb.ServerCommand {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	if len(cr.commands) == 0 {
+		return nil
+	}
+	return cr.commands[len(cr.commands)-1]
 }
 
 func setupTestHandler(t *testing.T) (*session.SessionHandler, *connmgr.ConnectionManager, *commandRecorder, *store.Store, chi.Router) {
@@ -433,6 +443,341 @@ func TestListSessions_FiltersByOwnership(t *testing.T) {
 	json.NewDecoder(adminListW.Body).Decode(&adminSessions)
 	if len(adminSessions) != 2 {
 		t.Errorf("admin sessions count = %d, want 2", len(adminSessions))
+	}
+}
+
+// setupTemplateTestEnv creates a test environment with auth, a connected agent, and a user.
+// Returns all components needed for template-aware session creation tests.
+func setupTemplateTestEnv(t *testing.T, userID string) (
+	*store.Store,
+	*connmgr.ConnectionManager,
+	*commandRecorder,
+	*session.Registry,
+	session.ClaimsGetter,
+) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	createTestUser(t, st, userID)
+
+	cm := connmgr.NewConnectionManager(&mockMachineStore{}, nil)
+	reg := session.NewRegistry(slog.Default())
+	recorder := &commandRecorder{}
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	})
+
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: userID, Role: "user"}
+	}
+
+	return st, cm, recorder, reg, getClaims
+}
+
+func TestCreateSession_WithTemplateID(t *testing.T) {
+	st, cm, recorder, reg, getClaims := setupTemplateTestEnv(t, "user-tmpl")
+
+	// Create a template
+	tmpl, err := st.CreateTemplate(context.Background(), &store.SessionTemplate{
+		UserID:        "user-tmpl",
+		Name:          "my-template",
+		Command:       "claude-code",
+		Args:          []string{"--model", "opus"},
+		WorkingDir:    "/projects/foo",
+		InitialPrompt: "Hello world",
+		EnvVars:       map[string]string{"FOO": "bar"},
+		TerminalRows:  40,
+		TerminalCols:  120,
+	})
+	if err != nil {
+		t.Fatalf("CreateTemplate: %v", err)
+	}
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	body := fmt.Sprintf(`{"machine_id":"machine-a","template_id":%q}`, tmpl.TemplateID)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	// Command should come from template
+	if resp["command"] != "claude-code" {
+		t.Errorf("command = %v, want claude-code", resp["command"])
+	}
+
+	// Verify proto command includes template fields
+	cmd := recorder.last()
+	if cmd == nil {
+		t.Fatal("expected command to be sent")
+	}
+	createCmd := cmd.GetCreateSession()
+	if createCmd == nil {
+		t.Fatal("expected CreateSession command")
+	}
+	if createCmd.Command != "claude-code" {
+		t.Errorf("proto command = %q, want claude-code", createCmd.Command)
+	}
+	if createCmd.WorkingDir != "/projects/foo" {
+		t.Errorf("proto working_dir = %q, want /projects/foo", createCmd.WorkingDir)
+	}
+	if createCmd.InitialPrompt != "Hello world" {
+		t.Errorf("proto initial_prompt = %q, want Hello world", createCmd.InitialPrompt)
+	}
+	if createCmd.EnvVars["FOO"] != "bar" {
+		t.Errorf("proto env_vars[FOO] = %q, want bar", createCmd.EnvVars["FOO"])
+	}
+	if len(createCmd.Args) != 2 || createCmd.Args[0] != "--model" || createCmd.Args[1] != "opus" {
+		t.Errorf("proto args = %v, want [--model opus]", createCmd.Args)
+	}
+
+	// Verify session in DB has template_id
+	sessionID := resp["session_id"].(string)
+	sess, err := st.GetSession(sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if sess.TemplateID != tmpl.TemplateID {
+		t.Errorf("session template_id = %q, want %q", sess.TemplateID, tmpl.TemplateID)
+	}
+}
+
+func TestCreateSession_WithTemplateName(t *testing.T) {
+	st, cm, recorder, reg, getClaims := setupTemplateTestEnv(t, "user-tmpl-name")
+
+	_, err := st.CreateTemplate(context.Background(), &store.SessionTemplate{
+		UserID:  "user-tmpl-name",
+		Name:    "named-template",
+		Command: "special-command",
+	})
+	if err != nil {
+		t.Fatalf("CreateTemplate: %v", err)
+	}
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	body := `{"machine_id":"machine-a","template_name":"named-template"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	cmd := recorder.last()
+	createCmd := cmd.GetCreateSession()
+	if createCmd.Command != "special-command" {
+		t.Errorf("command = %q, want special-command", createCmd.Command)
+	}
+}
+
+func TestCreateSession_TemplateWithExplicitOverride(t *testing.T) {
+	st, cm, recorder, reg, getClaims := setupTemplateTestEnv(t, "user-override")
+
+	_, err := st.CreateTemplate(context.Background(), &store.SessionTemplate{
+		UserID:     "user-override",
+		Name:       "override-test",
+		Command:    "template-cmd",
+		WorkingDir: "/template/dir",
+	})
+	if err != nil {
+		t.Fatalf("CreateTemplate: %v", err)
+	}
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	// Explicit command should override template
+	body := `{"machine_id":"machine-a","template_name":"override-test","command":"explicit-cmd"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	cmd := recorder.last()
+	createCmd := cmd.GetCreateSession()
+	if createCmd.Command != "explicit-cmd" {
+		t.Errorf("command = %q, want explicit-cmd (explicit override)", createCmd.Command)
+	}
+	// WorkingDir should come from template since not overridden
+	if createCmd.WorkingDir != "/template/dir" {
+		t.Errorf("working_dir = %q, want /template/dir (from template)", createCmd.WorkingDir)
+	}
+}
+
+func TestCreateSession_TemplateVariableSubstitution(t *testing.T) {
+	st, cm, recorder, reg, getClaims := setupTemplateTestEnv(t, "user-vars")
+
+	_, err := st.CreateTemplate(context.Background(), &store.SessionTemplate{
+		UserID:        "user-vars",
+		Name:          "pr-review",
+		Command:       "claude",
+		InitialPrompt: "Review this PR: ${PR_URL} and focus on ${FOCUS_AREA}",
+	})
+	if err != nil {
+		t.Fatalf("CreateTemplate: %v", err)
+	}
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	body := `{
+		"machine_id": "machine-a",
+		"template_name": "pr-review",
+		"variables": {
+			"PR_URL": "https://github.com/org/repo/pull/42",
+			"FOCUS_AREA": "security"
+		}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	cmd := recorder.last()
+	createCmd := cmd.GetCreateSession()
+	expected := "Review this PR: https://github.com/org/repo/pull/42 and focus on security"
+	if createCmd.InitialPrompt != expected {
+		t.Errorf("initial_prompt = %q, want %q", createCmd.InitialPrompt, expected)
+	}
+}
+
+func TestCreateSession_TemplateEnvVarsInProto(t *testing.T) {
+	st, cm, recorder, reg, getClaims := setupTemplateTestEnv(t, "user-env")
+
+	_, err := st.CreateTemplate(context.Background(), &store.SessionTemplate{
+		UserID:  "user-env",
+		Name:    "env-template",
+		Command: "claude",
+		EnvVars: map[string]string{"API_KEY": "secret123", "DEBUG": "true"},
+	})
+	if err != nil {
+		t.Fatalf("CreateTemplate: %v", err)
+	}
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	body := `{"machine_id":"machine-a","template_name":"env-template"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	cmd := recorder.last()
+	createCmd := cmd.GetCreateSession()
+	if len(createCmd.EnvVars) != 2 {
+		t.Fatalf("env_vars count = %d, want 2", len(createCmd.EnvVars))
+	}
+	if createCmd.EnvVars["API_KEY"] != "secret123" {
+		t.Errorf("env_vars[API_KEY] = %q, want secret123", createCmd.EnvVars["API_KEY"])
+	}
+	if createCmd.EnvVars["DEBUG"] != "true" {
+		t.Errorf("env_vars[DEBUG] = %q, want true", createCmd.EnvVars["DEBUG"])
+	}
+}
+
+func TestCreateSession_InvalidTemplateID(t *testing.T) {
+	st, cm, _, reg, getClaims := setupTemplateTestEnv(t, "user-invalid")
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	body := `{"machine_id":"machine-a","template_id":"nonexistent-id"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+}
+
+func TestCreateSession_WithoutTemplate_UnchangedBehavior(t *testing.T) {
+	st, cm, recorder, reg, getClaims := setupTemplateTestEnv(t, "user-notemplate")
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	router := chi.NewRouter()
+	router.Post("/api/v1/sessions", handler.CreateSession)
+
+	body := `{"machine_id":"machine-a","command":"my-cli","working_dir":"/home"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["command"] != "my-cli" {
+		t.Errorf("command = %v, want my-cli", resp["command"])
+	}
+
+	cmd := recorder.last()
+	createCmd := cmd.GetCreateSession()
+	if createCmd.Command != "my-cli" {
+		t.Errorf("proto command = %q, want my-cli", createCmd.Command)
+	}
+	if createCmd.WorkingDir != "/home" {
+		t.Errorf("proto working_dir = %q, want /home", createCmd.WorkingDir)
+	}
+	// No template → default terminal size
+	if createCmd.TerminalSize.Rows != 24 || createCmd.TerminalSize.Cols != 80 {
+		t.Errorf("terminal_size = %dx%d, want 24x80", createCmd.TerminalSize.Rows, createCmd.TerminalSize.Cols)
+	}
+
+	// Session should have empty template_id
+	sessionID := resp["session_id"].(string)
+	sess, err := st.GetSession(sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if sess.TemplateID != "" {
+		t.Errorf("session template_id = %q, want empty", sess.TemplateID)
 	}
 }
 
