@@ -5,14 +5,18 @@ import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
 import { useJobs } from '../hooks/useJobs.ts';
 import { useRuns } from '../hooks/useRuns.ts';
+import { useTemplates } from '../hooks/useTemplates.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { MachineCard } from '../components/machines/MachineCard.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
+import { TemplateCard } from '../components/templates/TemplateCard.tsx';
+import { LaunchTemplateModal } from '../components/templates/LaunchTemplateModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { TimeAgo } from '../components/shared/TimeAgo.tsx';
 import { toast } from 'sonner';
 import type { Job, Run } from '../types/job.ts';
+import type { SessionTemplate } from '../types/template.ts';
 
 export function CommandCenter() {
   const navigate = useNavigate();
@@ -20,11 +24,13 @@ export function CommandCenter() {
   const { data: machines, isLoading: machinesLoading, error: machinesError, refetch: refetchMachines } = useMachines();
   const { data: jobs, isLoading: jobsLoading } = useJobs();
   const { data: runs, isLoading: runsLoading } = useRuns({ limit: 20 });
+  const { data: templates } = useTemplates();
   const terminateSession = useTerminateSession();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [preselectedMachine, setPreselectedMachine] = useState<string | undefined>();
   const [terminateId, setTerminateId] = useState<string | null>(null);
+  const [launchTemplate, setLaunchTemplate] = useState<SessionTemplate | null>(null);
 
   const activeSessions = useMemo(
     () => (sessions ?? []).filter((s) => s.status === 'running' || s.status === 'created'),
@@ -171,6 +177,58 @@ export function CommandCenter() {
         />
       </div>
 
+      {/* Templates */}
+      {(templates ?? []).length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+              Templates
+            </h2>
+            <Link
+              to="/templates"
+              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              View All Templates
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {(templates ?? []).slice(0, 6).map((template) => (
+              <TemplateCard
+                key={template.template_id}
+                template={template}
+                onLaunch={setLaunchTemplate}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {templates && templates.length === 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+              Templates
+            </h2>
+            <Link
+              to="/templates"
+              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              View All Templates
+            </Link>
+          </div>
+          <div className="bg-bg-secondary rounded-lg border border-border-primary p-6 text-center">
+            <p className="text-sm text-text-secondary">
+              No templates yet. Create one to define reusable session configs.
+            </p>
+            <Link
+              to="/templates/new"
+              className="inline-block mt-2 text-xs text-accent-primary hover:text-accent-primary/80"
+            >
+              Create your first template
+            </Link>
+          </div>
+        </section>
+      )}
+
       {/* Recent Jobs & Recent Runs — 2-column */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Recent Jobs */}
@@ -297,6 +355,12 @@ export function CommandCenter() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         preselectedMachineId={preselectedMachine}
+      />
+
+      <LaunchTemplateModal
+        open={launchTemplate !== null}
+        onClose={() => setLaunchTemplate(null)}
+        template={launchTemplate}
       />
 
       <ConfirmDialog
