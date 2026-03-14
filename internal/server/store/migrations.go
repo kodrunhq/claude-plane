@@ -276,6 +276,35 @@ CREATE TABLE IF NOT EXISTS provisioning_tokens (
 CREATE INDEX IF NOT EXISTS idx_provisioning_tokens_expires ON provisioning_tokens(expires_at);
 `,
 	},
+	{
+		Version:     5,
+		Description: "session templates",
+		SQL: `
+CREATE TABLE session_templates (
+    template_id     TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL REFERENCES users(user_id),
+    name            TEXT NOT NULL,
+    description     TEXT,
+    command         TEXT,
+    args            TEXT,
+    working_dir     TEXT,
+    env_vars        TEXT,
+    initial_prompt  TEXT,
+    terminal_rows   INTEGER NOT NULL DEFAULT 24,
+    terminal_cols   INTEGER NOT NULL DEFAULT 80,
+    tags            TEXT,
+    timeout_seconds INTEGER NOT NULL DEFAULT 0,
+    deleted_at      DATETIME,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, name)
+);
+
+CREATE INDEX idx_templates_user ON session_templates(user_id, deleted_at);
+
+ALTER TABLE sessions ADD COLUMN template_id TEXT REFERENCES session_templates(template_id);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
