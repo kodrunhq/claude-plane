@@ -1,7 +1,10 @@
 import type { WatchData } from './WatchEditor.tsx';
 
+let nextWatchId = 0;
+
 export function createDefaultWatch(): WatchData {
   return {
+    id: `watch-${Date.now()}-${nextWatchId++}`,
     repo: '',
     template: '',
     machine_id: '',

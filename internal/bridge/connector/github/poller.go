@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -407,31 +408,35 @@ func (p *RepoPoller) fetchCheckRuns(ctx context.Context, sha string) ([]CheckRun
 // processIssues fetches open issues and evaluates them against the trigger filters.
 // Returns matched events, a rate-limit-low flag, and any error.
 func (p *RepoPoller) processIssues(ctx context.Context, trigger *IssueTrigger) ([]MatchedEvent, bool, error) {
-	url := fmt.Sprintf(
+	endpoint := fmt.Sprintf(
 		"%s/repos/%s/issues?state=open&sort=updated&direction=desc&per_page=%d",
 		p.apiBase, p.repo, issuePerPage,
 	)
 
-	// Append label filter if specified
+	// Append label filter if specified (URL-encode for labels with special chars)
 	if len(trigger.Filters.Labels) > 0 {
-		url += "&labels=" + strings.Join(trigger.Filters.Labels, ",")
+		encoded := make([]string, len(trigger.Filters.Labels))
+		for i, l := range trigger.Filters.Labels {
+			encoded[i] = url.QueryEscape(l)
+		}
+		endpoint += "&labels=" + strings.Join(encoded, ",")
 	}
 
-	req, err := p.newRequest(ctx, http.MethodGet, url)
+	req, err := p.newRequest(ctx, http.MethodGet, endpoint)
 	if err != nil {
 		return nil, false, err
 	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, false, fmt.Errorf("GET %s: %w", url, err)
+		return nil, false, fmt.Errorf("GET %s: %w", endpoint, err)
 	}
 	defer resp.Body.Close()
 
 	rateLow := p.checkRateLimit(resp)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, rateLow, fmt.Errorf("GET %s returned %d", url, resp.StatusCode)
+		return nil, rateLow, fmt.Errorf("GET %s returned %d", endpoint, resp.StatusCode)
 	}
 
 	var issues []IssueData
