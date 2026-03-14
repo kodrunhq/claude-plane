@@ -37,6 +37,38 @@ type telegramResponse struct {
 	Result json.RawMessage `json:"result"`
 }
 
+// telegramRateLimitResponse is returned by the Telegram API on HTTP 429.
+type telegramRateLimitResponse struct {
+	OK         bool `json:"ok"`
+	Parameters struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
+}
+
+// CheckRateLimit inspects the HTTP response for a 429 status and, if found,
+// waits for the retry_after duration (or 5 s by default) before returning an
+// error. For all other non-2xx statuses it returns an error immediately.
+// It returns nil for 2xx responses.
+func CheckRateLimit(ctx context.Context, resp *http.Response, rawBody []byte) error {
+	if resp.StatusCode == http.StatusTooManyRequests {
+		var rl telegramRateLimitResponse
+		retryAfter := 5 // default 5 seconds
+		if json.Unmarshal(rawBody, &rl) == nil && rl.Parameters.RetryAfter > 0 {
+			retryAfter = rl.Parameters.RetryAfter
+		}
+		select {
+		case <-time.After(time.Duration(retryAfter) * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return fmt.Errorf("telegram rate limited, waited %ds", retryAfter)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("telegram API error: HTTP %d: %s", resp.StatusCode, string(rawBody))
+	}
+	return nil
+}
+
 // Update represents a single Telegram update.
 type Update struct {
 	UpdateID int64    `json:"update_id"`
@@ -237,7 +269,7 @@ func (t *Telegram) runCommandsPoller(ctx context.Context) error {
 func (t *Telegram) handleCommand(ctx context.Context, text string) string {
 	cmd, err := ParseCommand(text)
 	if err != nil {
-		return fmt.Sprintf("❌ %s", err.Error())
+		return fmt.Sprintf("❌ %s", escapeMarkdownV2(err.Error()))
 	}
 
 	switch cmd.Name {
@@ -263,22 +295,25 @@ func (t *Telegram) handleCommand(ctx context.Context, text string) string {
 		return t.handleStart(ctx, cmd)
 
 	default:
-		return fmt.Sprintf("❌ Unknown command: %s", cmd.Name)
+		return fmt.Sprintf("❌ Unknown command: %s", escapeMarkdownV2(cmd.Name))
 	}
 }
 
 func (t *Telegram) handleList(ctx context.Context) string {
 	sessions, err := t.apiClient.ListSessions(ctx)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to list sessions: %s", err.Error())
+		return fmt.Sprintf("❌ Failed to list sessions: %s", escapeMarkdownV2(err.Error()))
 	}
 	if len(sessions) == 0 {
-		return "No active sessions."
+		return "No active sessions\\."
 	}
 	var sb strings.Builder
 	sb.WriteString("*Active sessions:*\n")
 	for _, s := range sessions {
-		sb.WriteString(fmt.Sprintf("• `%s` — %s (%s)\n", s.SessionID, s.MachineID, s.Status))
+		sb.WriteString(fmt.Sprintf("• `%s` — %s \\(%s\\)\n",
+			s.SessionID,
+			escapeMarkdownV2(s.MachineID),
+			escapeMarkdownV2(s.Status)))
 	}
 	return sb.String()
 }
@@ -286,10 +321,10 @@ func (t *Telegram) handleList(ctx context.Context) string {
 func (t *Telegram) handleMachines(ctx context.Context) string {
 	machines, err := t.apiClient.ListMachines(ctx)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to list machines: %s", err.Error())
+		return fmt.Sprintf("❌ Failed to list machines: %s", escapeMarkdownV2(err.Error()))
 	}
 	if len(machines) == 0 {
-		return "No machines connected."
+		return "No machines connected\\."
 	}
 	var sb strings.Builder
 	sb.WriteString("*Connected machines:*\n")
@@ -298,25 +333,28 @@ func (t *Telegram) handleMachines(ctx context.Context) string {
 		if name == "" {
 			name = m.MachineID
 		}
-		sb.WriteString(fmt.Sprintf("• `%s` — %s (%s)\n", m.MachineID, name, m.Status))
+		sb.WriteString(fmt.Sprintf("• `%s` — %s \\(%s\\)\n",
+			m.MachineID,
+			escapeMarkdownV2(name),
+			escapeMarkdownV2(m.Status)))
 	}
 	return sb.String()
 }
 
 func (t *Telegram) handleKill(ctx context.Context, cmd *Command) string {
 	if len(cmd.Args) < 1 {
-		return "❌ Usage: /kill <session_id>"
+		return "❌ Usage: /kill <session\\_id>"
 	}
 	sessionID := cmd.Args[0]
 	if err := t.apiClient.KillSession(ctx, sessionID); err != nil {
-		return fmt.Sprintf("❌ Failed to kill session %s: %s", sessionID, err.Error())
+		return fmt.Sprintf("❌ Failed to kill session %s: %s", escapeMarkdownV2(sessionID), escapeMarkdownV2(err.Error()))
 	}
-	return fmt.Sprintf("✅ Session `%s` killed.", sessionID)
+	return fmt.Sprintf("✅ Session `%s` killed\\.", sessionID)
 }
 
 func (t *Telegram) handleInject(ctx context.Context, cmd *Command) string {
 	if len(cmd.Args) < 2 {
-		return "❌ Usage: /inject <session_id> <text>"
+		return "❌ Usage: /inject <session\\_id> <text>"
 	}
 	sessionID := cmd.Args[0]
 	text := strings.Join(cmd.Args[1:], " ")
@@ -325,47 +363,50 @@ func (t *Telegram) handleInject(ctx context.Context, cmd *Command) string {
 		Source: "telegram",
 	}
 	if err := t.apiClient.InjectSession(ctx, sessionID, req); err != nil {
-		return fmt.Sprintf("❌ Failed to inject into session %s: %s", sessionID, err.Error())
+		return fmt.Sprintf("❌ Failed to inject into session %s: %s", escapeMarkdownV2(sessionID), escapeMarkdownV2(err.Error()))
 	}
-	return fmt.Sprintf("✅ Text injected into session `%s`.", sessionID)
+	return fmt.Sprintf("✅ Text injected into session `%s`\\.", sessionID)
 }
 
 func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
-	if len(cmd.Args) < 2 {
-		return "❌ Usage: /start <template_name> <machine_id> [| VAR=val …]"
+	if len(cmd.Args) < 1 {
+		return "❌ Usage: /start <template\\_name> \\[machine\\_id\\] \\[\\| VAR\\=val …\\]"
 	}
 	templateName := cmd.Args[0]
-	machineID := cmd.Args[1]
+
+	// Machine ID is optional — falls back to template default.
+	var machineID string
+	if len(cmd.Args) >= 2 {
+		machineID = cmd.Args[1]
+	}
 
 	// Resolve template name to ID.
-	templates, err := t.apiClient.ListTemplates(ctx)
+	matched, err := t.apiClient.GetTemplateByName(ctx, templateName)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to list templates: %s", err.Error())
+		return fmt.Sprintf("❌ Template %q not found\\.", escapeMarkdownV2(templateName))
 	}
-	templateID := ""
-	for _, tmpl := range templates {
-		if tmpl.Name == templateName {
-			templateID = tmpl.TemplateID
-			break
-		}
+
+	// Fall back to template's default machine.
+	if machineID == "" {
+		machineID = matched.MachineID
 	}
-	if templateID == "" {
-		return fmt.Sprintf("❌ Template %q not found.", templateName)
+	if machineID == "" {
+		return "❌ Template has no default machine\\. Usage: /start <template> <machine>"
 	}
 
 	req := client.CreateSessionRequest{
 		MachineID:  machineID,
-		TemplateID: templateID,
+		TemplateID: matched.TemplateID,
 		Variables:  cmd.Vars,
 	}
 	session, err := t.apiClient.CreateSession(ctx, req)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to create session: %s", err.Error())
+		return fmt.Sprintf("❌ Failed to create session: %s", escapeMarkdownV2(err.Error()))
 	}
 	return fmt.Sprintf("✅ Session started\nID: `%s`\nMachine: `%s`", session.SessionID, session.MachineID)
 }
 
-// sendMessage sends a Markdown-formatted message to the given Telegram topic.
+// sendMessage sends a MarkdownV2-formatted message to the given Telegram topic.
 func (t *Telegram) sendMessage(ctx context.Context, text string, topicID int) error {
 	apiURL := fmt.Sprintf("%s%s/sendMessage", telegramAPIBase, t.config.BotToken)
 
@@ -373,7 +414,7 @@ func (t *Telegram) sendMessage(ctx context.Context, text string, topicID int) er
 		"chat_id":                  t.config.GroupID,
 		"message_thread_id":        topicID,
 		"text":                     text,
-		"parse_mode":               "Markdown",
+		"parse_mode":               "MarkdownV2",
 		"disable_web_page_preview": true,
 	}
 
@@ -386,6 +427,10 @@ func (t *Telegram) sendMessage(ctx context.Context, text string, topicID int) er
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read sendMessage body: %w", err)
+	}
+
+	if err := CheckRateLimit(ctx, resp, raw); err != nil {
+		return fmt.Errorf("sendMessage: %w", err)
 	}
 
 	var tgResp telegramResponse
@@ -418,6 +463,10 @@ func (t *Telegram) getUpdates(ctx context.Context, offset int64) ([]Update, erro
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read getUpdates body: %w", err)
+	}
+
+	if err := CheckRateLimit(ctx, resp, raw); err != nil {
+		return nil, fmt.Errorf("getUpdates: %w", err)
 	}
 
 	var tgResp telegramResponse
@@ -459,13 +508,13 @@ func (t *Telegram) postJSON(ctx context.Context, url string, body map[string]int
 
 // helpText returns the static help message shown by /help.
 func helpText() string {
-	return `*claude-plane bot commands*
+	return `*claude\-plane bot commands*
 
-/start <template> <machine> [| VAR=val …] — Start a session from a template
+/start <template> \[machine\] \[| VAR\=val …\] — Start a session from a template
 /list — List active sessions
 /machines — List connected machines
 /status — Bridge status
-/kill <session_id> — Kill a session
-/inject <session_id> <text> — Inject text into a session
+/kill <session\_id> — Kill a session
+/inject <session\_id> <text> — Inject text into a session
 /help — Show this message`
 }

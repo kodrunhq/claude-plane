@@ -63,6 +63,7 @@ type Session struct {
 type Template struct {
 	TemplateID string `json:"template_id"`
 	Name       string `json:"name"`
+	MachineID  string `json:"machine_id,omitempty"`
 }
 
 // Machine represents a connected agent machine.
@@ -157,6 +158,15 @@ func (c *Client) ListTemplates(ctx context.Context) ([]Template, error) {
 		return nil, fmt.Errorf("list templates: %w", err)
 	}
 	return templates, nil
+}
+
+// GetTemplateByName returns a single template by name.
+func (c *Client) GetTemplateByName(ctx context.Context, name string) (*Template, error) {
+	var tmpl Template
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/templates/by-name/"+url.PathEscape(name), nil, &tmpl); err != nil {
+		return nil, fmt.Errorf("get template by name %q: %w", name, err)
+	}
+	return &tmpl, nil
 }
 
 // --- Machine Methods ---

@@ -355,6 +355,76 @@ func TestTemplateHandler_Get_AdminSeesAll(t *testing.T) {
 	}
 }
 
+func TestTemplateHandler_GetByName_Exists(t *testing.T) {
+	s := newTestStore(t)
+	srv := newTemplateRouter(t, s, "user-1", "member")
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]interface{}{"name": "my-template"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/templates", "application/json", bytes.NewReader(body))
+	createResp.Body.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/templates/by-name/my-template")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result store.SessionTemplate
+	json.NewDecoder(resp.Body).Decode(&result)
+	if result.Name != "my-template" {
+		t.Errorf("expected 'my-template', got %q", result.Name)
+	}
+	if result.TemplateID == "" {
+		t.Error("expected template_id in response")
+	}
+}
+
+func TestTemplateHandler_GetByName_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	srv := newTemplateRouter(t, s, "user-1", "member")
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/templates/by-name/nonexistent")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestTemplateHandler_GetByName_OtherUser(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create as user-1
+	srv1 := newTemplateRouter(t, s, "user-1", "member")
+	body, _ := json.Marshal(map[string]interface{}{"name": "private-tmpl"})
+	createResp, _ := http.Post(srv1.URL+"/api/v1/templates", "application/json", bytes.NewReader(body))
+	createResp.Body.Close()
+	srv1.Close()
+
+	// Try to get by name as user-2
+	srv2 := newTemplateRouter(t, s, "user-2", "member")
+	defer srv2.Close()
+
+	resp, err := http.Get(srv2.URL + "/api/v1/templates/by-name/private-tmpl")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for other user, got %d", resp.StatusCode)
+	}
+}
+
 func TestTemplateHandler_Update_Valid(t *testing.T) {
 	s := newTestStore(t)
 	srv := newTemplateRouter(t, s, "user-1", "member")

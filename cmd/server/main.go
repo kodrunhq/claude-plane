@@ -136,7 +136,7 @@ func newServeCmd() *cobra.Command {
 				if c == nil {
 					return nil
 				}
-				return &handler.UserClaims{UserID: c.UserID, Role: c.Role}
+				return &handler.UserClaims{UserID: c.UserID, Role: c.Role, Scopes: c.Scopes}
 			}
 
 			// Step executor — creates real PTY sessions on agents.
@@ -147,12 +147,14 @@ func newServeCmd() *cobra.Command {
 			eventBus := event.NewBus(slog.Default())
 			defer eventBus.Close()
 
-			// Persist every event to SQLite.
+			// Persist every event to SQLite (synchronous, before fan-out).
 			persistSub := event.NewPersistSubscriber(s, slog.Default())
-			persistSub.Subscribe(eventBus)
+			eventBus.SetPersistHandler(persistSub.Handler())
 
 			// Periodic event retention cleanup.
-			retentionCleaner := event.NewRetentionCleaner(s, slog.Default())
+			retentionDays := cfg.Events.GetRetentionDays()
+			maxAge := time.Duration(retentionDays) * 24 * time.Hour
+			retentionCleaner := event.NewRetentionCleaner(s, maxAge, slog.Default())
 			retentionCleaner.Start(ctx)
 
 			// WebSocket fan-out for the /ws/events endpoint.

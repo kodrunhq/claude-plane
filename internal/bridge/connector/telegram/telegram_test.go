@@ -1,6 +1,11 @@
 package telegram_test
 
 import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,8 +123,8 @@ func TestFormatEvent_Default(t *testing.T) {
 		"key": "value",
 	})
 	got := telegram.FormatEvent(e)
-	// Default must start with the event type header
-	prefix := "📢 *custom.event*\n"
+	// Default must start with the escaped event type header (MarkdownV2)
+	prefix := "📢 *custom\\.event*\n"
 	if len(got) < len(prefix) || got[:len(prefix)] != prefix {
 		t.Errorf("FormatEvent(default) missing prefix\ngot: %q", got)
 	}
@@ -317,5 +322,75 @@ func TestShouldForwardEvent_WithPatterns(t *testing.T) {
 	}
 	if telegram.ShouldForwardEvent(patterns, "run.completed") {
 		t.Error("run.completed should not match any pattern")
+	}
+}
+
+// --- CheckRateLimit tests ---
+
+func makeResp(statusCode int, body string) (*http.Response, []byte) {
+	raw := []byte(body)
+	resp := &http.Response{
+		StatusCode: statusCode,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	return resp, raw
+}
+
+func TestCheckRateLimit_429WithRetryAfter(t *testing.T) {
+	body := `{"ok":false,"parameters":{"retry_after":1}}`
+	resp, raw := makeResp(http.StatusTooManyRequests, body)
+
+	ctx := context.Background()
+	start := time.Now()
+	err := telegram.CheckRateLimit(ctx, resp, raw)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error for 429, got nil")
+	}
+	if elapsed < 900*time.Millisecond {
+		t.Errorf("expected wait of ~1s, waited only %v", elapsed)
+	}
+	if !strings.Contains(err.Error(), "rate limited") {
+		t.Errorf("error message should mention rate limited, got: %v", err)
+	}
+}
+
+func TestCheckRateLimit_429ContextCancelled(t *testing.T) {
+	body := `{"ok":false,"parameters":{"retry_after":30}}`
+	resp, raw := makeResp(http.StatusTooManyRequests, body)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel the context immediately.
+	cancel()
+
+	err := telegram.CheckRateLimit(ctx, resp, raw)
+
+	if err == nil {
+		t.Fatal("expected error after context cancellation, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestCheckRateLimit_200(t *testing.T) {
+	resp, raw := makeResp(http.StatusOK, `{"ok":true,"result":[]}`)
+
+	err := telegram.CheckRateLimit(context.Background(), resp, raw)
+	if err != nil {
+		t.Errorf("expected nil for 200, got: %v", err)
+	}
+}
+
+func TestCheckRateLimit_500(t *testing.T) {
+	resp, raw := makeResp(http.StatusInternalServerError, `internal server error`)
+
+	err := telegram.CheckRateLimit(context.Background(), resp, raw)
+	if err == nil {
+		t.Fatal("expected error for 500, got nil")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Errorf("error message should contain status code 500, got: %v", err)
 	}
 }

@@ -24,7 +24,7 @@ func (s *stubRetentionStore) PurgeEvents(_ context.Context, before time.Time) (i
 
 func TestRetentionCleaner_CallsPurgeEvents(t *testing.T) {
 	store := &stubRetentionStore{}
-	rc := NewRetentionCleaner(store, nullLogger())
+	rc := NewRetentionCleaner(store, 0, nullLogger())
 
 	// Override period to something very short so the test doesn't take long.
 	rc.period = 10 * time.Millisecond
@@ -50,7 +50,7 @@ func TestRetentionCleaner_CallsPurgeEvents(t *testing.T) {
 
 func TestRetentionCleaner_StopsOnContextCancel(t *testing.T) {
 	store := &stubRetentionStore{}
-	rc := NewRetentionCleaner(store, nullLogger())
+	rc := NewRetentionCleaner(store, 0, nullLogger())
 	rc.period = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,7 +76,7 @@ func TestRetentionCleaner_StopsOnContextCancel(t *testing.T) {
 func TestRetentionCleaner_NilLogger(t *testing.T) {
 	store := &stubRetentionStore{}
 	// nil logger must not panic.
-	rc := NewRetentionCleaner(store, nil)
+	rc := NewRetentionCleaner(store, 0, nil)
 	rc.period = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -97,7 +97,7 @@ func TestRetentionCleaner_NilLogger(t *testing.T) {
 
 func TestRetentionCleaner_PurgesBeforeMaxAge(t *testing.T) {
 	store := &stubRetentionStore{}
-	rc := NewRetentionCleaner(store, nullLogger())
+	rc := NewRetentionCleaner(store, 0, nullLogger())
 	rc.period = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,5 +130,33 @@ func TestRetentionCleaner_PurgesBeforeMaxAge(t *testing.T) {
 	// Allow 5 seconds of slack for slow test environments.
 	if diff > 5*time.Second {
 		t.Errorf("PurgeEvents called with before=%v, expected ~%v (diff %v)", before, expectedBefore, diff)
+	}
+}
+
+func TestRetentionCleaner_UsesProvidedMaxAge(t *testing.T) {
+	store := &stubRetentionStore{}
+	customAge := 14 * 24 * time.Hour
+	rc := NewRetentionCleaner(store, customAge, nullLogger())
+
+	if rc.maxAge != customAge {
+		t.Errorf("expected maxAge=%v, got %v", customAge, rc.maxAge)
+	}
+}
+
+func TestRetentionCleaner_DefaultsToSevenDaysWhenZero(t *testing.T) {
+	store := &stubRetentionStore{}
+	rc := NewRetentionCleaner(store, 0, nullLogger())
+
+	if rc.maxAge != defaultMaxAge {
+		t.Errorf("expected default maxAge=%v, got %v", defaultMaxAge, rc.maxAge)
+	}
+}
+
+func TestRetentionCleaner_DefaultsToSevenDaysWhenNegative(t *testing.T) {
+	store := &stubRetentionStore{}
+	rc := NewRetentionCleaner(store, -1*time.Hour, nullLogger())
+
+	if rc.maxAge != defaultMaxAge {
+		t.Errorf("expected default maxAge=%v, got %v", defaultMaxAge, rc.maxAge)
 	}
 }

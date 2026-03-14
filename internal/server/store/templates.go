@@ -16,6 +16,7 @@ type SessionTemplate struct {
 	TemplateID     string            `json:"template_id"`
 	UserID         string            `json:"user_id"`
 	Name           string            `json:"name"`
+	MachineID      string            `json:"machine_id,omitempty"`
 	Description    string            `json:"description,omitempty"`
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
@@ -71,11 +72,11 @@ func (s *Store) CreateTemplate(ctx context.Context, t *SessionTemplate) (*Sessio
 
 	_, err = s.writer.ExecContext(ctx,
 		`INSERT INTO session_templates
-		 (template_id, user_id, name, description, command, args, working_dir,
+		 (template_id, user_id, name, machine_id, description, command, args, working_dir,
 		  env_vars, initial_prompt, terminal_rows, terminal_cols, tags,
 		  timeout_seconds, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, t.UserID, t.Name, nullIfEmpty(t.Description), nullIfEmpty(t.Command),
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, t.UserID, t.Name, t.MachineID, nullIfEmpty(t.Description), nullIfEmpty(t.Command),
 		argsJSON, nullIfEmpty(t.WorkingDir), envJSON, nullIfEmpty(t.InitialPrompt),
 		t.TerminalRows, t.TerminalCols, tagsJSON, t.TimeoutSeconds, now, now,
 	)
@@ -87,6 +88,7 @@ func (s *Store) CreateTemplate(ctx context.Context, t *SessionTemplate) (*Sessio
 		TemplateID:     id,
 		UserID:         t.UserID,
 		Name:           t.Name,
+		MachineID:      t.MachineID,
 		Description:    t.Description,
 		Command:        t.Command,
 		Args:           t.Args,
@@ -105,7 +107,7 @@ func (s *Store) CreateTemplate(ctx context.Context, t *SessionTemplate) (*Sessio
 // GetTemplate retrieves a template by ID, excluding soft-deleted templates.
 func (s *Store) GetTemplate(ctx context.Context, templateID string) (*SessionTemplate, error) {
 	return s.scanTemplate(s.reader.QueryRowContext(ctx,
-		`SELECT template_id, user_id, name, description, command, args, working_dir,
+		`SELECT template_id, user_id, name, machine_id, description, command, args, working_dir,
 		        env_vars, initial_prompt, terminal_rows, terminal_cols, tags,
 		        timeout_seconds, deleted_at, created_at, updated_at
 		 FROM session_templates WHERE template_id = ? AND deleted_at IS NULL`, templateID,
@@ -115,7 +117,7 @@ func (s *Store) GetTemplate(ctx context.Context, templateID string) (*SessionTem
 // GetTemplateByName retrieves a template by user and name, excluding soft-deleted.
 func (s *Store) GetTemplateByName(ctx context.Context, userID, name string) (*SessionTemplate, error) {
 	return s.scanTemplate(s.reader.QueryRowContext(ctx,
-		`SELECT template_id, user_id, name, description, command, args, working_dir,
+		`SELECT template_id, user_id, name, machine_id, description, command, args, working_dir,
 		        env_vars, initial_prompt, terminal_rows, terminal_cols, tags,
 		        timeout_seconds, deleted_at, created_at, updated_at
 		 FROM session_templates WHERE user_id = ? AND name = ? AND deleted_at IS NULL`, userID, name,
@@ -125,7 +127,7 @@ func (s *Store) GetTemplateByName(ctx context.Context, userID, name string) (*Se
 // ListTemplates returns templates for a user with optional filters.
 // If userID is empty, returns all templates (admin mode).
 func (s *Store) ListTemplates(ctx context.Context, userID string, opts ListTemplateOptions) ([]SessionTemplate, error) {
-	query := `SELECT template_id, user_id, name, description, command, args, working_dir,
+	query := `SELECT template_id, user_id, name, machine_id, description, command, args, working_dir,
 	                 env_vars, initial_prompt, terminal_rows, terminal_cols, tags,
 	                 timeout_seconds, deleted_at, created_at, updated_at
 	          FROM session_templates WHERE deleted_at IS NULL`
@@ -182,11 +184,11 @@ func (s *Store) UpdateTemplate(ctx context.Context, templateID string, t *Sessio
 	now := time.Now().UTC()
 	result, err := s.writer.ExecContext(ctx,
 		`UPDATE session_templates
-		 SET name = ?, description = ?, command = ?, args = ?, working_dir = ?,
+		 SET name = ?, machine_id = ?, description = ?, command = ?, args = ?, working_dir = ?,
 		     env_vars = ?, initial_prompt = ?, terminal_rows = ?, terminal_cols = ?,
 		     tags = ?, timeout_seconds = ?, updated_at = ?
 		 WHERE template_id = ? AND deleted_at IS NULL`,
-		t.Name, nullIfEmpty(t.Description), nullIfEmpty(t.Command), argsJSON,
+		t.Name, t.MachineID, nullIfEmpty(t.Description), nullIfEmpty(t.Command), argsJSON,
 		nullIfEmpty(t.WorkingDir), envJSON, nullIfEmpty(t.InitialPrompt),
 		t.TerminalRows, t.TerminalCols, tagsJSON, t.TimeoutSeconds, now,
 		templateID,
@@ -254,6 +256,7 @@ func (s *Store) CloneTemplate(ctx context.Context, templateID string) (*SessionT
 	clone := &SessionTemplate{
 		UserID:         original.UserID,
 		Name:           cloneName,
+		MachineID:      original.MachineID,
 		Description:    original.Description,
 		Command:        original.Command,
 		Args:           original.Args,
@@ -281,7 +284,7 @@ func (s *Store) scanTemplate(row *sql.Row, identifier string) (*SessionTemplate,
 	var deletedAt sql.NullTime
 
 	err := row.Scan(
-		&tmpl.TemplateID, &tmpl.UserID, &tmpl.Name, &desc, &cmd,
+		&tmpl.TemplateID, &tmpl.UserID, &tmpl.Name, &tmpl.MachineID, &desc, &cmd,
 		&argsJSON, &workDir, &envJSON, &prompt,
 		&tmpl.TerminalRows, &tmpl.TerminalCols, &tagsJSON,
 		&tmpl.TimeoutSeconds, &deletedAt, &tmpl.CreatedAt, &tmpl.UpdatedAt,
@@ -335,7 +338,7 @@ func scanTemplateRow(rows *sql.Rows) (*SessionTemplate, error) {
 	var deletedAt sql.NullTime
 
 	err := rows.Scan(
-		&tmpl.TemplateID, &tmpl.UserID, &tmpl.Name, &desc, &cmd,
+		&tmpl.TemplateID, &tmpl.UserID, &tmpl.Name, &tmpl.MachineID, &desc, &cmd,
 		&argsJSON, &workDir, &envJSON, &prompt,
 		&tmpl.TerminalRows, &tmpl.TerminalCols, &tagsJSON,
 		&tmpl.TimeoutSeconds, &deletedAt, &tmpl.CreatedAt, &tmpl.UpdatedAt,

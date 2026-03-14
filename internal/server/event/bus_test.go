@@ -479,3 +479,105 @@ func TestMatchPattern(t *testing.T) {
 		}
 	}
 }
+
+// --- Persist handler tests ---
+
+func TestBusPersistHandlerCalledForEveryEvent(t *testing.T) {
+	b := NewBus(nullLogger())
+	defer b.Close()
+
+	var persisted atomic.Int64
+	b.SetPersistHandler(func(_ context.Context, _ Event) error {
+		persisted.Add(1)
+		return nil
+	})
+
+	const total = 10
+	for i := 0; i < total; i++ {
+		if err := b.Publish(context.Background(), makeEvent(TypeRunCreated)); err != nil {
+			t.Fatalf("Publish: %v", err)
+		}
+	}
+
+	if got := persisted.Load(); got != total {
+		t.Errorf("persist handler called %d times, want %d", got, total)
+	}
+}
+
+func TestBusPersistHandlerErrorDoesNotBlockFanout(t *testing.T) {
+	b := NewBus(nullLogger())
+	defer b.Close()
+
+	// Persist handler always fails.
+	b.SetPersistHandler(func(_ context.Context, _ Event) error {
+		return errors.New("persist failure")
+	})
+
+	// Subscriber should still receive events despite persist errors.
+	received := make(chan Event, 8)
+	unsub := b.Subscribe("*", func(_ context.Context, ev Event) error {
+		received <- ev
+		return nil
+	}, SubscriberOptions{})
+	defer unsub()
+
+	ev := makeEvent(TypeRunCreated)
+	if err := b.Publish(context.Background(), ev); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	got, ok := receiveWithTimeout(t, received, time.Second)
+	if !ok {
+		t.Fatal("subscriber did not receive event after persist handler error")
+	}
+	if got.Type != TypeRunCreated {
+		t.Errorf("got type %q, want %q", got.Type, TypeRunCreated)
+	}
+}
+
+func TestBusSubscribersNonBlockingWithPersistHandler(t *testing.T) {
+	b := NewBus(nullLogger())
+	defer b.Close()
+
+	// Set up a persist handler that succeeds.
+	var persisted atomic.Int64
+	b.SetPersistHandler(func(_ context.Context, _ Event) error {
+		persisted.Add(1)
+		return nil
+	})
+
+	// Subscriber with buffer of 1 and a blocked handler — will overflow.
+	slowStart := make(chan struct{})
+	unsub := b.Subscribe("*", func(_ context.Context, _ Event) error {
+		<-slowStart
+		return nil
+	}, SubscriberOptions{BufferSize: 1, Concurrency: 1})
+	defer func() {
+		close(slowStart)
+		unsub()
+	}()
+
+	// Publish more events than the subscriber buffer can hold.
+	// Persist handler should be called for all; subscriber should drop extras.
+	done := make(chan struct{})
+	const total = 10
+	go func() {
+		for i := 0; i < total; i++ {
+			_ = b.Publish(context.Background(), makeEvent(TypeRunCreated))
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Publish did not block — non-blocking fan-out works.
+	case <-time.After(2 * time.Second):
+		t.Fatal("Publish blocked on full subscriber buffer")
+	}
+
+	// Persist handler must have been called for every event, even though
+	// the subscriber dropped most of them.
+	if got := persisted.Load(); got != total {
+		t.Errorf("persist handler called %d times, want %d", got, total)
+	}
+}
