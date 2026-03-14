@@ -331,31 +331,44 @@ func (t *Telegram) handleInject(ctx context.Context, cmd *Command) string {
 }
 
 func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
-	if len(cmd.Args) < 2 {
-		return "❌ Usage: /start <template_name> <machine_id> [| VAR=val …]"
+	if len(cmd.Args) < 1 {
+		return "❌ Usage: /start <template_name> [machine_id] [| VAR=val …]"
 	}
 	templateName := cmd.Args[0]
-	machineID := cmd.Args[1]
+
+	// Machine ID is optional — falls back to template default.
+	var machineID string
+	if len(cmd.Args) >= 2 {
+		machineID = cmd.Args[1]
+	}
 
 	// Resolve template name to ID.
 	templates, err := t.apiClient.ListTemplates(ctx)
 	if err != nil {
 		return fmt.Sprintf("❌ Failed to list templates: %s", err.Error())
 	}
-	templateID := ""
-	for _, tmpl := range templates {
+	var matched *client.Template
+	for i, tmpl := range templates {
 		if tmpl.Name == templateName {
-			templateID = tmpl.TemplateID
+			matched = &templates[i]
 			break
 		}
 	}
-	if templateID == "" {
+	if matched == nil {
 		return fmt.Sprintf("❌ Template %q not found.", templateName)
+	}
+
+	// Fall back to template's default machine.
+	if machineID == "" {
+		machineID = matched.MachineID
+	}
+	if machineID == "" {
+		return "❌ Template has no default machine. Usage: /start <template> <machine>"
 	}
 
 	req := client.CreateSessionRequest{
 		MachineID:  machineID,
-		TemplateID: templateID,
+		TemplateID: matched.TemplateID,
 		Variables:  cmd.Vars,
 	}
 	session, err := t.apiClient.CreateSession(ctx, req)
@@ -461,7 +474,7 @@ func (t *Telegram) postJSON(ctx context.Context, url string, body map[string]int
 func helpText() string {
 	return `*claude-plane bot commands*
 
-/start <template> <machine> [| VAR=val …] — Start a session from a template
+/start <template> [machine] [| VAR=val …] — Start a session from a template
 /list — List active sessions
 /machines — List connected machines
 /status — Bridge status
