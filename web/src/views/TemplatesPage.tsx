@@ -1,25 +1,58 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router';
-import { Plus, Pencil, Copy, Trash2, Play } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { Plus, CopyPlus, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTemplates, useDeleteTemplate, useCloneTemplate } from '../hooks/useTemplates.ts';
-import { LaunchTemplateModal } from '../components/templates/LaunchTemplateModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
-import { TimeAgo } from '../components/shared/TimeAgo.tsx';
+import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import type { SessionTemplate } from '../types/template.ts';
 
+const SELECT_CLASS =
+  'rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary';
+
+function formatArgs(args: string[] | undefined): string {
+  if (!args || args.length === 0) return '—';
+  const joined = args.join(' ');
+  return joined.length > 30 ? joined.slice(0, 30) + '...' : joined;
+}
+
+function formatWorkingDir(dir: string | undefined): string {
+  if (!dir) return '—';
+  return dir.length > 25 ? '...' + dir.slice(-22) : dir;
+}
+
 export function TemplatesPage() {
+  const navigate = useNavigate();
   const { data: templates, isLoading } = useTemplates();
   const deleteTemplate = useDeleteTemplate();
   const cloneTemplate = useCloneTemplate();
 
-  const [launchTemplate, setLaunchTemplate] = useState<SessionTemplate | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tagFilter, setTagFilter] = useState('all');
 
-  const sortedTemplates = useMemo(
-    () => [...(templates ?? [])].sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
-    [templates],
-  );
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    for (const t of templates ?? []) {
+      for (const tag of t.tags ?? []) tags.add(tag);
+    }
+    return Array.from(tags).sort();
+  }, [templates]);
+
+  const filteredTemplates = useMemo(() => {
+    const sorted = [...(templates ?? [])].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    return sorted.filter((t) => {
+      const matchesSearch =
+        searchQuery === '' ||
+        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.template_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.description ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTag =
+        tagFilter === 'all' || (t.tags ?? []).includes(tagFilter);
+      return matchesSearch && matchesTag;
+    });
+  }, [templates, searchQuery, tagFilter]);
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -32,66 +65,116 @@ export function TemplatesPage() {
     setDeleteId(null);
   }
 
-  async function handleClone(template: SessionTemplate) {
+  async function handleDuplicate(e: React.MouseEvent, template: SessionTemplate) {
+    e.stopPropagation();
     try {
       await cloneTemplate.mutateAsync(template.template_id);
-      toast.success(`Cloned "${template.name}"`);
+      toast.success(`Duplicated "${template.name}"`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to clone template');
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate template');
     }
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Templates</h1>
         <Link
           to="/templates/new"
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium bg-accent-primary hover:bg-accent-primary/90 text-white transition-all hover:shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
         >
           <Plus size={16} />
           New Template
         </Link>
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+          <input
+            type="text"
+            placeholder="Search by name, ID, or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-9 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/50"
+          />
+        </div>
+        {allTags.length > 0 && (
+          <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className={SELECT_CLASS}>
+            <option value="all">All Tags</option>
+            {allTags.map((tag) => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       {/* Content */}
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="bg-bg-secondary rounded-lg border border-border-primary p-4 animate-pulse">
+            <div key={i} className="bg-bg-secondary rounded-lg p-4 animate-pulse">
               <div className="h-4 bg-bg-tertiary rounded w-1/4 mb-2" />
               <div className="h-3 bg-bg-tertiary rounded w-1/2" />
             </div>
           ))}
         </div>
-      ) : sortedTemplates.length === 0 ? (
-        <div className="bg-bg-secondary rounded-lg border border-border-primary p-8 text-center">
-          <p className="text-sm text-text-secondary mb-3">
-            No templates yet. Create one to define reusable session configurations.
-          </p>
-          <Link
-            to="/templates/new"
-            className="inline-flex items-center gap-1.5 text-sm text-accent-primary hover:text-accent-primary/80 transition-colors"
-          >
-            <Plus size={14} />
-            Create your first template
-          </Link>
-        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <EmptyState
+          title={templates && templates.length > 0 ? 'No matching templates' : 'No templates yet'}
+          description={templates && templates.length > 0 ? 'Try adjusting your search or filters.' : 'Create a template to define reusable session configurations.'}
+        />
       ) : (
-        <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
-          {sortedTemplates.map((template) => (
-            <div
-              key={template.template_id}
-              className="flex items-center justify-between px-4 py-3 hover:bg-accent-primary/5 transition-all first:rounded-t-lg last:rounded-b-lg"
-            >
-              <div className="flex-1 min-w-0 mr-4">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary truncate">
-                    {template.name}
-                  </p>
-                  {template.tags && template.tags.length > 0 && (
-                    <div className="flex gap-1 shrink-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
+              <th className="px-4 py-2">Name</th>
+              <th className="px-4 py-2">Command</th>
+              <th className="px-4 py-2">Args</th>
+              <th className="px-4 py-2">Working Dir</th>
+              <th className="px-4 py-2">Tags</th>
+              <th className="px-4 py-2">Updated</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTemplates.map((template) => (
+              <tr
+                key={template.template_id}
+                onClick={() => navigate(`/templates/${template.template_id}/edit`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/templates/${template.template_id}/edit`);
+                  }
+                }}
+                tabIndex={0}
+                role="button"
+                className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-border-primary/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
+              >
+                <td className="px-4 py-2">
+                  <div className="text-text-primary font-medium truncate">{template.name}</div>
+                  {template.description && (
+                    <div className="text-xs text-text-secondary truncate mt-0.5 max-w-[200px]">{template.description}</div>
+                  )}
+                  <div className="font-mono text-xs text-text-secondary/60 mt-0.5" title={template.template_id}>
+                    {truncateId(template.template_id)}
+                  </div>
+                </td>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary">
+                  {template.command || '—'}
+                </td>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={template.args?.join(' ') ?? ''}>
+                  {formatArgs(template.args)}
+                </td>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={template.working_dir ?? ''}>
+                  {formatWorkingDir(template.working_dir)}
+                </td>
+                <td className="px-4 py-2">
+                  {template.tags && template.tags.length > 0 ? (
+                    <div className="flex gap-1 flex-wrap">
                       {template.tags.slice(0, 3).map((tag) => (
                         <span
                           key={tag}
@@ -100,69 +183,40 @@ export function TemplatesPage() {
                           {tag}
                         </span>
                       ))}
+                      {template.tags.length > 3 && (
+                        <span className="text-xs text-text-secondary/60">+{template.tags.length - 3}</span>
+                      )}
                     </div>
+                  ) : (
+                    <span className="text-xs text-text-secondary/40">—</span>
                   )}
-                </div>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  {template.description && (
-                    <span className="mr-2">{template.description}</span>
-                  )}
-                  {template.command && (
-                    <>
-                      <span className="font-mono text-text-secondary/70">{template.command}</span>
-                      {' · '}
-                    </>
-                  )}
-                  {template.timeout_seconds > 0 && (
-                    <>
-                      <span>{template.timeout_seconds}s timeout</span>
-                      {' · '}
-                    </>
-                  )}
-                  <TimeAgo date={template.created_at} />
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => setLaunchTemplate(template)}
-                  className="p-1.5 rounded-md text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors"
-                  title="Launch"
-                >
-                  <Play size={14} />
-                </button>
-                <Link
-                  to={`/templates/${template.template_id}/edit`}
-                  className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-                  title="Edit"
-                >
-                  <Pencil size={14} />
-                </Link>
-                <button
-                  onClick={() => handleClone(template)}
-                  className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-                  title="Clone"
-                >
-                  <Copy size={14} />
-                </button>
-                <button
-                  onClick={() => setDeleteId(template.template_id)}
-                  className="p-1.5 rounded-md text-text-secondary hover:text-status-error hover:bg-status-error/10 transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+                </td>
+                <td className="px-4 py-2 text-text-secondary">
+                  {formatTimeAgo(template.updated_at)}
+                </td>
+                <td className="px-4 py-2">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={(e) => handleDuplicate(e, template)}
+                      className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+                      title="Duplicate"
+                    >
+                      <CopyPlus size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteId(template.template_id); }}
+                      className="p-1.5 rounded-md text-text-secondary hover:text-status-error hover:bg-status-error/10 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
-
-      <LaunchTemplateModal
-        open={launchTemplate !== null}
-        onClose={() => setLaunchTemplate(null)}
-        template={launchTemplate}
-      />
 
       <ConfirmDialog
         open={deleteId !== null}

@@ -10,13 +10,11 @@ import { SessionList } from '../components/sessions/SessionList.tsx';
 import { MachineCard } from '../components/machines/MachineCard.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 import { TemplateCard } from '../components/templates/TemplateCard.tsx';
-import { LaunchTemplateModal } from '../components/templates/LaunchTemplateModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { TimeAgo } from '../components/shared/TimeAgo.tsx';
 import { toast } from 'sonner';
 import type { Job, Run } from '../types/job.ts';
-import type { SessionTemplate } from '../types/template.ts';
 
 export function CommandCenter() {
   const navigate = useNavigate();
@@ -30,7 +28,6 @@ export function CommandCenter() {
   const [modalOpen, setModalOpen] = useState(false);
   const [preselectedMachine, setPreselectedMachine] = useState<string | undefined>();
   const [terminateId, setTerminateId] = useState<string | null>(null);
-  const [launchTemplate, setLaunchTemplate] = useState<SessionTemplate | null>(null);
 
   const activeSessions = useMemo(
     () => (sessions ?? []).filter((s) => s.status === 'running' || s.status === 'created'),
@@ -196,7 +193,6 @@ export function CommandCenter() {
               <TemplateCard
                 key={template.template_id}
                 template={template}
-                onLaunch={setLaunchTemplate}
               />
             ))}
           </div>
@@ -355,12 +351,6 @@ export function CommandCenter() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         preselectedMachineId={preselectedMachine}
-      />
-
-      <LaunchTemplateModal
-        open={launchTemplate !== null}
-        onClose={() => setLaunchTemplate(null)}
-        template={launchTemplate}
       />
 
       <ConfirmDialog
