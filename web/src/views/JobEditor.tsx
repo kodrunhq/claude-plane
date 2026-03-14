@@ -94,7 +94,6 @@ export function JobEditor() {
     try {
       const job = await createJob.mutateAsync({ name: jobName, description: jobDescription });
       setJobId(job.job_id);
-      navigate(`/jobs/${job.job_id}`, { replace: true });
       return job.job_id;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create job');
@@ -109,11 +108,14 @@ export function JobEditor() {
       const step = await addStep.mutateAsync({
         jobId: jid,
         params: {
-          name: `Step ${steps.length + 1}`,
+          name: '',
           machine_id: machines?.[0]?.machine_id ?? '',
         },
       });
       selectStep(step.step_id);
+      if (isNew) {
+        navigate(`/jobs/${jid}`, { replace: true });
+      }
       toast.success('Step added');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add step');

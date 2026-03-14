@@ -93,6 +93,7 @@ export function DAGCanvas({
           label: step.name,
           status: rs?.status ?? 'pending',
           machineId: step.machine_id,
+          delaySeconds: step.delay_seconds ?? 0,
           selected: false,
         },
       };

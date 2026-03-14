@@ -30,6 +30,8 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   const [machineId, setMachineId] = useState(preselectedMachineId ?? '');
   const [workingDir, setWorkingDir] = useState('');
   const [command, setCommand] = useState('');
+  const [model, setModel] = useState('');
+  const [skipPermissions, setSkipPermissions] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<SessionTemplate | null>(null);
   const [variables, setVariables] = useState<Record<string, string>>({});
 
@@ -52,6 +54,8 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
       if (!preselectedMachineId) setMachineId('');
       setWorkingDir('');
       setCommand('');
+      setModel('');
+      setSkipPermissions('');
       setSelectedTemplate(null);
       setVariables({});
     }
@@ -85,6 +89,8 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
         terminal_size: { cols, rows },
         ...(command ? { command } : {}),
         ...(workingDir ? { working_dir: workingDir } : {}),
+        ...(model ? { model } : {}),
+        ...(skipPermissions ? { skip_permissions: skipPermissions === '1' } : {}),
         ...(selectedTemplate ? { template_id: selectedTemplate.template_id } : {}),
         ...(variableNames.length > 0 ? { variables } : {}),
       });
@@ -167,6 +173,37 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
               placeholder="claude"
               className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">
+              Model <span className="text-text-secondary/50">(optional)</span>
+            </label>
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+            >
+              <option value="">Default</option>
+              <option value="opus">Opus</option>
+              <option value="sonnet">Sonnet</option>
+              <option value="haiku">Haiku</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">
+              Skip Permissions <span className="text-text-secondary/50">(optional)</span>
+            </label>
+            <select
+              value={skipPermissions}
+              onChange={(e) => setSkipPermissions(e.target.value)}
+              className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+            >
+              <option value="">Default (from settings)</option>
+              <option value="1">On</option>
+              <option value="0">Off</option>
+            </select>
           </div>
 
           {variableNames.length > 0 && variableNames.map((varName) => (

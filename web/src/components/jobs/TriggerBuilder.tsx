@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Save, X } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Info, Link, Save, X } from 'lucide-react';
 import type { CreateTriggerParams } from '../../types/trigger.ts';
 import { KNOWN_EVENT_TYPES } from '../../types/trigger.ts';
+import { useJobs } from '../../hooks/useJobs.ts';
 
 interface TriggerBuilderProps {
   onSave: (params: CreateTriggerParams) => Promise<void>;
@@ -13,14 +14,19 @@ interface FormState {
   event_type: string;
   custom_event_type: string;
   filter: string;
+  source_job_id: string;
 }
 
 const CUSTOM_OPTION = '__custom__';
+const NO_JOB_SELECTED = '';
+
+const JOB_CHAINING_EVENT_TYPES = ['run.completed', 'run.failed'];
 
 const DEFAULT_FORM: FormState = {
   event_type: KNOWN_EVENT_TYPES[0],
   custom_event_type: '',
   filter: '',
+  source_job_id: NO_JOB_SELECTED,
 };
 
 function isValidJson(value: string): boolean {
@@ -33,25 +39,49 @@ function isValidJson(value: string): boolean {
   }
 }
 
+function isJobChainingEvent(eventType: string): boolean {
+  return JOB_CHAINING_EVENT_TYPES.includes(eventType);
+}
+
 export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderProps) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const { data: jobs } = useJobs();
 
   const isCustom = form.event_type === CUSTOM_OPTION;
   const resolvedEventType = isCustom ? form.custom_event_type.trim() : form.event_type;
+  const showJobChaining = isJobChainingEvent(resolvedEventType);
   const filterValid = isValidJson(form.filter);
   const canSave = resolvedEventType.length > 0 && filterValid;
 
+  const sortedJobs = useMemo(() => {
+    if (!jobs) return [];
+    return [...jobs].sort((a, b) => a.name.localeCompare(b.name));
+  }, [jobs]);
+
   function handleEventTypeChange(value: string) {
-    setForm((prev) => ({ ...prev, event_type: value }));
+    setForm((prev) => ({
+      ...prev,
+      event_type: value,
+      source_job_id: NO_JOB_SELECTED,
+    }));
+  }
+
+  function handleSourceJobChange(jobId: string) {
+    if (jobId === NO_JOB_SELECTED) {
+      setForm((prev) => ({ ...prev, source_job_id: jobId, filter: '' }));
+      return;
+    }
+    const filterJson = JSON.stringify({ job_id: jobId }, null, 2);
+    setForm((prev) => ({ ...prev, source_job_id: jobId, filter: filterJson }));
   }
 
   function handleFilterChange(value: string) {
-    setForm((prev) => ({ ...prev, filter: value }));
+    setForm((prev) => ({ ...prev, filter: value, source_job_id: NO_JOB_SELECTED }));
   }
 
   async function handleSave() {
     if (!canSave) return;
-    await onSave({ event_type: resolvedEventType, filter: form.filter });
+    await onSave({ event_type: resolvedEventType, filter: form.filter.trim() || '' });
   }
 
   return (
@@ -80,6 +110,37 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
           />
         )}
       </div>
+
+      {showJobChaining && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 rounded-md bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+            <Info size={14} className="text-blue-400 mt-0.5 shrink-0" />
+            <p className="text-xs text-blue-300">
+              To trigger this job when a specific job {resolvedEventType === 'run.failed' ? 'fails' : 'completes'},
+              select the source job below or add a filter with its ID.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-text-secondary flex items-center gap-1">
+              <Link size={11} />
+              Source Job
+            </label>
+            <select
+              value={form.source_job_id}
+              onChange={(e) => handleSourceJobChange(e.target.value)}
+              className="w-full bg-bg-secondary border border-border-primary rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary"
+            >
+              <option value={NO_JOB_SELECTED}>None (any job)</option>
+              {sortedJobs.map((job) => (
+                <option key={job.job_id} value={job.job_id}>
+                  {job.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1">
         <label className="text-xs text-text-secondary">Filter (optional JSON)</label>

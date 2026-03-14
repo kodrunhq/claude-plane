@@ -15,30 +15,36 @@ var ErrNotFound = errors.New("not found")
 
 // CreateStepParams holds parameters for creating a step.
 type CreateStepParams struct {
-	JobID          string
-	Name           string
-	Prompt         string
-	MachineID      string
-	WorkingDir     string
-	Command        string
-	Args           string
-	TimeoutSeconds int
-	SortOrder      int
-	OnFailure      string
+	JobID           string
+	Name            string
+	Prompt          string
+	MachineID       string
+	WorkingDir      string
+	Command         string
+	Args            string
+	TimeoutSeconds  int
+	SortOrder       int
+	OnFailure       string
+	SkipPermissions *int
+	Model           string
+	DelaySeconds    int
 }
 
 // UpdateStepParams holds parameters for updating a step.
 type UpdateStepParams struct {
-	StepID         string
-	Name           string
-	Prompt         string
-	MachineID      string
-	WorkingDir     string
-	Command        string
-	Args           string
-	TimeoutSeconds int
-	SortOrder      int
-	OnFailure      string
+	StepID          string
+	Name            string
+	Prompt          string
+	MachineID       string
+	WorkingDir      string
+	Command         string
+	Args            string
+	TimeoutSeconds  int
+	SortOrder       int
+	OnFailure       string
+	SkipPermissions *int
+	Model           string
+	DelaySeconds    int
 }
 
 // ListRunsOptions holds optional filters and pagination for ListAllRuns.
@@ -106,17 +112,20 @@ type Job struct {
 
 // Step represents a step within a job.
 type Step struct {
-	StepID         string `json:"step_id"`
-	JobID          string `json:"job_id"`
-	Name           string `json:"name"`
-	Prompt         string `json:"prompt"`
-	MachineID      string `json:"machine_id"`
-	WorkingDir     string `json:"working_dir"`
-	Command        string `json:"command"`
-	Args           string `json:"args"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	SortOrder      int    `json:"sort_order"`
-	OnFailure      string `json:"on_failure"`
+	StepID          string `json:"step_id"`
+	JobID           string `json:"job_id"`
+	Name            string `json:"name"`
+	Prompt          string `json:"prompt"`
+	MachineID       string `json:"machine_id"`
+	WorkingDir      string `json:"working_dir"`
+	Command         string `json:"command"`
+	Args            string `json:"args"`
+	TimeoutSeconds  int    `json:"timeout_seconds"`
+	SortOrder       int    `json:"sort_order"`
+	OnFailure       string `json:"on_failure"`
+	SkipPermissions *int   `json:"skip_permissions"`
+	Model           string `json:"model"`
+	DelaySeconds    int    `json:"delay_seconds"`
 }
 
 // StepDependency represents a dependency edge in the step DAG.
@@ -139,21 +148,26 @@ type Run struct {
 
 // RunStep represents an instance of a step within a specific run.
 type RunStep struct {
-	RunStepID          string     `json:"run_step_id"`
-	RunID              string     `json:"run_id"`
-	StepID             string     `json:"step_id"`
-	Status             string     `json:"status"`
-	SessionID          string     `json:"session_id,omitempty"`
-	MachineID          string     `json:"machine_id,omitempty"`
-	ExitCode           *int       `json:"exit_code,omitempty"`
-	StartedAt          *time.Time `json:"started_at,omitempty"`
-	CompletedAt        *time.Time `json:"completed_at,omitempty"`
-	PromptSnapshot     string     `json:"prompt_snapshot"`
-	MachineIDSnapshot  string     `json:"machine_id_snapshot"`
-	WorkingDirSnapshot string     `json:"working_dir_snapshot"`
-	CommandSnapshot    string     `json:"command_snapshot"`
-	ArgsSnapshot       string     `json:"args_snapshot"`
-	OnFailure          string     `json:"on_failure,omitempty"`
+	RunStepID               string     `json:"run_step_id"`
+	RunID                   string     `json:"run_id"`
+	StepID                  string     `json:"step_id"`
+	Status                  string     `json:"status"`
+	SessionID               string     `json:"session_id,omitempty"`
+	MachineID               string     `json:"machine_id,omitempty"`
+	ExitCode                *int       `json:"exit_code,omitempty"`
+	StartedAt               *time.Time `json:"started_at,omitempty"`
+	CompletedAt             *time.Time `json:"completed_at,omitempty"`
+	PromptSnapshot          string     `json:"prompt_snapshot"`
+	MachineIDSnapshot       string     `json:"machine_id_snapshot"`
+	WorkingDirSnapshot      string     `json:"working_dir_snapshot"`
+	CommandSnapshot         string     `json:"command_snapshot"`
+	ArgsSnapshot            string     `json:"args_snapshot"`
+	SkipPermissionsSnapshot *int       `json:"skip_permissions_snapshot"`
+	ModelSnapshot           string     `json:"model_snapshot"`
+	DelaySecondsSnapshot    int        `json:"delay_seconds_snapshot"`
+	OnFailureSnapshot       string     `json:"on_failure_snapshot"`
+	TimeoutSecondsSnapshot  int        `json:"timeout_seconds_snapshot"`
+	OnFailure               string     `json:"on_failure,omitempty"`
 }
 
 // JobDetail is a job with its steps and dependency edges.
@@ -346,25 +360,29 @@ func (s *Store) UpdateJob(ctx context.Context, jobID, name, description string) 
 func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, error) {
 	id := uuid.New().String()
 	_, err := s.writer.ExecContext(ctx,
-		`INSERT INTO steps (step_id, job_id, name, prompt, machine_id, working_dir, command, args, timeout_seconds, sort_order, on_failure)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO steps (step_id, job_id, name, prompt, machine_id, working_dir, command, args, timeout_seconds, sort_order, on_failure, skip_permissions, model, delay_seconds)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, p.JobID, p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure,
+		p.SkipPermissions, p.Model, p.DelaySeconds,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create step: %w", err)
 	}
 	return &Step{
-		StepID:         id,
-		JobID:          p.JobID,
-		Name:           p.Name,
-		Prompt:         p.Prompt,
-		MachineID:      p.MachineID,
-		WorkingDir:     p.WorkingDir,
-		Command:        p.Command,
-		Args:           p.Args,
-		TimeoutSeconds: p.TimeoutSeconds,
-		SortOrder:      p.SortOrder,
-		OnFailure:      p.OnFailure,
+		StepID:          id,
+		JobID:           p.JobID,
+		Name:            p.Name,
+		Prompt:          p.Prompt,
+		MachineID:       p.MachineID,
+		WorkingDir:      p.WorkingDir,
+		Command:         p.Command,
+		Args:            p.Args,
+		TimeoutSeconds:  p.TimeoutSeconds,
+		SortOrder:       p.SortOrder,
+		OnFailure:       p.OnFailure,
+		SkipPermissions: p.SkipPermissions,
+		Model:           p.Model,
+		DelaySeconds:    p.DelaySeconds,
 	}, nil
 }
 
@@ -372,8 +390,9 @@ func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, erro
 func (s *Store) UpdateStep(ctx context.Context, p UpdateStepParams) error {
 	result, err := s.writer.ExecContext(ctx,
 		`UPDATE steps SET name = ?, prompt = ?, machine_id = ?, working_dir = ?, command = ?, args = ?,
-		 timeout_seconds = ?, sort_order = ?, on_failure = ? WHERE step_id = ?`,
-		p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure, p.StepID,
+		 timeout_seconds = ?, sort_order = ?, on_failure = ?, skip_permissions = ?, model = ?, delay_seconds = ? WHERE step_id = ?`,
+		p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args, p.TimeoutSeconds, p.SortOrder, p.OnFailure,
+		p.SkipPermissions, p.Model, p.DelaySeconds, p.StepID,
 	)
 	if err != nil {
 		return fmt.Errorf("update step: %w", err)
@@ -434,7 +453,8 @@ func (s *Store) GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []S
 	rows, err := s.reader.QueryContext(ctx,
 		`SELECT step_id, job_id, name, prompt, COALESCE(machine_id, ''), COALESCE(working_dir, ''),
 		        COALESCE(command, 'claude'), COALESCE(args, ''), COALESCE(timeout_seconds, 0),
-		        sort_order, COALESCE(on_failure, 'fail_run')
+		        sort_order, COALESCE(on_failure, 'fail_run'),
+		        skip_permissions, COALESCE(model, ''), COALESCE(delay_seconds, 0)
 		 FROM steps WHERE job_id = ? ORDER BY sort_order`, jobID,
 	)
 	if err != nil {
@@ -446,7 +466,8 @@ func (s *Store) GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []S
 	for rows.Next() {
 		var st Step
 		if err := rows.Scan(&st.StepID, &st.JobID, &st.Name, &st.Prompt, &st.MachineID,
-			&st.WorkingDir, &st.Command, &st.Args, &st.TimeoutSeconds, &st.SortOrder, &st.OnFailure); err != nil {
+			&st.WorkingDir, &st.Command, &st.Args, &st.TimeoutSeconds, &st.SortOrder, &st.OnFailure,
+			&st.SkipPermissions, &st.Model, &st.DelaySeconds); err != nil {
 			return nil, nil, fmt.Errorf("scan step: %w", err)
 		}
 		steps = append(steps, st)
@@ -516,10 +537,12 @@ func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) 
 		id := uuid.New().String()
 		_, err := tx.ExecContext(ctx,
 			`INSERT INTO run_steps (run_step_id, run_id, step_id, status, machine_id,
-			 prompt_snapshot, machine_id_snapshot, working_dir_snapshot, command_snapshot, args_snapshot)
-			 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+			 prompt_snapshot, machine_id_snapshot, working_dir_snapshot, command_snapshot, args_snapshot,
+			 skip_permissions_snapshot, model_snapshot, delay_seconds_snapshot, on_failure_snapshot, timeout_seconds_snapshot)
+			 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, runID, st.StepID, nullIfEmpty(st.MachineID),
 			st.Prompt, st.MachineID, st.WorkingDir, st.Command, st.Args,
+			st.SkipPermissions, st.Model, st.DelaySeconds, st.OnFailure, st.TimeoutSeconds,
 		)
 		if err != nil {
 			return fmt.Errorf("insert run step for %s: %w", st.StepID, err)
@@ -558,7 +581,10 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 		        COALESCE(machine_id, ''), exit_code, started_at, ended_at,
 		        COALESCE(prompt_snapshot, ''), COALESCE(machine_id_snapshot, ''),
 		        COALESCE(working_dir_snapshot, ''), COALESCE(command_snapshot, ''),
-		        COALESCE(args_snapshot, '')
+		        COALESCE(args_snapshot, ''),
+		        skip_permissions_snapshot, COALESCE(model_snapshot, ''),
+		        COALESCE(delay_seconds_snapshot, 0), COALESCE(on_failure_snapshot, 'fail_run'),
+		        COALESCE(timeout_seconds_snapshot, 0)
 		 FROM run_steps WHERE run_id = ?`, runID,
 	)
 	if err != nil {
@@ -574,9 +600,13 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 		if err := rows.Scan(&rs.RunStepID, &rs.RunID, &rs.StepID, &rs.Status,
 			&rs.SessionID, &rs.MachineID, &exitCode, &rsStarted, &rsCompleted,
 			&rs.PromptSnapshot, &rs.MachineIDSnapshot, &rs.WorkingDirSnapshot,
-			&rs.CommandSnapshot, &rs.ArgsSnapshot); err != nil {
+			&rs.CommandSnapshot, &rs.ArgsSnapshot,
+			&rs.SkipPermissionsSnapshot, &rs.ModelSnapshot,
+			&rs.DelaySecondsSnapshot, &rs.OnFailureSnapshot,
+			&rs.TimeoutSecondsSnapshot); err != nil {
 			return nil, fmt.Errorf("scan run step: %w", err)
 		}
+		rs.OnFailure = rs.OnFailureSnapshot
 		if exitCode.Valid {
 			ec := int(exitCode.Int64)
 			rs.ExitCode = &ec

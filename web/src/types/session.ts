@@ -23,6 +23,8 @@ export interface CreateSessionRequest {
   template_id?: string;
   template_name?: string;
   variables?: Record<string, string>;
+  model?: string;
+  skip_permissions?: boolean;
 }
 
 export type TerminalStatus = 'connecting' | 'replaying' | 'live' | 'disconnected';

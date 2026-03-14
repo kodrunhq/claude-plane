@@ -349,6 +349,10 @@ func newServeCmd() *cobra.Command {
 			scheduleHandler := handler.NewScheduleHandler(s, s, sched, handlerClaimsGetter)
 			userHandler := handler.NewUserHandler(s, handlerClaimsGetter)
 
+			preferencesHandler := handler.NewPreferencesHandler(s, handlerClaimsGetter)
+
+			searchHandler := handler.NewSearchHandler(connMgr)
+
 			// Credentials vault handler — encryption key is optional.
 			// If not configured, credential endpoints return 503 with a helpful message.
 			var credentialHandler *handler.CredentialHandler
@@ -392,7 +396,7 @@ func newServeCmd() *cobra.Command {
 
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
-			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler, apiKeyAuth)
+			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler, preferencesHandler, apiKeyAuth)
 
 			// Agent binary download endpoint (public, no JWT required).
 			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)
@@ -402,6 +406,12 @@ func newServeCmd() *cobra.Command {
 			router.Group(func(r chi.Router) {
 				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
 				handler.RegisterTemplateRoutes(r, templateHandler)
+			})
+
+			// Search routes: JWT-protected.
+			router.Group(func(r chi.Router) {
+				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
+				handler.RegisterSearchRoutes(r, searchHandler)
 			})
 
 			// API key routes: JWT-only (no API key auth to prevent privilege escalation).

@@ -363,6 +363,27 @@ CREATE TABLE IF NOT EXISTS bridge_control (
 		Description: "add machine_id to session templates",
 		SQL:         `ALTER TABLE session_templates ADD COLUMN machine_id TEXT NOT NULL DEFAULT '';`,
 	},
+	{
+		Version:     9,
+		Description: "add step preferences, run_step snapshots, and user_preferences table",
+		SQL: `
+ALTER TABLE steps ADD COLUMN skip_permissions INTEGER;
+ALTER TABLE steps ADD COLUMN model TEXT DEFAULT '';
+ALTER TABLE steps ADD COLUMN delay_seconds INTEGER DEFAULT 0;
+
+ALTER TABLE run_steps ADD COLUMN skip_permissions_snapshot INTEGER;
+ALTER TABLE run_steps ADD COLUMN model_snapshot TEXT DEFAULT '';
+ALTER TABLE run_steps ADD COLUMN delay_seconds_snapshot INTEGER DEFAULT 0;
+ALTER TABLE run_steps ADD COLUMN on_failure_snapshot TEXT NOT NULL DEFAULT 'fail_run';
+ALTER TABLE run_steps ADD COLUMN timeout_seconds_snapshot INTEGER DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id    TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    preferences TEXT NOT NULL DEFAULT '{}',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
