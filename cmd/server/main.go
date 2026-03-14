@@ -374,18 +374,44 @@ func newServeCmd() *cobra.Command {
 			templateHandler := handler.NewTemplateHandler(s, handlerClaimsGetter)
 			templateHandler.SetPublisher(eventBus)
 
+			// API key handler — uses JWT secret as HMAC signing key
+			apiKeySigningKey := []byte(cfg.Auth.JWTSecret)
+			apiKeyHandler := handler.NewAPIKeyHandler(s, apiKeySigningKey, handlerClaimsGetter)
+
+			// API key auth for middleware — enables cpk_ token validation
+			apiKeyAuth := &api.APIKeyAuth{
+				Store:      s,
+				UserStore:  s,
+				SigningKey:  apiKeySigningKey,
+			}
+
+			// Bridge handler — uses encryption key for connector secrets
+			bridgeHandler := handler.NewBridgeHandler(s, handlerClaimsGetter, encryptionKey)
+
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
-			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler)
+			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler, apiKeyAuth)
 
 			// Agent binary download endpoint (public, no JWT required).
 			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)
 			agentdl.RegisterRoutes(router, dlHandler)
 
-			// Template routes: JWT-protected, registered after NewRouter (provisionHandler pattern).
+			// Template routes: JWT-protected (supports API key auth too).
 			router.Group(func(r chi.Router) {
-				r.Use(api.JWTAuthMiddleware(authSvc))
+				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
 				handler.RegisterTemplateRoutes(r, templateHandler)
+			})
+
+			// API key routes: JWT-protected.
+			router.Group(func(r chi.Router) {
+				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
+				handler.RegisterAPIKeyRoutes(r, apiKeyHandler)
+			})
+
+			// Bridge routes: JWT-protected (supports API key auth for bridge binary).
+			router.Group(func(r chi.Router) {
+				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
+				handler.RegisterBridgeRoutes(r, bridgeHandler)
 			})
 
 			// Provisioning: JWT-protected route for creating tokens.
