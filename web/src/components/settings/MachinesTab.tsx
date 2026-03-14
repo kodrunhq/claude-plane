@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Save, ChevronDown, ChevronRight, Server } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMachines } from '../../hooks/useMachines.ts';
-import { KeyValueEditor } from './KeyValueEditor.tsx';
+import { KeyValueEditor, envToEntries, entriesToEnv } from './KeyValueEditor.tsx';
 import type { UserPreferences, MachineOverride } from '../../types/preferences.ts';
 import type { Machine } from '../../lib/types.ts';
 
@@ -26,20 +26,6 @@ function emptyOverride(): MachineOverride {
     env_vars: {},
     max_concurrent_sessions: 0,
   };
-}
-
-function envToEntries(env: Record<string, string>): ReadonlyArray<readonly [string, string]> {
-  return Object.entries(env).map(([k, v]) => [k, v] as const);
-}
-
-function entriesToEnv(entries: ReadonlyArray<readonly [string, string]>): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [k, v] of entries) {
-    if (k.trim()) {
-      result[k.trim()] = v;
-    }
-  }
-  return result;
 }
 
 export function MachinesTab({ preferences, onSave, saving }: MachinesTabProps) {

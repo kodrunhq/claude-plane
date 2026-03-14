@@ -17,10 +17,3 @@ export function useUpdatePreferences() {
   });
 }
 
-export function usePatchPreferences() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (prefs: Partial<UserPreferences>) => preferencesApi.patch(prefs),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['preferences'] }),
-  });
-}

@@ -136,8 +136,10 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 	delay := time.Duration(rs.DelaySecondsSnapshot) * time.Second
 	if delay > 0 {
 		go func() {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
 			select {
-			case <-time.After(delay):
+			case <-timer.C:
 				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 			case <-ctx.Done():
 				return
@@ -250,10 +252,14 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	}
 }
 
-// Cancel stops the DAGRunner context. Safe to call before Start().
+// Cancel stops the DAGRunner context. Safe to call before Start() and
+// concurrently with Start().
 func (d *DAGRunner) Cancel() {
-	if d.cancel != nil {
-		d.cancel()
+	d.mu.Lock()
+	cancel := d.cancel
+	d.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
