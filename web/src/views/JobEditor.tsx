@@ -104,12 +104,16 @@ export function JobEditor() {
   async function handleAddStep() {
     const jid = await ensureJobCreated();
     if (!jid) return;
+    if (!machines || machines.length === 0) {
+      toast.error('No machines are available. Connect a machine before adding a step.');
+      return;
+    }
     try {
       const step = await addStep.mutateAsync({
         jobId: jid,
         params: {
           name: '',
-          machine_id: machines?.[0]?.machine_id ?? '',
+          machine_id: machines[0].machine_id,
         },
       });
       selectStep(step.step_id);
