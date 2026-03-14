@@ -72,6 +72,7 @@ func (h *TemplateHandler) publish(eventType, templateID, userID string) {
 func RegisterTemplateRoutes(r chi.Router, h *TemplateHandler) {
 	r.Post("/api/v1/templates", h.Create)
 	r.Get("/api/v1/templates", h.List)
+	r.Get("/api/v1/templates/by-name/{name}", h.GetByName)
 	r.Get("/api/v1/templates/{templateID}", h.Get)
 	r.Put("/api/v1/templates/{templateID}", h.Update)
 	r.Delete("/api/v1/templates/{templateID}", h.Delete)
@@ -192,6 +193,34 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	templateID := chi.URLParam(r, "templateID")
 	tmpl, err := h.store.GetTemplate(r.Context(), templateID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "template not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if !h.authorizeTemplate(w, r, tmpl) {
+		return
+	}
+	writeJSON(w, http.StatusOK, tmpl)
+}
+
+// GetByName handles GET /api/v1/templates/by-name/{name}.
+func (h *TemplateHandler) GetByName(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	userID := ""
+	if c := h.claims(r); c != nil {
+		userID = c.UserID
+	}
+
+	tmpl, err := h.store.GetTemplateByName(r.Context(), userID, name)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "template not found")
