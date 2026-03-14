@@ -37,7 +37,7 @@ func setupTestAPI(t *testing.T) *httptest.Server {
 	cm := connmgr.NewConnectionManager(s, nil)
 
 	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
-	router := api.NewRouter(handlers, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := api.NewRouter(handlers, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return httptest.NewServer(router)
 }
 
@@ -342,7 +342,7 @@ func setupTestAPIWithMode(t *testing.T, mode, inviteCode string) *httptest.Serve
 	cm := connmgr.NewConnectionManager(s, nil)
 
 	handlers := api.NewHandlers(s, authSvc, cm, mode, inviteCode)
-	router := api.NewRouter(handlers, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := api.NewRouter(handlers, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return httptest.NewServer(router)
 }
 
