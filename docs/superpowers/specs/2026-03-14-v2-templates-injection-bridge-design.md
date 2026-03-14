@@ -205,7 +205,7 @@ export interface SessionTemplate {
 }
 ```
 
-**API client:** `templatesApi` with list, get, getByName, create, update, delete, clone.
+**API client:** `templatesApi` with list, get, create, update, delete, clone. The `getByName(name)` convenience function is a wrapper around `list({ name })` — it calls `GET /api/v1/templates?name={name}` and returns the first result.
 
 **TanStack Query hooks:** `useTemplates()`, `useTemplate(id)`, mutation hooks.
 
@@ -257,13 +257,26 @@ type InjectionStoreIface interface {
     UpdateInjectionDelivered(ctx context.Context, injectionID string, deliveredAt time.Time) error
 }
 
+// SessionStatusChecker — narrow interface for checking session state
+type SessionStatusChecker interface {
+    GetSession(ctx context.Context, sessionID string) (*Session, error)
+}
+
+// Subscriber — narrow interface for event subscription (avoids depending on concrete *event.Bus)
+// Defined in event package alongside the existing Publisher interface.
+type Subscriber interface {
+    Subscribe(pattern string, handler HandlerFunc, opts SubscriberOptions) (unsubscribe func())
+}
+
 type InjectionQueue struct {
-    mu       sync.Mutex
-    queues   map[string]*sessionQueue  // sessionID -> queue
-    connMgr  *connmgr.ConnectionManager
-    store    InjectionStoreIface       // narrow interface, not concrete *store.Store
-    bus      *event.Bus                // subscribe to session lifecycle events
-    logger   *slog.Logger
+    mu            sync.Mutex
+    queues        map[string]*sessionQueue  // sessionID -> queue
+    connMgr       *connmgr.ConnectionManager
+    store         InjectionStoreIface       // narrow interface, not concrete *store.Store
+    sessionStore  SessionStatusChecker      // for checking session status on drainer creation
+    subscriber    Subscriber                // narrow interface for event bus subscription
+    unsubscribe   func()                    // cleanup function from Subscribe call
+    logger        *slog.Logger
 }
 
 type sessionQueue struct {
@@ -277,6 +290,27 @@ type queueItem struct {
     DelayMs     int
     QueuedAt    time.Time
 }
+
+// Constructor — subscribes to session events at creation time
+func NewInjectionQueue(
+    connMgr *connmgr.ConnectionManager,
+    store InjectionStoreIface,
+    sessionStore SessionStatusChecker,
+    subscriber Subscriber,
+    logger *slog.Logger,
+) *InjectionQueue {
+    q := &InjectionQueue{
+        queues:       make(map[string]*sessionQueue),
+        connMgr:      connMgr,
+        store:        store,
+        sessionStore: sessionStore,
+        subscriber:   subscriber,
+        logger:       logger,
+    }
+    q.unsubscribe = subscriber.Subscribe("session.*", q.handleSessionEvent,
+        event.SubscriberOptions{BufferSize: 64, Concurrency: 1})
+    return q
+}
 ```
 
 **Behavior:**
@@ -288,7 +322,9 @@ type queueItem struct {
 - Drainer exits when session ends or after 5 minutes idle
 - Agent temporarily disconnected: drainer pauses, retries on reconnect
 
-**Drainer lifecycle management:** The `InjectionQueue` subscribes to `session.*` events on the event bus at initialization. When a `session.exited` or `session.terminated` event is received, the queue closes the corresponding `sessionQueue.done` channel, which signals the drainer goroutine to exit. This prevents goroutine leaks on long-running deployments.
+**Drainer lifecycle management:** The `InjectionQueue` subscribes to `session.*` events via the `Subscriber` interface at construction time (in `NewInjectionQueue`). When a `session.exited` or `session.terminated` event is received, the queue closes the corresponding `sessionQueue.done` channel, which signals the drainer goroutine to exit. This prevents goroutine leaks on long-running deployments.
+
+**Race condition handling:** When creating a drainer lazily (on first injection), the queue first checks the session's current status via `sessionStore.GetSession()`. If the session is already in a terminal state (`completed`, `failed`, `terminated`), the injection returns `409 Conflict` immediately without creating a drainer. This handles the race where a session exits between the inject API call and drainer creation, and the `session.*` event was already dispatched before the drainer existed to receive it.
 
 ### 4.3 Audit Table
 
@@ -614,7 +650,7 @@ The handler parses the cursor string into its two components before calling the 
 
 ### 6.5 Missing Event Types to Add
 
-- `session.terminated` — distinct from `session.exited`. The existing `TypeSessionExited` covers both process exit and user-initiated termination. Add `TypeSessionTerminated = "session.terminated"` and emit it from `TerminateSession` handler. The payload includes `"reason"` field: `"user"`, `"timeout"`, or `"admin"`. Keep `session.exited` for process-initiated exits only.
+- `session.terminated` — distinct from `session.exited`. The existing `TypeSessionExited` covers both process exit and user-initiated termination. Add `TypeSessionTerminated = "session.terminated"` and emit it from `TerminateSession` handler. The payload includes `"reason"` field: `"user"`, `"timeout"`, or `"admin"`. Keep `session.exited` for process-initiated exits only. **Critical: change the existing `TypeSessionExited` publish call in `session/handler.go` `TerminateSession` method to use the new `TypeSessionTerminated` instead.**
 - `job.run.step_completed` — individual step completion
 - `job.run.step_failed` — individual step failure
 
