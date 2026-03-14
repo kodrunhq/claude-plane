@@ -67,15 +67,28 @@ func (m *mockAuditStore) getFailed() []failedRecord {
 }
 
 type mockSessionStore struct {
+	mu       sync.Mutex
 	sessions map[string]*store.Session
 }
 
 func (m *mockSessionStore) GetSession(id string) (*store.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	sess, ok := m.sessions[id]
 	if !ok {
 		return nil, fmt.Errorf("session %s: not found", id)
 	}
-	return sess, nil
+	// Return a copy to avoid data races on the Status field.
+	copy := *sess
+	return &copy, nil
+}
+
+func (m *mockSessionStore) setStatus(id, status string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if sess, ok := m.sessions[id]; ok {
+		sess.Status = status
+	}
 }
 
 type mockSubscriber struct {
@@ -450,6 +463,58 @@ func TestInjectionQueue_AuditRecordUpdated(t *testing.T) {
 	delivered := audit.getDelivered()
 	if delivered[0] != "inj-audit" {
 		t.Errorf("delivered injection ID = %q, want %q", delivered[0], "inj-audit")
+	}
+}
+
+func TestProcessItem_TerminalSession(t *testing.T) {
+	// Use a blocking SendCommand so we can verify it is never called.
+	blockCh := make(chan struct{})
+	defer close(blockCh)
+
+	cm := connmgr.NewConnectionManager(&noopMachineStore{}, slog.Default())
+	agent := &connmgr.ConnectedAgent{
+		MachineID:    "machine-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  10,
+		Cancel:       func() {},
+		SendCommand: func(_ *pb.ServerCommand) error {
+			<-blockCh
+			return nil
+		},
+	}
+	_ = cm.Register("machine-1", agent)
+
+	audit := &mockAuditStore{}
+	sessions := newRunningSessionStore("sess-toctou", "machine-1")
+	sub := &mockSubscriber{}
+
+	q := NewInjectionQueue(cm, audit, sessions, sub, slog.Default())
+	defer q.Close()
+
+	// Enqueue an item while the session is still running.
+	err := q.Enqueue(context.Background(), "sess-toctou", "machine-1", []byte("data\n"), 0, "inj-toctou")
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	// Simulate the TOCTOU window: session transitions to terminal status
+	// before processItem runs the re-check.
+	sessions.setStatus("sess-toctou", store.StatusTerminated)
+
+	// Wait for processItem to call UpdateInjectionFailed("session terminated").
+	waitFor(t, 2*time.Second, func() bool {
+		failed := audit.getFailed()
+		for _, f := range failed {
+			if f.InjectionID == "inj-toctou" && f.Reason == "session terminated" {
+				return true
+			}
+		}
+		return false
+	})
+
+	// Confirm no gRPC delivery was attempted.
+	if len(audit.getDelivered()) != 0 {
+		t.Error("expected no delivery when session is in terminal status")
 	}
 }
 
