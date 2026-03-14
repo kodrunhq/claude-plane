@@ -36,7 +36,7 @@ type Command struct {
 //   - The first non-space word must start with "/".
 //   - The command name (after stripping "/") must be in the known command set.
 //   - If a "|" separator is present, everything to the right is parsed as VAR=val pairs.
-//   - Each variable token must contain exactly one "=".
+//   - Each variable token must contain at least one "=" (values may contain "=").
 func ParseCommand(text string) (*Command, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {

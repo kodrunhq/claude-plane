@@ -402,9 +402,9 @@ func newServeCmd() *cobra.Command {
 				handler.RegisterTemplateRoutes(r, templateHandler)
 			})
 
-			// API key routes: JWT-protected.
+			// API key routes: JWT-only (no API key auth to prevent privilege escalation).
 			router.Group(func(r chi.Router) {
-				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
+				r.Use(api.JWTAuthMiddleware(authSvc))
 				handler.RegisterAPIKeyRoutes(r, apiKeyHandler)
 			})
 
