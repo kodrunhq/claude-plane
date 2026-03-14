@@ -117,6 +117,15 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Ownership check: non-admin users can only use their own templates.
+		if h.getClaims != nil {
+			claims := h.getClaims(r)
+			if claims != nil && claims.Role != "admin" && tmpl.UserID != claims.UserID {
+				httputil.WriteError(w, http.StatusNotFound, "template not found")
+				return
+			}
+		}
+
 		templateID = tmpl.TemplateID
 
 		// Merge: template provides defaults, request overrides

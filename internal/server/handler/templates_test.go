@@ -56,7 +56,7 @@ func TestTemplateHandler_Create_Valid(t *testing.T) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"name":           "My Template",
 		"description":    "A test template",
-		"initial_prompt": "Hello {{WORLD}}",
+		"initial_prompt": "Hello ${WORLD}",
 	})
 	resp, err := http.Post(srv.URL+"/api/v1/templates", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -129,7 +129,7 @@ func TestTemplateHandler_Create_InvalidVariable(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]interface{}{
 		"name":           "Bad Var",
-		"initial_prompt": "Hello {{lowercase}}",
+		"initial_prompt": "Hello ${lowercase}",
 	})
 	resp, err := http.Post(srv.URL+"/api/v1/templates", "application/json", bytes.NewReader(body))
 	if err != nil {

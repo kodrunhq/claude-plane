@@ -234,12 +234,17 @@ func (s *Store) CloneTemplate(ctx context.Context, templateID string) (*SessionT
 		if i > 0 {
 			cloneName = fmt.Sprintf("%s-%d", baseName, i+1)
 		}
-		_, err := s.GetTemplateByName(ctx, original.UserID, cloneName)
+		// Check if name exists including soft-deleted rows (UNIQUE constraint is global).
+		var count int
+		err := s.reader.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM session_templates WHERE user_id = ? AND name = ?`,
+			original.UserID, cloneName,
+		).Scan(&count)
 		if err != nil {
-			if isNotFound(err) {
-				break
-			}
 			return nil, fmt.Errorf("check clone name: %w", err)
+		}
+		if count == 0 {
+			break
 		}
 		if i == maxRetries-1 {
 			return nil, fmt.Errorf("could not find unique clone name after %d attempts", maxRetries)
