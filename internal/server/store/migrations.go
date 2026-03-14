@@ -280,7 +280,7 @@ CREATE INDEX IF NOT EXISTS idx_provisioning_tokens_expires ON provisioning_token
 		Version:     5,
 		Description: "session templates",
 		SQL: `
-CREATE TABLE session_templates (
+CREATE TABLE IF NOT EXISTS session_templates (
     template_id     TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL REFERENCES users(user_id),
     name            TEXT NOT NULL,
@@ -300,7 +300,7 @@ CREATE TABLE session_templates (
     UNIQUE(user_id, name)
 );
 
-CREATE INDEX idx_templates_user ON session_templates(user_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_templates_user ON session_templates(user_id, deleted_at);
 
 ALTER TABLE sessions ADD COLUMN template_id TEXT REFERENCES session_templates(template_id);
 `,
@@ -309,7 +309,7 @@ ALTER TABLE sessions ADD COLUMN template_id TEXT REFERENCES session_templates(te
 		Version:     6,
 		Description: "session injections",
 		SQL: `
-CREATE TABLE injections (
+CREATE TABLE IF NOT EXISTS injections (
     injection_id TEXT PRIMARY KEY,
     session_id   TEXT NOT NULL REFERENCES sessions(session_id),
     user_id      TEXT NOT NULL REFERENCES users(user_id),
@@ -319,14 +319,14 @@ CREATE TABLE injections (
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     delivered_at DATETIME
 );
-CREATE INDEX idx_injections_session ON injections(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_injections_session ON injections(session_id, created_at DESC);
 `,
 	},
 	{
 		Version:     7,
 		Description: "api keys and bridge connector config",
 		SQL: `
-CREATE TABLE api_keys (
+CREATE TABLE IF NOT EXISTS api_keys (
     key_id       TEXT PRIMARY KEY,
     key_hmac     TEXT NOT NULL,
     user_id      TEXT NOT NULL REFERENCES users(user_id),
@@ -336,9 +336,9 @@ CREATE TABLE api_keys (
     last_used_at DATETIME,
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_api_keys_user ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 
-CREATE TABLE bridge_connectors (
+CREATE TABLE IF NOT EXISTS bridge_connectors (
     connector_id   TEXT PRIMARY KEY,
     connector_type TEXT NOT NULL,
     name           TEXT NOT NULL,
@@ -351,7 +351,7 @@ CREATE TABLE bridge_connectors (
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE bridge_control (
+CREATE TABLE IF NOT EXISTS bridge_control (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
