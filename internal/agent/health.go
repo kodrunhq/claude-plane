@@ -69,8 +69,8 @@ func darwinMemoryMB() (total, used int64) {
 			wiredPages = parseVMStatValue(line)
 		}
 	}
-	// Page size is typically 4096 on macOS
-	usedBytes := (activePages + wiredPages) * 4096
+	pageSize := int64(os.Getpagesize())
+	usedBytes := (activePages + wiredPages) * pageSize
 	used = usedBytes / (1024 * 1024)
 	return total, used
 }
