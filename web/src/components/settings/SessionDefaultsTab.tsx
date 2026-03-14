@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { KeyValueEditor, envToEntries, entriesToEnv } from './KeyValueEditor.tsx';
+import { KeyValueEditor } from './KeyValueEditor.tsx';
+import { envToEntries, entriesToEnv } from './envUtils.ts';
 import type { UserPreferences } from '../../types/preferences.ts';
 
 interface SessionDefaultsTabProps {
@@ -11,7 +12,7 @@ interface SessionDefaultsTabProps {
 }
 
 export function SessionDefaultsTab({ preferences, onSave, saving }: SessionDefaultsTabProps) {
-  const [skipPermissions, setSkipPermissions] = useState(preferences.skip_permissions ?? false);
+  const [skipPermissions, setSkipPermissions] = useState(preferences.skip_permissions ?? true);
   const [sessionTimeout, setSessionTimeout] = useState(String(preferences.default_session_timeout ?? ''));
   const [envEntries, setEnvEntries] = useState(envToEntries(preferences.default_env_vars));
 
