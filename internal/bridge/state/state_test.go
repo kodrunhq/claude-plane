@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -88,26 +89,30 @@ func TestIsProcessed_UnknownEvent(t *testing.T) {
 func TestPrune_RemovesOldEntries(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
+
+	// Write a state file with a manually old processed entry (48h ago).
+	oldTime := time.Now().Add(-48 * time.Hour)
+	stateJSON := fmt.Sprintf(`{"cursors":{},"processed":{"evt-old":"%s"}}`, oldTime.Format(time.RFC3339Nano))
+	if err := os.WriteFile(path, []byte(stateJSON), 0o644); err != nil {
+		t.Fatalf("write state file: %v", err)
+	}
+
 	s := state.New(path)
-
-	if err := s.MarkProcessed("evt-old"); err != nil {
-		t.Fatalf("MarkProcessed: %v", err)
-	}
-	if err := s.MarkProcessed("evt-new"); err != nil {
-		t.Fatalf("MarkProcessed: %v", err)
+	if err := s.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
 	}
 
-	// Prune with a very small maxAge — both should be considered old relative to future,
-	// so use a negative duration to simulate age greater than any entry.
-	// Instead, write a file with a manually crafted old timestamp.
-	// The simplest way: call Prune with 1 nanosecond, so everything before now-1ns is pruned.
-	// Since MarkProcessed uses time.Now(), they are never older than 1ns when called immediately.
-	// So we verify that Prune with a large window keeps them, and a zero window removes them.
-	if err := s.Prune(100 * 365 * 24 * time.Hour); err != nil {
-		t.Fatalf("Prune (large window): %v", err)
+	if !s.IsProcessed("evt-old") {
+		t.Fatal("expected evt-old to be present before prune")
 	}
-	if !s.IsProcessed("evt-old") || !s.IsProcessed("evt-new") {
-		t.Error("Prune with large window should keep recent events")
+
+	// Prune with 24h window — the 48h-old entry should be removed.
+	if err := s.Prune(24 * time.Hour); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+
+	if s.IsProcessed("evt-old") {
+		t.Error("Prune should have removed the 48h-old entry with 24h window")
 	}
 }
 

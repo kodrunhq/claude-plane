@@ -47,7 +47,7 @@ func TestCreateAPIKey(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "alice@apikeys.com")
 
-	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "my-key", []string{"read", "write"}, testSigningKey)
+	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "my-key", []string{"read", "write"}, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestGetAPIKeyByID(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "bob@apikeys.com")
 
-	_, keyID, err := s.CreateAPIKey(ctx, userID, "get-test-key", []string{"read"}, testSigningKey)
+	_, keyID, err := s.CreateAPIKey(ctx, userID, "get-test-key", []string{"read"}, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestValidateAPIKey(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "carol@apikeys.com")
 
-	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "validate-key", []string{"admin"}, testSigningKey)
+	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "validate-key", []string{"admin"}, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestValidateAPIKey_Invalid(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "dave@apikeys.com")
 
-	plaintextKey, _, err := s.CreateAPIKey(ctx, userID, "tampered-key", nil, testSigningKey)
+	plaintextKey, _, err := s.CreateAPIKey(ctx, userID, "tampered-key", nil, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -197,15 +197,15 @@ func TestListAPIKeys(t *testing.T) {
 	userA := createTestUserForAPIKeys(t, s, "listA@apikeys.com")
 	userB := createTestUserForAPIKeys(t, s, "listB@apikeys.com")
 
-	_, _, err := s.CreateAPIKey(ctx, userA, "key-1", []string{"read"}, testSigningKey)
+	_, _, err := s.CreateAPIKey(ctx, userA, "key-1", []string{"read"}, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey 1: %v", err)
 	}
-	_, _, err = s.CreateAPIKey(ctx, userA, "key-2", nil, testSigningKey)
+	_, _, err = s.CreateAPIKey(ctx, userA, "key-2", nil, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey 2: %v", err)
 	}
-	_, _, err = s.CreateAPIKey(ctx, userB, "key-3", []string{"write"}, testSigningKey)
+	_, _, err = s.CreateAPIKey(ctx, userB, "key-3", []string{"write"}, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey 3: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestDeleteAPIKey(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "eve@apikeys.com")
 
-	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "delete-me", nil, testSigningKey)
+	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "delete-me", nil, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestUpdateAPIKeyLastUsed(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "frank@apikeys.com")
 
-	_, keyID, err := s.CreateAPIKey(ctx, userID, "last-used-key", nil, testSigningKey)
+	_, keyID, err := s.CreateAPIKey(ctx, userID, "last-used-key", nil, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestValidateAPIKey_Expired(t *testing.T) {
 	userID := createTestUserForAPIKeys(t, s, "grace@apikeys.com")
 
 	// Create a key, then manually set its expiry to the past via direct DB access.
-	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "expiring-key", nil, testSigningKey)
+	plaintextKey, keyID, err := s.CreateAPIKey(ctx, userID, "expiring-key", nil, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}
@@ -330,7 +330,7 @@ func TestAPIKey_NilScopes(t *testing.T) {
 	ctx := context.Background()
 	userID := createTestUserForAPIKeys(t, s, "hank@apikeys.com")
 
-	_, keyID, err := s.CreateAPIKey(ctx, userID, "no-scopes-key", nil, testSigningKey)
+	_, keyID, err := s.CreateAPIKey(ctx, userID, "no-scopes-key", nil, nil, testSigningKey)
 	if err != nil {
 		t.Fatalf("CreateAPIKey: %v", err)
 	}

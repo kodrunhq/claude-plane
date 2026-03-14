@@ -16,6 +16,7 @@ interface TelegramConfig {
 interface TelegramFormProps {
   connector?: BridgeConnector;  // undefined = create, defined = edit
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 function parseTelegramConfig(configJson: string): Partial<TelegramConfig> {
@@ -26,7 +27,7 @@ function parseTelegramConfig(configJson: string): Partial<TelegramConfig> {
   }
 }
 
-export function TelegramForm({ connector, onClose }: TelegramFormProps) {
+export function TelegramForm({ connector, onClose, onSaved }: TelegramFormProps) {
   const isEdit = connector !== undefined;
   const existingConfig = isEdit ? parseTelegramConfig(connector.config) : {};
 
@@ -101,7 +102,11 @@ export function TelegramForm({ connector, onClose }: TelegramFormProps) {
         });
         toast.success('Connector created');
       }
-      onClose();
+      if (onSaved) {
+        onSaved();
+      } else {
+        onClose();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save connector');
     }

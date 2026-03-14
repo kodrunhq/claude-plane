@@ -37,7 +37,7 @@ const apiKeyPrefix = "cpk"
 // Key format: cpk_{8-char-hex-keyid}_{32-byte-random-base64url}
 //
 // Only the HMAC-SHA256 of the full plaintext key is stored in the database.
-func (s *Store) CreateAPIKey(ctx context.Context, userID, name string, scopes []string, signingKey []byte) (plaintextKey string, keyID string, err error) {
+func (s *Store) CreateAPIKey(ctx context.Context, userID, name string, scopes []string, expiresAt *time.Time, signingKey []byte) (plaintextKey string, keyID string, err error) {
 	keyID = uuid.New().String()
 	keyIDPrefix := strings.ReplaceAll(keyID, "-", "")[:8]
 
@@ -60,9 +60,9 @@ func (s *Store) CreateAPIKey(ctx context.Context, userID, name string, scopes []
 
 	now := time.Now().UTC()
 	_, err = s.writer.ExecContext(ctx,
-		`INSERT INTO api_keys (key_id, key_hmac, user_id, name, scopes, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		keyID, keyHMAC, userID, name, scopesJSON, now,
+		`INSERT INTO api_keys (key_id, key_hmac, user_id, name, scopes, expires_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		keyID, keyHMAC, userID, name, scopesJSON, expiresAt, now,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("insert api key: %w", err)

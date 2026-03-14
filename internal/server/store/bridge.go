@@ -157,28 +157,40 @@ func (s *Store) ListConnectors(ctx context.Context) ([]BridgeConnector, error) {
 
 // UpdateConnector updates the mutable fields of a bridge connector and
 // re-encrypts the secret when secretJSON is non-nil. When secretJSON is nil,
-// config_secret and config_nonce are set to NULL. Returns the updated record.
-// Returns ErrNotFound when no matching connector exists.
+// the existing config_secret and config_nonce are preserved. Returns the
+// updated record re-read from the database. Returns ErrNotFound when no
+// matching connector exists.
 func (s *Store) UpdateConnector(ctx context.Context, connectorID string, c *BridgeConnector, secretJSON []byte, encKey []byte) (*BridgeConnector, error) {
 	now := time.Now().UTC()
 
-	var configSecret, configNonce []byte
-	if secretJSON != nil {
-		var err error
-		configSecret, configNonce, err = Encrypt(secretJSON, encKey)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt connector secret: %w", err)
-		}
-	}
+	var result sql.Result
+	var err error
 
-	result, err := s.writer.ExecContext(ctx,
-		`UPDATE bridge_connectors
-		 SET connector_type = ?, name = ?, enabled = ?, config = ?,
-		     config_secret = ?, config_nonce = ?, updated_at = ?
-		 WHERE connector_id = ?`,
-		c.ConnectorType, c.Name, boolToInt(c.Enabled), c.Config,
-		configSecret, configNonce, now, connectorID,
-	)
+	if secretJSON != nil {
+		var configSecret, configNonce []byte
+		if len(secretJSON) > 0 {
+			configSecret, configNonce, err = Encrypt(secretJSON, encKey)
+			if err != nil {
+				return nil, fmt.Errorf("encrypt connector secret: %w", err)
+			}
+		}
+		result, err = s.writer.ExecContext(ctx,
+			`UPDATE bridge_connectors
+			 SET connector_type = ?, name = ?, enabled = ?, config = ?,
+			     config_secret = ?, config_nonce = ?, updated_at = ?
+			 WHERE connector_id = ?`,
+			c.ConnectorType, c.Name, boolToInt(c.Enabled), c.Config,
+			configSecret, configNonce, now, connectorID,
+		)
+	} else {
+		result, err = s.writer.ExecContext(ctx,
+			`UPDATE bridge_connectors
+			 SET connector_type = ?, name = ?, enabled = ?, config = ?, updated_at = ?
+			 WHERE connector_id = ?`,
+			c.ConnectorType, c.Name, boolToInt(c.Enabled), c.Config,
+			now, connectorID,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("update connector: %w", err)
 	}
@@ -191,15 +203,19 @@ func (s *Store) UpdateConnector(ctx context.Context, connectorID string, c *Brid
 		return nil, fmt.Errorf("connector %s: %w", connectorID, ErrNotFound)
 	}
 
-	return &BridgeConnector{
-		ConnectorID:   connectorID,
-		ConnectorType: c.ConnectorType,
-		Name:          c.Name,
-		Enabled:       c.Enabled,
-		Config:        c.Config,
-		CreatedBy:     c.CreatedBy,
-		UpdatedAt:     now,
-	}, nil
+	// Re-read the full row from the writer connection to return accurate data.
+	var updated BridgeConnector
+	var enabledInt int
+	err = s.writer.QueryRowContext(ctx,
+		`SELECT connector_id, connector_type, name, enabled, config, created_by, created_at, updated_at
+		 FROM bridge_connectors WHERE connector_id = ?`, connectorID,
+	).Scan(&updated.ConnectorID, &updated.ConnectorType, &updated.Name, &enabledInt,
+		&updated.Config, &updated.CreatedBy, &updated.CreatedAt, &updated.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("read updated connector: %w", err)
+	}
+	updated.Enabled = enabledInt != 0
+	return &updated, nil
 }
 
 // DeleteConnector removes a bridge connector by ID.
