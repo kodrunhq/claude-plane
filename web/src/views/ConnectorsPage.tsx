@@ -5,6 +5,7 @@ import { useConnectors, useDeleteConnector, useRestartBridge } from '../hooks/us
 import { ConnectorCard } from '../components/connectors/ConnectorCard.tsx';
 import { AddConnectorModal } from '../components/connectors/AddConnectorModal.tsx';
 import { TelegramForm } from '../components/connectors/TelegramForm.tsx';
+import { GithubForm } from '../components/connectors/GithubForm.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import type { BridgeConnector } from '../types/connector.ts';
 
@@ -16,6 +17,7 @@ export function ConnectorsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingConnector, setEditingConnector] = useState<BridgeConnector | null>(null);
   const [showTelegramForm, setShowTelegramForm] = useState(false);
+  const [showGithubForm, setShowGithubForm] = useState(false);
   const [configChanged, setConfigChanged] = useState(false);
   const [deletingConnector, setDeletingConnector] = useState<BridgeConnector | null>(null);
 
@@ -24,6 +26,9 @@ export function ConnectorsPage() {
     if (type === 'telegram') {
       setEditingConnector(null);
       setShowTelegramForm(true);
+    } else if (type === 'github') {
+      setEditingConnector(null);
+      setShowGithubForm(true);
     }
   }
 
@@ -31,16 +36,20 @@ export function ConnectorsPage() {
     setEditingConnector(connector);
     if (connector.connector_type === 'telegram') {
       setShowTelegramForm(true);
+    } else if (connector.connector_type === 'github') {
+      setShowGithubForm(true);
     }
   }
 
   function handleFormClose() {
     setShowTelegramForm(false);
+    setShowGithubForm(false);
     setEditingConnector(null);
   }
 
   function handleFormSaved() {
     setShowTelegramForm(false);
+    setShowGithubForm(false);
     setEditingConnector(null);
     setConfigChanged(true);
   }
@@ -149,6 +158,11 @@ export function ConnectorsPage() {
       {/* Telegram create/edit form */}
       {showTelegramForm && (
         <TelegramForm connector={editingConnector ?? undefined} onClose={handleFormClose} onSaved={handleFormSaved} />
+      )}
+
+      {/* GitHub create/edit form */}
+      {showGithubForm && (
+        <GithubForm connector={editingConnector ?? undefined} onClose={handleFormClose} onSaved={handleFormSaved} />
       )}
 
       {/* Delete confirmation */}

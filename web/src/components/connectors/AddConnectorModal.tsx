@@ -22,10 +22,9 @@ const CONNECTOR_OPTIONS: ConnectorOption[] = [
   {
     type: 'github',
     label: 'GitHub',
-    description: 'Connect to GitHub for PR notifications and actions',
-    icon: <Github size={28} className="text-text-secondary/50" />,
-    available: false,
-    comingSoon: 'Coming in Phase 4',
+    description: 'Connect to GitHub for PR notifications and automated sessions',
+    icon: <Github size={28} className="text-accent-primary" />,
+    available: true,
   },
 ];
 
