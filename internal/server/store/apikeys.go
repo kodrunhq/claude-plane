@@ -191,6 +191,29 @@ func (s *Store) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error
 	return keys, rows.Err()
 }
 
+// ListAllAPIKeys returns all API keys across all users, ordered by creation time
+// descending. It is intended for admin use only — callers must enforce authz.
+func (s *Store) ListAllAPIKeys(ctx context.Context) ([]APIKey, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT key_id, user_id, name, scopes, expires_at, last_used_at, created_at
+		 FROM api_keys ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list all api keys: %w", err)
+	}
+	defer rows.Close()
+
+	keys := make([]APIKey, 0)
+	for rows.Next() {
+		key, err := scanAPIKeyRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, *key)
+	}
+	return keys, rows.Err()
+}
+
 // DeleteAPIKey removes an API key by its ID.
 // Returns ErrNotFound if no matching key exists.
 func (s *Store) DeleteAPIKey(ctx context.Context, keyID string) error {
