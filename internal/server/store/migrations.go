@@ -358,6 +358,11 @@ CREATE TABLE bridge_control (
 );
 `,
 	},
+	{
+		Version:     8,
+		Description: "add machine_id to session templates",
+		SQL:         `ALTER TABLE session_templates ADD COLUMN machine_id TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

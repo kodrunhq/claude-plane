@@ -81,6 +81,7 @@ func RegisterTemplateRoutes(r chi.Router, h *TemplateHandler) {
 // createTemplateRequest is the JSON body for POST /api/v1/templates.
 type createTemplateRequest struct {
 	Name           string            `json:"name"`
+	MachineID      string            `json:"machine_id,omitempty"`
 	Description    string            `json:"description,omitempty"`
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
@@ -135,6 +136,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tmpl := &store.SessionTemplate{
 		UserID:         userID,
 		Name:           req.Name,
+		MachineID:      req.MachineID,
 		Description:    req.Description,
 		Command:        req.Command,
 		Args:           req.Args,
@@ -207,6 +209,7 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 // updateTemplateRequest is the JSON body for PUT /api/v1/templates/{templateID}.
 type updateTemplateRequest struct {
 	Name           string            `json:"name"`
+	MachineID      string            `json:"machine_id,omitempty"`
 	Description    string            `json:"description,omitempty"`
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
@@ -258,6 +261,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.store.UpdateTemplate(r.Context(), templateID, &store.SessionTemplate{
 		Name:           req.Name,
+		MachineID:      req.MachineID,
 		Description:    req.Description,
 		Command:        req.Command,
 		Args:           req.Args,

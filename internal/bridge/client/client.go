@@ -63,6 +63,7 @@ type Session struct {
 type Template struct {
 	TemplateID string `json:"template_id"`
 	Name       string `json:"name"`
+	MachineID  string `json:"machine_id,omitempty"`
 }
 
 // Machine represents a connected agent machine.
