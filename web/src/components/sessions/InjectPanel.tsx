@@ -24,7 +24,7 @@ function sourceBadgeClass(source: string): string {
 
 function injectionErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 409) return 'Conflict: injection already queued or session busy.';
+    if (err.status === 409) return 'Session is not running';
     if (err.status === 429) return 'Rate limited: too many injections. Please wait.';
     if (err.status === 503) return 'Session unavailable: agent may be disconnected.';
     return err.message;
@@ -58,7 +58,7 @@ export function InjectPanel({ sessionId, sessionStatus }: InjectPanelProps) {
   const [raw, setRaw] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const isActive = sessionStatus === 'running' || sessionStatus === 'created';
+  const isActive = sessionStatus === 'running';
 
   const { data: injections, isLoading: injectionsLoading } = useInjections(
     open ? sessionId : undefined,
@@ -103,7 +103,7 @@ export function InjectPanel({ sessionId, sessionStatus }: InjectPanelProps) {
         <div className="px-4 pb-4 space-y-3">
           {!isActive ? (
             <p className="text-xs text-text-secondary italic">
-              Session is not active — injection is only available for running or created sessions.
+              Session is not running — injection is only available for running sessions.
             </p>
           ) : (
             <>

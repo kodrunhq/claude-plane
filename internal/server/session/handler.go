@@ -398,6 +398,14 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "text is required")
 		return
 	}
+	if req.DelayMs < 0 {
+		httputil.WriteError(w, http.StatusBadRequest, "delay_ms must be non-negative")
+		return
+	}
+	if req.DelayMs > 30000 {
+		httputil.WriteError(w, http.StatusBadRequest, "delay_ms must not exceed 30000")
+		return
+	}
 
 	data := []byte(req.Text)
 	if !req.Raw {
@@ -410,6 +418,9 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 			userID = claims.UserID
 		}
 	}
+	if userID == "" {
+		userID = sess.UserID
+	}
 
 	metadataJSON := ""
 	if req.Metadata != nil {
@@ -421,19 +432,21 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 	injectionID := uuid.New().String()
 
 	// Enqueue first — only create the audit record on success.
-	if h.injectionQueue != nil {
-		if err := h.injectionQueue.Enqueue(r.Context(), sessionID, sess.MachineID, data, req.DelayMs, injectionID); err != nil {
-			if errors.Is(err, ErrQueueFull) {
-				httputil.WriteError(w, http.StatusTooManyRequests, "injection queue full")
-				return
-			}
-			if errors.Is(err, ErrSessionNotRunning) {
-				httputil.WriteError(w, http.StatusConflict, "session is not running")
-				return
-			}
-			httputil.WriteError(w, http.StatusInternalServerError, "failed to enqueue injection")
+	if h.injectionQueue == nil {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "injection service not available")
+		return
+	}
+	if err := h.injectionQueue.Enqueue(r.Context(), sessionID, sess.MachineID, data, req.DelayMs, injectionID); err != nil {
+		if errors.Is(err, ErrQueueFull) {
+			httputil.WriteError(w, http.StatusTooManyRequests, "injection queue full")
 			return
 		}
+		if errors.Is(err, ErrSessionNotRunning) {
+			httputil.WriteError(w, http.StatusConflict, "session is not running")
+			return
+		}
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to enqueue injection")
+		return
 	}
 
 	inj := &store.Injection{
