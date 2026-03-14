@@ -26,11 +26,13 @@
 | File | Change |
 |------|--------|
 | `internal/server/store/migrations.go` | Add migration v5: `session_templates` table + `sessions.template_id` column |
-| `internal/server/session/handler.go` | Add template merge logic to `CreateSession`, wire `EnvVars`/`InitialPrompt` into `CreateSessionCmd` proto |
+| `internal/server/store/sessions.go` | Add `TemplateID` field to `Session` struct, update INSERT in `CreateSession` and SELECTs in `GetSession`/`ListSessions` to include `template_id` |
+| `internal/server/session/handler.go` | Add template merge logic to `CreateSession`, wire `EnvVars`/`InitialPrompt` into `CreateSessionCmd` proto. Use existing `h.store` (which is `*store.Store` and satisfies `TemplateStoreIface`) — do NOT add a separate `templateStore` field |
 | `internal/server/session/handler_test.go` | Tests for template-aware session creation (create if needed) |
-| `internal/server/api/router.go` | Register template routes, add `templateHandler` to `NewRouter` |
+| `internal/server/api/router.go` | Register template routes after `NewRouter` returns (like `provisionHandler` pattern) — do NOT add to `NewRouter` parameter list, which is already 13 args. Phase 3 will refactor to `HandlerSet` |
 | `internal/server/event/event.go` | Add `TypeTemplateCreated`, `TypeTemplateUpdated`, `TypeTemplateDeleted` constants |
 | `internal/server/event/builders.go` | Add `NewTemplateEvent` builder |
+| `cmd/server/` (main.go or serve.go) | Wire `templateHandler.SetPublisher(eventBus)` alongside existing `sessionHandler.SetPublisher(eventBus)` |
 
 ### Frontend — Create
 | File | Responsibility |
@@ -243,7 +245,7 @@ git commit -m "feat: add template lifecycle event types and builder"
 
 - [ ] **Step 1: Write failing tests for CRUD endpoints**
 
-Follow the pattern in `handler/jobs_test.go`. Create a mock `TemplateStoreIface`. Test:
+Follow the pattern in `handler/jobs_test.go`. Use a real in-memory SQLite store via `store.NewStore(t.TempDir() + "/test.db")` — do NOT use mocks (all handler tests in the codebase use real stores). Test:
 - `POST /api/v1/templates` — valid request returns 201; missing name returns 400; duplicate name returns 409
 - `GET /api/v1/templates` — returns user's templates; admin sees all; supports `?tag=` and `?name=` filters
 - `GET /api/v1/templates/{templateID}` — returns template; non-existent returns 404; other user's template returns 404 (unless admin)
@@ -289,7 +291,7 @@ Implement each handler method following `handler/jobs.go` patterns:
 - Validate required fields (`name` for create)
 - Validate `initial_prompt` variable names match `[A-Z][A-Z0-9_]*` regex
 - Call store methods
-- Publish events
+- Publish events (tests must verify events are published on Create/Update/Delete — use a mock publisher or the real event bus in test setup)
 - Return JSON response
 
 - [ ] **Step 3: Run tests**
@@ -342,9 +344,9 @@ type createSessionRequest struct {
 }
 ```
 
-- [ ] **Step 3: Add template store dependency to SessionHandler**
+- [ ] **Step 3: Verify SessionHandler already has access to template store**
 
-Add `templateStore store.TemplateStoreIface` field to `SessionHandler`. Update `NewSessionHandler` constructor to accept it. This is needed to resolve templates by ID or name.
+The existing `SessionHandler.store` field is `*store.Store` (concrete type), which already satisfies `TemplateStoreIface` once `templates.go` methods are added. Do NOT add a separate `templateStore` field — use `h.store.GetTemplate()` and `h.store.GetTemplateByName()` directly. No constructor change needed.
 
 - [ ] **Step 4: Implement template merge logic in CreateSession**
 
@@ -387,35 +389,36 @@ git commit -m "feat: add template-aware session creation with merge and variable
 
 ---
 
-### Task 7: Register Template Routes in Router
+### Task 7: Register Template Routes + Wire in Server
 
 **Files:**
-- Modify: `internal/server/api/router.go`
+- Modify: `cmd/server/` (main.go or serve.go)
 
-- [ ] **Step 1: Add templateHandler parameter to NewRouter**
+- [ ] **Step 1: Wire up template handler in server main**
 
-Add `templateHandler *handler.TemplateHandler` to the `NewRouter` function signature. Register routes inside the JWT-protected group:
-
+In server setup (where other handlers are constructed):
+1. Create `TemplateHandler`: `templateHandler := handler.NewTemplateHandler(store, getClaims)`
+2. Set publisher: `templateHandler.SetPublisher(eventBus)`
+3. Register routes on the router AFTER `NewRouter` returns (same pattern as `provisionHandler`):
 ```go
-if templateHandler != nil {
+router.Group(func(r chi.Router) {
+    r.Use(api.JWTAuthMiddleware(authSvc))
     handler.RegisterTemplateRoutes(r, templateHandler)
-}
+})
 ```
 
-- [ ] **Step 2: Wire up in server main**
+Do NOT modify `NewRouter`'s parameter list — it already has 13 args. Phase 3 will refactor to `HandlerSet`.
 
-Wherever `NewRouter` is called (likely `cmd/server/main.go` or `cmd/server/serve.go`), instantiate `TemplateHandler` and pass it. Follow the existing pattern for `jobHandler`, `runHandler`, etc.
-
-- [ ] **Step 3: Run full test suite**
+- [ ] **Step 2: Run full test suite**
 
 Run: `go test -race ./...`
-Expected: PASS (update any callers of `NewRouter` in tests)
+Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```
-git add internal/server/api/router.go cmd/server/
-git commit -m "feat: register template routes in API router"
+git add cmd/server/
+git commit -m "feat: register template routes and wire handler in server"
 ```
 
 ---
@@ -470,8 +473,13 @@ export interface CreateTemplateParams {
 In `api/templates.ts`, follow the pattern in `api/jobs.ts`:
 ```typescript
 export const templatesApi = {
-  list: (params?: { tag?: string; name?: string }) =>
-    request<SessionTemplate[]>(`/templates${buildQuery(params)}`),
+  list: (params?: { tag?: string; name?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.tag) sp.set('tag', params.tag);
+    if (params?.name) sp.set('name', params.name);
+    const qs = sp.toString();
+    return request<SessionTemplate[]>(`/templates${qs ? `?${qs}` : ''}`);
+  },
   get: (id: string) =>
     request<SessionTemplate>(`/templates/${encodeURIComponent(id)}`),
   getByName: (name: string) =>
@@ -507,7 +515,7 @@ git commit -m "feat: add template TypeScript types and API client"
 
 Follow the pattern in `hooks/useJobs.ts`. Implement:
 - `useTemplates(params?)` — query with key `['templates', params]`
-- `useTemplate(id)` — query with key `['template', id]`
+- `useTemplate(id)` — query with key `['templates', id]` (use plural resource name per codebase convention)
 - `useCreateTemplate()` — mutation that invalidates `['templates']`
 - `useUpdateTemplate()` — mutation that invalidates `['templates']` and `['template', id]`
 - `useDeleteTemplate()` — mutation that invalidates `['templates']`

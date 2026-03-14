@@ -10,7 +10,9 @@
 
 **Design Spec:** `docs/superpowers/specs/2026-03-14-v2-templates-injection-bridge-design.md` — Section 4
 
-**Depends on:** Phase 1 (templates) must be complete — shares the modified session handler.
+**Depends on:** Phase 1 (templates) must be complete — shares the modified session handler. Phase 1's migration is version 5; this phase uses version 6.
+
+**Known limitation:** In Phase 2, `TerminateSession` still emits `TypeSessionExited` (not `TypeSessionTerminated`). The drainer subscribes to `session.*` which catches both. Drainers for terminated sessions will still exit correctly via the `session.exited` event. Phase 3 adds the distinct `TypeSessionTerminated` event type.
 
 ---
 
@@ -117,13 +119,11 @@ type Injection struct {
     CreatedAt   time.Time  `json:"created_at"`
     DeliveredAt *time.Time `json:"delivered_at,omitempty"`
 }
+```
 
-// InjectionStoreIface is the narrow interface for injection audit operations.
-type InjectionStoreIface interface {
-    CreateInjection(ctx context.Context, inj *Injection) (*Injection, error)
-    UpdateInjectionDelivered(ctx context.Context, injectionID string, deliveredAt time.Time) error
-    ListInjectionsBySession(ctx context.Context, sessionID string) ([]Injection, error)
-}
+Note: The narrow interfaces (`InjectionStoreIface`, `SessionStatusChecker`) are defined in the consuming package (`session/injection_queue.go`), NOT here in the store package. This follows the Go convention (interfaces in the consumer) and the pattern used by `connmgr.MachineStore`. The store package only provides the concrete methods on `*Store`.
+
+Note: The existing `store.GetSession(id string)` does NOT accept `context.Context`. The `SessionStatusChecker` interface must match this signature: `GetSession(id string) (*Session, error)` — do NOT add ctx.
 ```
 
 - [ ] **Step 3: Run tests**
@@ -194,6 +194,8 @@ Test cases:
 - `Enqueue` when queue full (32 items): returns error (429-equivalent)
 - `Enqueue` when agent disconnected: returns error (503-equivalent)
 - Session exit event: drainer goroutine exits, no goroutine leak
+- Idle drainer exit: set `idleTimeout` to 100ms in test, verify drainer exits after idle period (no goroutine leak)
+- Race condition: session transitions to terminal between status check and drainer creation — verify inject returns 409 (drainer checks status before starting)
 - Stale items (older than 5 min): silently dropped by drainer
 - Audit record created with `delivered_at = nil`, updated after delivery
 
@@ -202,24 +204,40 @@ Test cases:
 In `injection_queue.go`:
 
 ```go
+// Narrow interfaces defined in the consuming package (session), not in store.
+// Follows the pattern used by connmgr.MachineStore.
+
+// InjectionStoreIface is the narrow interface for injection audit.
+type InjectionStoreIface interface {
+    CreateInjection(ctx context.Context, inj *store.Injection) (*store.Injection, error)
+    UpdateInjectionDelivered(ctx context.Context, injectionID string, deliveredAt time.Time) error
+}
+
+// InjectionListStore is a separate narrow interface for listing injections (used by handler, not queue).
+type InjectionListStore interface {
+    ListInjectionsBySession(ctx context.Context, sessionID string) ([]store.Injection, error)
+}
+
+// SessionStatusChecker matches the existing store.GetSession signature (no context param).
 type SessionStatusChecker interface {
-    GetSession(ctx context.Context, sessionID string) (*store.Session, error)
+    GetSession(id string) (*store.Session, error)
 }
 
 type InjectionQueue struct {
     mu           sync.Mutex
     queues       map[string]*sessionQueue
     connMgr      *connmgr.ConnectionManager
-    store        store.InjectionStoreIface
-    sessionStore SessionStatusChecker
+    store        InjectionStoreIface     // narrow: Create + UpdateDelivered only
+    sessionStore SessionStatusChecker    // matches existing store.GetSession(id) signature
     subscriber   event.Subscriber
     unsubscribe  func()
+    idleTimeout  time.Duration           // configurable for testing (default 5 min)
     logger       *slog.Logger
 }
 
 func NewInjectionQueue(
     connMgr *connmgr.ConnectionManager,
-    injStore store.InjectionStoreIface,
+    injStore InjectionStoreIface,
     sessionStore SessionStatusChecker,
     subscriber event.Subscriber,
     logger *slog.Logger,
@@ -270,9 +288,18 @@ Test cases:
 - Inject by non-owner returns 404
 - `GET /api/v1/sessions/{id}/injections` — returns list of injections
 
-- [ ] **Step 2: Add InjectionQueue dependency to SessionHandler**
+- [ ] **Step 2: Add InjectionQueue and InjectionListStore dependencies to SessionHandler**
 
-Add `injectionQueue *InjectionQueue` field. Update constructor.
+Add two new fields to `SessionHandler`:
+```go
+injectionQueue *InjectionQueue
+injListStore   InjectionListStore  // for ListInjections handler
+```
+
+Update `NewSessionHandler` constructor to accept these (or use setter methods like `SetPublisher`). Wire in `cmd/server/` main:
+1. Create `InjectionQueue` with `NewInjectionQueue(connMgr, store, store, eventBus, logger)`
+2. Pass it to session handler: `sessionHandler.SetInjectionQueue(injQueue)`
+3. Pass `store` (which satisfies `InjectionListStore`) for listing
 
 - [ ] **Step 3: Implement InjectSession handler**
 
@@ -460,7 +487,18 @@ Find the component that renders the terminal for a session. Add `<InjectPanel se
 
 Only show the panel when session status is `running`.
 
-- [ ] **Step 4: Run frontend lint + tests**
+- [ ] **Step 4: Write InjectPanel tests**
+
+Create `web/src/components/sessions/InjectPanel.test.tsx` with test cases:
+- Renders textarea and send button
+- Submit sends inject API call with text
+- Ctrl+Enter keyboard shortcut triggers submit
+- Raw mode toggle changes request payload
+- Error states: 503 (agent disconnected), 409 (session not running), 429 (queue full) — display appropriate messages
+- Injection history list renders with timestamp, source badge, text length
+- Panel hidden when session status is not `running`
+
+- [ ] **Step 5: Run frontend lint + tests**
 
 Run: `cd web && npx vitest run && npm run lint`
 Expected: PASS
