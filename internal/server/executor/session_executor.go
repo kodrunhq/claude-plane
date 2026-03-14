@@ -109,12 +109,15 @@ func (e *SessionStepExecutor) ExecuteStep(
 	args := parseArgs(runStep.ArgsSnapshot)
 
 	// Inject --dangerously-skip-permissions if snapshot says so (nil defaults to true for jobs).
+	// TODO: When nil, resolve against user preferences at snapshot time instead of defaulting here.
 	if runStep.SkipPermissionsSnapshot == nil || *runStep.SkipPermissionsSnapshot != 0 {
+		args = stripFlag(args, "--dangerously-skip-permissions")
 		args = append([]string{"--dangerously-skip-permissions"}, args...)
 	}
 
-	// Inject --model if set in snapshot.
+	// Inject --model if set in snapshot, stripping any existing --model from user-supplied args.
 	if runStep.ModelSnapshot != "" {
+		args = stripFlagWithValue(args, "--model")
 		args = append(args, "--model", runStep.ModelSnapshot)
 	}
 
@@ -322,6 +325,35 @@ func (e *SessionStepExecutor) sendKill(machineID, sessionID string) {
 			"error", err,
 		)
 	}
+}
+
+// stripFlag removes all occurrences of a standalone flag from args.
+func stripFlag(args []string, flag string) []string {
+	result := make([]string, 0, len(args))
+	for _, a := range args {
+		if a != flag {
+			result = append(result, a)
+		}
+	}
+	return result
+}
+
+// stripFlagWithValue removes a flag and its following value from args (e.g., --model opus).
+func stripFlagWithValue(args []string, flag string) []string {
+	result := make([]string, 0, len(args))
+	skip := false
+	for _, a := range args {
+		if skip {
+			skip = false
+			continue
+		}
+		if a == flag {
+			skip = true
+			continue
+		}
+		result = append(result, a)
+	}
+	return result
 }
 
 // parseArgs parses a JSON-encoded array string into a []string.

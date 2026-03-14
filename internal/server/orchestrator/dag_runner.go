@@ -146,7 +146,7 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 			}
 		}()
 	} else {
-		d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
+		go d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 	}
 }
 

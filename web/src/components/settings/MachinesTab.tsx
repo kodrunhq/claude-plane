@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import { Save, ChevronDown, ChevronRight, Server } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMachines } from '../../hooks/useMachines.ts';
-import { KeyValueEditor, envToEntries, entriesToEnv } from './KeyValueEditor.tsx';
+import { KeyValueEditor } from './KeyValueEditor.tsx';
+import { envToEntries, entriesToEnv } from './envUtils.ts';
 import type { UserPreferences, MachineOverride } from '../../types/preferences.ts';
 import type { Machine } from '../../lib/types.ts';
 
@@ -42,7 +43,7 @@ export function MachinesTab({ preferences, onSave, saving }: MachinesTabProps) {
   function updateOverride(machineId: string, patch: Partial<MachineOverride>) {
     setOverrides((prev) => ({
       ...prev,
-      [machineId]: { ...getOverride(machineId), ...patch },
+      [machineId]: { ...(prev[machineId] ?? emptyOverride()), ...patch },
     }));
   }
 
