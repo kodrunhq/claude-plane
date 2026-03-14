@@ -1006,3 +1006,49 @@ func TestListInjections_EmptyListForNoInjections(t *testing.T) {
 		t.Errorf("injections count = %d, want 0", len(injections))
 	}
 }
+
+func TestInjectSession_NonOwnerReturns404(t *testing.T) {
+	cm, recorder, st, reg := setupAuthTestEnv(t)
+
+	createTestUser(t, st, "owner-user")
+	createTestUser(t, st, "other-user")
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	})
+
+	// Create a running session owned by owner-user.
+	sessionID := "sess-inject-auth"
+	if err := st.CreateSession(&store.Session{
+		SessionID: sessionID,
+		MachineID: "machine-a",
+		UserID:    "owner-user",
+		Command:   "claude",
+		Status:    store.StatusRunning,
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Attempt inject as other-user (non-admin).
+	otherClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "other-user", Role: "user"}
+	}
+	otherHandler := session.NewSessionHandler(st, cm, reg, otherClaims, slog.Default())
+	otherRouter := chi.NewRouter()
+	otherRouter.Post("/api/v1/sessions/{sessionID}/inject", otherHandler.InjectSession)
+
+	body := `{"text":"should not work"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sessionID+"/inject", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	otherRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("inject by non-owner: status = %d, want 404; body = %s", w.Code, w.Body.String())
+	}
+}

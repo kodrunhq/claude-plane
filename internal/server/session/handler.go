@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -349,7 +350,7 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 	if err := h.store.UpdateSessionStatus(sessionID, store.StatusTerminated); err != nil {
 		h.logger.Error("failed to update session status", "error", err)
 	}
-	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionExited, sessionID, sess.MachineID))
+	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionTerminated, sessionID, sess.MachineID))
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": store.StatusTerminated})
 }
@@ -377,7 +378,7 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if sess.Status != store.StatusRunning && sess.Status != store.StatusCreated {
+	if sess.Status != store.StatusRunning {
 		httputil.WriteError(w, http.StatusConflict, "session is not running")
 		return
 	}
@@ -416,29 +417,42 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 			metadataJSON = string(b)
 		}
 	}
-	inj := &store.Injection{
-		SessionID:  sessionID,
-		UserID:     userID,
-		TextLength: len(req.Text),
-		Metadata:   metadataJSON,
-		Source:     "api",
-	}
-	created, err := h.store.CreateInjection(r.Context(), inj)
-	if err != nil {
-		h.logger.Error("failed to create injection audit record", "error", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to record injection")
-		return
-	}
 
+	injectionID := uuid.New().String()
+
+	// Enqueue first — only create the audit record on success.
 	if h.injectionQueue != nil {
-		if err := h.injectionQueue.Enqueue(r.Context(), sessionID, sess.MachineID, data, req.DelayMs, created.InjectionID); err != nil {
-			if strings.Contains(err.Error(), "queue full") {
+		if err := h.injectionQueue.Enqueue(r.Context(), sessionID, sess.MachineID, data, req.DelayMs, injectionID); err != nil {
+			if errors.Is(err, ErrQueueFull) {
 				httputil.WriteError(w, http.StatusTooManyRequests, "injection queue full")
+				return
+			}
+			if errors.Is(err, ErrSessionNotRunning) {
+				httputil.WriteError(w, http.StatusConflict, "session is not running")
 				return
 			}
 			httputil.WriteError(w, http.StatusInternalServerError, "failed to enqueue injection")
 			return
 		}
+	}
+
+	inj := &store.Injection{
+		InjectionID: injectionID,
+		SessionID:   sessionID,
+		UserID:      userID,
+		TextLength:  len(req.Text),
+		Metadata:    metadataJSON,
+		Source:      "api",
+	}
+	created, err := h.store.CreateInjection(r.Context(), inj)
+	if err != nil {
+		h.logger.Error("failed to create injection audit record", "error", err)
+		// Enqueue succeeded but audit failed — log and continue with the generated ID.
+		httputil.WriteJSON(w, http.StatusAccepted, map[string]any{
+			"injection_id": injectionID,
+			"queued_at":    time.Now().UTC(),
+		})
+		return
 	}
 
 	httputil.WriteJSON(w, http.StatusAccepted, map[string]any{
