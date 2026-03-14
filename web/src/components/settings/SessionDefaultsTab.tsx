@@ -1,27 +1,13 @@
 import { useState, useCallback } from 'react';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { KeyValueEditor } from './KeyValueEditor.tsx';
+import { KeyValueEditor, envToEntries, entriesToEnv } from './KeyValueEditor.tsx';
 import type { UserPreferences } from '../../types/preferences.ts';
 
 interface SessionDefaultsTabProps {
   preferences: UserPreferences;
   onSave: (prefs: UserPreferences) => Promise<void>;
   saving: boolean;
-}
-
-function envToEntries(env: Record<string, string> | undefined): ReadonlyArray<readonly [string, string]> {
-  return Object.entries(env ?? {}).map(([k, v]) => [k, v] as const);
-}
-
-function entriesToEnv(entries: ReadonlyArray<readonly [string, string]>): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [k, v] of entries) {
-    if (k.trim()) {
-      result[k.trim()] = v;
-    }
-  }
-  return result;
 }
 
 export function SessionDefaultsTab({ preferences, onSave, saving }: SessionDefaultsTabProps) {
