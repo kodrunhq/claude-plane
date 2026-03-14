@@ -305,6 +305,23 @@ CREATE INDEX idx_templates_user ON session_templates(user_id, deleted_at);
 ALTER TABLE sessions ADD COLUMN template_id TEXT REFERENCES session_templates(template_id);
 `,
 	},
+	{
+		Version:     6,
+		Description: "session injections",
+		SQL: `
+CREATE TABLE injections (
+    injection_id TEXT PRIMARY KEY,
+    session_id   TEXT NOT NULL REFERENCES sessions(session_id),
+    user_id      TEXT NOT NULL REFERENCES users(user_id),
+    text_length  INTEGER NOT NULL,
+    metadata     TEXT,
+    source       TEXT NOT NULL,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delivered_at DATETIME
+);
+CREATE INDEX idx_injections_session ON injections(session_id, created_at DESC);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
