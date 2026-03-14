@@ -326,6 +326,11 @@ func newServeCmd() *cobra.Command {
 			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
 			sessionHandler.SetPublisher(eventBus)
 
+			// Injection queue for mid-flight session context injection
+			injectionQueue := session.NewInjectionQueue(connMgr, s, s, eventBus, slog.Default())
+			defer injectionQueue.Close()
+			sessionHandler.SetInjectionQueue(injectionQueue)
+
 			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
 			eventsWSHandler := session.HandleEventsWS(authSvc, wsFanout, slog.Default())
 
