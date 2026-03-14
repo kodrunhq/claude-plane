@@ -62,3 +62,14 @@ func NewTemplateEvent(eventType, templateID, userID string) Event {
 		"user_id":     userID,
 	})
 }
+
+// NewRunStepEvent constructs an event for individual run step completions or failures.
+// eventType should be one of TypeJobRunStepCompleted or TypeJobRunStepFailed.
+func NewRunStepEvent(eventType, runID, runStepID, stepID, status string) Event {
+	return newEvent(eventType, "orchestrator", map[string]any{
+		"run_id":      runID,
+		"run_step_id": runStepID,
+		"step_id":     stepID,
+		"status":      status,
+	})
+}

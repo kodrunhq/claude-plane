@@ -56,8 +56,14 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 // Protected routes (logout, machines, sessions) require a valid JWT, checked
 // via httpOnly cookie first, then Authorization: Bearer header as fallback.
 // WebSocket routes support cookie auth (preferred) and first-message auth.
-func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler, eventHandler *handler.EventHandler, webhookHandler *handler.WebhookHandler, triggerHandler *handler.TriggerHandler, ingestHandler *handler.IngestHandler, scheduleHandler *handler.ScheduleHandler, userHandler *handler.UserHandler, credentialHandler *handler.CredentialHandler) chi.Router {
+func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler, eventHandler *handler.EventHandler, webhookHandler *handler.WebhookHandler, triggerHandler *handler.TriggerHandler, ingestHandler *handler.IngestHandler, scheduleHandler *handler.ScheduleHandler, userHandler *handler.UserHandler, credentialHandler *handler.CredentialHandler, apiKeyAuth ...*APIKeyAuth) chi.Router {
 	r := chi.NewRouter()
+
+	// Resolve optional API key auth for all protected routes.
+	var aka *APIKeyAuth
+	if len(apiKeyAuth) > 0 {
+		aka = apiKeyAuth[0]
+	}
 
 	// Global middleware
 	r.Use(middleware.RequestID)
@@ -83,9 +89,9 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 		r.With(authLimiter).Post("/auth/register", h.Register)
 		r.With(authLimiter).Post("/auth/login", h.Login)
 
-		// Protected routes
+		// Protected routes (JWT + optional API key auth)
 		r.Group(func(r chi.Router) {
-			r.Use(JWTAuthMiddleware(h.authSvc))
+			r.Use(JWTAuthMiddleware(h.authSvc, aka))
 			r.Post("/auth/logout", h.Logout)
 			r.Get("/machines", h.ListMachines)
 			r.Get("/machines/{machineID}", h.GetMachine)
@@ -102,10 +108,10 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 		})
 	})
 
-	// Job system routes (flat paths, JWT-protected)
+	// Job system routes (flat paths, JWT + optional API key protected)
 	if jobHandler != nil || runHandler != nil || eventHandler != nil || webhookHandler != nil || triggerHandler != nil || scheduleHandler != nil || userHandler != nil || credentialHandler != nil {
 		r.Group(func(r chi.Router) {
-			r.Use(JWTAuthMiddleware(h.authSvc))
+			r.Use(JWTAuthMiddleware(h.authSvc, aka))
 			if jobHandler != nil {
 				handler.RegisterJobRoutes(r, jobHandler)
 			}

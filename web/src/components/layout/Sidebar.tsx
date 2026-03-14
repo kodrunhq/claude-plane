@@ -12,6 +12,8 @@ import {
   Users,
   KeyRound,
   Lock,
+  Plug,
+  Key,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -44,6 +46,7 @@ const navSections: NavSection[] = [
     title: 'Automation',
     items: [
       { to: '/webhooks', label: 'Webhooks', icon: Webhook },
+      { to: '/connectors', label: 'Connectors', icon: Plug },
     ],
   },
   {
@@ -59,6 +62,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/users', label: 'Users', icon: Users },
       { to: '/provisioning', label: 'Provisioning', icon: KeyRound },
+      { to: '/api-keys', label: 'API Keys', icon: Key },
     ],
   },
 ];
