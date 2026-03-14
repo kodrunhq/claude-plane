@@ -1,11 +1,13 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
+import { Timer } from 'lucide-react';
 import type { NodeProps, Node } from '@xyflow/react';
 
 export interface StepNodeData {
   label: string;
   status?: string;
   machineId?: string;
+  delaySeconds?: number;
   selected?: boolean;
   [key: string]: unknown;
 }
@@ -34,12 +36,13 @@ export const StepNode = memo(function StepNode({ data }: NodeProps<StepNodeType>
   const status = data.status ?? 'pending';
   const borderColor = statusBorderColors[status] ?? 'border-gray-600';
   const isSelected = data.selected;
+  const delaySeconds = data.delaySeconds ?? 0;
 
   return (
     <div
       className={`px-3 py-2 rounded-lg border-2 bg-bg-secondary ${borderColor} ${
         isSelected ? 'ring-2 ring-accent-primary' : ''
-      }`}
+      } relative`}
       style={{ width: 180, height: 60 }}
     >
       <Handle type="target" position={Position.Left} className="!bg-gray-400 !w-2 !h-2" />
@@ -52,6 +55,12 @@ export const StepNode = memo(function StepNode({ data }: NodeProps<StepNodeType>
           )}
         </div>
       </div>
+      {delaySeconds > 0 && (
+        <div className="absolute -top-2 -right-2 flex items-center gap-0.5 bg-yellow-600/90 text-white text-[9px] font-medium rounded-full px-1.5 py-0.5">
+          <Timer size={9} />
+          {delaySeconds}s
+        </div>
+      )}
       <Handle type="source" position={Position.Right} className="!bg-gray-400 !w-2 !h-2" />
     </div>
   );

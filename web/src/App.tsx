@@ -19,6 +19,8 @@ import { CredentialsPage } from './views/CredentialsPage.tsx'
 import { TemplatesPage } from './views/TemplatesPage.tsx'
 import { ApiKeysPage } from './views/ApiKeysPage.tsx'
 import { ConnectorsPage } from './views/ConnectorsPage.tsx'
+import { SearchPage } from './views/SearchPage.tsx'
+import { SettingsPage } from './views/SettingsPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { InjectPanel } from './components/sessions/InjectPanel.tsx'
@@ -96,6 +98,8 @@ function App() {
             <Route path="/credentials" element={<CredentialsPage />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/connectors" element={<ConnectorsPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </AppShell>
       </BrowserRouter>

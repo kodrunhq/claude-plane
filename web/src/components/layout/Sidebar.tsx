@@ -14,6 +14,8 @@ import {
   Lock,
   Plug,
   Key,
+  Search,
+  Settings,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -40,6 +42,7 @@ const navSections: NavSection[] = [
       { to: '/jobs', label: 'Jobs', icon: Workflow },
       { to: '/templates', label: 'Templates', icon: FileText },
       { to: '/runs', label: 'Runs', icon: Play },
+      { to: '/search', label: 'Search', icon: Search },
     ],
   },
   {
@@ -131,7 +134,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-2 border-t border-border-primary">
+      <div className="p-2 border-t border-border-primary space-y-0.5">
+        <NavItemLink to="/settings" label="Settings" icon={Settings} collapsed={collapsed} />
         <button
           onClick={() => logout()}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-status-error hover:bg-status-error/10 w-full transition-all duration-200"

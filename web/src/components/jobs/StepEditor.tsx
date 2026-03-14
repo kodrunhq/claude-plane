@@ -13,6 +13,12 @@ interface StepEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+function parseSkipPermissions(value: string): number | null | undefined {
+  if (value === '1') return 1;
+  if (value === '0') return 0;
+  return undefined;
+}
+
 function getFormParams(form: HTMLFormElement): UpdateStepParams {
   const data = new FormData(form);
   return {
@@ -22,18 +28,31 @@ function getFormParams(form: HTMLFormElement): UpdateStepParams {
     working_dir: data.get('working_dir') as string,
     command: (data.get('command') as string) || 'claude',
     args: data.get('args') as string,
+    model: (data.get('model') as string) || undefined,
+    skip_permissions: parseSkipPermissions(data.get('skip_permissions') as string),
+    delay_seconds: Number(data.get('delay_seconds')) || 0,
   };
+}
+
+function skipPermissionsFormValue(step: Step): string {
+  if (step.skip_permissions === 1) return '1';
+  if (step.skip_permissions === 0) return '0';
+  return '';
 }
 
 function isDirty(form: HTMLFormElement, step: Step): boolean {
   const params = getFormParams(form);
+  const data = new FormData(form);
   return (
     params.name !== step.name ||
     params.prompt !== step.prompt ||
     params.machine_id !== step.machine_id ||
     params.working_dir !== step.working_dir ||
     params.command !== (step.command || 'claude') ||
-    params.args !== (step.args ?? '')
+    params.args !== (step.args ?? '') ||
+    (data.get('model') as string) !== (step.model ?? '') ||
+    (data.get('skip_permissions') as string) !== skipPermissionsFormValue(step) ||
+    (Number(data.get('delay_seconds')) || 0) !== (step.delay_seconds ?? 0)
   );
 }
 
@@ -324,6 +343,52 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
             </option>
           ))}
         </select>
+      </div>
+
+      <div>
+        <label htmlFor="step-model" className="block text-xs text-text-secondary mb-1">Model</label>
+        <select
+          id="step-model"
+          name="model"
+          defaultValue={step.model ?? ''}
+          key={step.step_id + '-model'}
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+        >
+          <option value="">Default</option>
+          <option value="opus">Opus</option>
+          <option value="sonnet">Sonnet</option>
+          <option value="haiku">Haiku</option>
+        </select>
+      </div>
+
+      <div>
+        <label htmlFor="step-skip-permissions" className="block text-xs text-text-secondary mb-1">Skip Permissions</label>
+        <select
+          id="step-skip-permissions"
+          name="skip_permissions"
+          defaultValue={skipPermissionsFormValue(step)}
+          key={step.step_id + '-skip-permissions'}
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+        >
+          <option value="">Default (from settings)</option>
+          <option value="1">On</option>
+          <option value="0">Off</option>
+        </select>
+      </div>
+
+      <div>
+        <label htmlFor="step-delay" className="block text-xs text-text-secondary mb-1">Delay (seconds)</label>
+        <input
+          id="step-delay"
+          name="delay_seconds"
+          type="number"
+          min={0}
+          max={86400}
+          defaultValue={step.delay_seconds ?? 0}
+          key={step.step_id + '-delay'}
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+        />
+        <p className="text-[10px] text-text-secondary/70 mt-0.5">Wait before starting this step (0–86400)</p>
       </div>
 
       <div>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Plus, Trash2, Zap } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Link, Plus, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTriggers, useCreateTrigger, useDeleteTrigger } from '../../hooks/useTriggers.ts';
+import { useJobs } from '../../hooks/useJobs.ts';
 import { TriggerBuilder } from './TriggerBuilder.tsx';
 import type { JobTrigger, CreateTriggerParams } from '../../types/trigger.ts';
 
@@ -9,6 +10,7 @@ interface TriggerRowProps {
   trigger: JobTrigger;
   onDelete: (triggerId: string) => void;
   isDeleting: boolean;
+  jobNameMap: ReadonlyMap<string, string>;
 }
 
 function formatDate(dateStr: string): string {
@@ -19,8 +21,53 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function TriggerRow({ trigger, onDelete, isDeleting }: TriggerRowProps) {
+function parseFilterJobId(filter: string): string | null {
+  if (!filter.trim()) return null;
+  try {
+    const parsed = JSON.parse(filter);
+    if (typeof parsed === 'object' && parsed !== null && typeof parsed.job_id === 'string') {
+      return parsed.job_id;
+    }
+  } catch {
+    // not valid JSON, ignore
+  }
+  return null;
+}
+
+const EVENT_LABELS: Record<string, { verb: string; noun: string }> = {
+  'run.completed': { verb: 'completes', noun: 'completion' },
+  'run.failed': { verb: 'fails', noun: 'failure' },
+  'run.started': { verb: 'starts', noun: 'start' },
+  'run.created': { verb: 'is created', noun: 'creation' },
+  'run.cancelled': { verb: 'is cancelled', noun: 'cancellation' },
+};
+
+function buildTriggerDescription(
+  trigger: JobTrigger,
+  jobNameMap: ReadonlyMap<string, string>,
+): { text: string; isChained: boolean } {
+  const filterJobId = parseFilterJobId(trigger.filter);
+  const label = EVENT_LABELS[trigger.event_type];
+
+  if (filterJobId && label) {
+    const jobName = jobNameMap.get(filterJobId);
+    const displayName = jobName ?? filterJobId.slice(0, 8);
+    return {
+      text: `Fires when ${displayName} ${label.verb}`,
+      isChained: true,
+    };
+  }
+
+  return {
+    text: `Fires on ${trigger.event_type}`,
+    isChained: false,
+  };
+}
+
+function TriggerRow({ trigger, onDelete, isDeleting, jobNameMap }: TriggerRowProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const description = buildTriggerDescription(trigger, jobNameMap);
 
   function handleDeleteClick() {
     if (confirmDelete) {
@@ -38,7 +85,13 @@ function TriggerRow({ trigger, onDelete, isDeleting }: TriggerRowProps) {
     <div className="border border-border-primary rounded-md p-3 space-y-2 bg-bg-tertiary">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-mono text-text-primary truncate">{trigger.event_type}</p>
+          <p className="text-xs text-text-primary flex items-center gap-1.5">
+            {description.isChained && <Link size={11} className="text-blue-400 shrink-0" />}
+            <span className="truncate">{description.text}</span>
+          </p>
+          <p className="text-xs font-mono text-text-secondary mt-0.5 truncate">
+            {trigger.event_type}
+          </p>
           {trigger.filter && (
             <p className="text-xs text-text-secondary font-mono mt-0.5 truncate" title={trigger.filter}>
               filter: {trigger.filter}
@@ -95,10 +148,21 @@ interface TriggerPanelProps {
 
 export function TriggerPanel({ jobId }: TriggerPanelProps) {
   const { data: triggers, isLoading } = useTriggers(jobId);
+  const { data: jobs } = useJobs();
   const createTrigger = useCreateTrigger();
   const deleteTrigger = useDeleteTrigger();
 
   const [showForm, setShowForm] = useState(false);
+
+  const jobNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (jobs) {
+      for (const job of jobs) {
+        map.set(job.job_id, job.name);
+      }
+    }
+    return map;
+  }, [jobs]);
 
   async function handleCreate(params: CreateTriggerParams) {
     try {
@@ -165,6 +229,7 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
                 trigger={trigger}
                 onDelete={handleDelete}
                 isDeleting={deleteTrigger.isPending}
+                jobNameMap={jobNameMap}
               />
             ))}
           </div>
