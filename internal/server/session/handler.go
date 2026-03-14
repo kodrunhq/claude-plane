@@ -3,9 +3,12 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,17 +32,23 @@ type ClaimsGetter func(r *http.Request) *UserClaims
 
 // SessionHandler provides REST handlers for session lifecycle management.
 type SessionHandler struct {
-	store     *store.Store
-	connMgr   *connmgr.ConnectionManager
-	registry  *Registry
-	getClaims ClaimsGetter
-	logger    *slog.Logger
-	publisher event.Publisher
+	store          *store.Store
+	connMgr        *connmgr.ConnectionManager
+	registry       *Registry
+	getClaims      ClaimsGetter
+	logger         *slog.Logger
+	publisher      event.Publisher
+	injectionQueue *InjectionQueue
 }
 
 // SetPublisher sets the event publisher used to emit session lifecycle events.
 func (h *SessionHandler) SetPublisher(p event.Publisher) {
 	h.publisher = p
+}
+
+// SetInjectionQueue sets the injection queue used by the InjectSession handler.
+func (h *SessionHandler) SetInjectionQueue(q *InjectionQueue) {
+	h.injectionQueue = q
 }
 
 // publishEvent emits an event if a publisher is configured.
@@ -342,9 +351,153 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 	if err := h.store.UpdateSessionStatus(sessionID, store.StatusTerminated); err != nil {
 		h.logger.Error("failed to update session status", "error", err)
 	}
-	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionExited, sessionID, sess.MachineID))
+	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionTerminated, sessionID, sess.MachineID))
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": store.StatusTerminated})
+}
+
+// injectRequest is the JSON body for POST /api/v1/sessions/{sessionID}/inject.
+type injectRequest struct {
+	Text     string         `json:"text"`
+	Raw      bool           `json:"raw"`
+	DelayMs  int            `json:"delay_ms"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// InjectSession handles POST /api/v1/sessions/{sessionID}/inject.
+// It enqueues text to be sent to a running session's PTY via the injection queue.
+func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionID")
+
+	sess, err := h.store.GetSession(sessionID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if !h.authorizeSession(r, sess) {
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	if sess.Status != store.StatusRunning {
+		httputil.WriteError(w, http.StatusConflict, "session is not running")
+		return
+	}
+
+	agent := h.connMgr.GetAgent(sess.MachineID)
+	if agent == nil {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "agent disconnected")
+		return
+	}
+
+	var req injectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Text == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "text is required")
+		return
+	}
+	if req.DelayMs < 0 {
+		httputil.WriteError(w, http.StatusBadRequest, "delay_ms must be non-negative")
+		return
+	}
+	if req.DelayMs > 30000 {
+		httputil.WriteError(w, http.StatusBadRequest, "delay_ms must not exceed 30000")
+		return
+	}
+
+	data := []byte(req.Text)
+	if !req.Raw {
+		data = append(data, '\n')
+	}
+
+	userID := ""
+	if h.getClaims != nil {
+		if claims := h.getClaims(r); claims != nil {
+			userID = claims.UserID
+		}
+	}
+	if userID == "" {
+		userID = sess.UserID
+	}
+
+	metadataJSON := ""
+	if req.Metadata != nil {
+		if b, err := json.Marshal(req.Metadata); err == nil {
+			metadataJSON = string(b)
+		}
+	}
+
+	injectionID := uuid.New().String()
+
+	if h.injectionQueue == nil {
+		httputil.WriteError(w, http.StatusServiceUnavailable, "injection service not available")
+		return
+	}
+
+	// Create audit record BEFORE enqueue to avoid a delivery race: the drainer
+	// can deliver and call UpdateInjectionDelivered before CreateInjection runs.
+	inj := &store.Injection{
+		InjectionID: injectionID,
+		SessionID:   sessionID,
+		UserID:      userID,
+		TextLength:  utf8.RuneCountInString(req.Text),
+		Metadata:    metadataJSON,
+		Source:      "api",
+	}
+	created, err := h.store.CreateInjection(r.Context(), inj)
+	if err != nil {
+		h.logger.Error("failed to create injection audit record", "error", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to create injection record")
+		return
+	}
+
+	// Enqueue — if this fails the audit record stays with delivered_at = NULL,
+	// which correctly represents "attempted but not delivered".
+	if err := h.injectionQueue.Enqueue(r.Context(), sessionID, sess.MachineID, data, req.DelayMs, injectionID); err != nil {
+		if errors.Is(err, ErrQueueFull) {
+			httputil.WriteError(w, http.StatusTooManyRequests, "injection queue full")
+			return
+		}
+		if errors.Is(err, ErrSessionNotRunning) {
+			httputil.WriteError(w, http.StatusConflict, "session is not running")
+			return
+		}
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to enqueue injection")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusAccepted, map[string]any{
+		"injection_id": created.InjectionID,
+		"queued_at":    time.Now().UTC(),
+	})
+}
+
+// ListInjections handles GET /api/v1/sessions/{sessionID}/injections.
+func (h *SessionHandler) ListInjections(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionID")
+
+	sess, err := h.store.GetSession(sessionID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if !h.authorizeSession(r, sess) {
+		httputil.WriteError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	injections, err := h.store.ListInjectionsBySession(r.Context(), sessionID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list injections")
+		return
+	}
+	if injections == nil {
+		injections = []store.Injection{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, injections)
 }
 
 // authorizeSession returns true if the current user is allowed to access the session.

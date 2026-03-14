@@ -19,6 +19,8 @@ import { CredentialsPage } from './views/CredentialsPage.tsx'
 import { TemplatesPage } from './views/TemplatesPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
+import { InjectPanel } from './components/sessions/InjectPanel.tsx'
+import { useSession } from './hooks/useSessions.ts'
 import { useAuthStore } from './stores/auth.ts'
 
 const queryClient = new QueryClient({
@@ -31,8 +33,14 @@ const queryClient = new QueryClient({
 
 function TerminalRoute() {
   const { sessionId } = useParams<{ sessionId: string }>()
+  const { data: session } = useSession(sessionId ?? '')
   if (!sessionId) return null
-  return <TerminalView sessionId={sessionId} className="h-full" />
+  return (
+    <div className="flex flex-col h-full">
+      <TerminalView sessionId={sessionId} className="flex-1 min-h-0" />
+      <InjectPanel sessionId={sessionId} sessionStatus={session?.status ?? ''} />
+    </div>
+  )
 }
 
 function App() {
