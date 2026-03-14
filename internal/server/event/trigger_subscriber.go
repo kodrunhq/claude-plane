@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 )
@@ -80,6 +81,11 @@ func (t *TriggerSubscriber) Handler() HandlerFunc {
 				continue
 			}
 
+			// Filter evaluation: if the trigger has a filter, all keys must match the event payload.
+			if !matchesFilter(trigger.Filter, e.Payload) {
+				continue
+			}
+
 			if err := t.orchestrator.CreateRun(ctx, trigger.JobID, "event_trigger"); err != nil {
 				t.logger.Warn("trigger subscriber: create run failed",
 					"trigger_id", trigger.TriggerID,
@@ -92,6 +98,29 @@ func (t *TriggerSubscriber) Handler() HandlerFunc {
 		}
 		return nil
 	}
+}
+
+// matchesFilter returns true if the event payload satisfies the trigger filter.
+// An empty filter matches everything. The filter is a flat JSON object where
+// every key must exist in the payload with an equal string value.
+func matchesFilter(filter string, payload map[string]any) bool {
+	if filter == "" {
+		return true
+	}
+	var filterMap map[string]string
+	if err := json.Unmarshal([]byte(filter), &filterMap); err != nil {
+		return false
+	}
+	for k, v := range filterMap {
+		payloadVal, ok := payload[k]
+		if !ok {
+			return false
+		}
+		if fmt.Sprintf("%v", payloadVal) != v {
+			return false
+		}
+	}
+	return true
 }
 
 // payloadString safely extracts a string value from a payload map.
