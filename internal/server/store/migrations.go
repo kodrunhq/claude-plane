@@ -322,6 +322,42 @@ CREATE TABLE injections (
 CREATE INDEX idx_injections_session ON injections(session_id, created_at DESC);
 `,
 	},
+	{
+		Version:     7,
+		Description: "api keys and bridge connector config",
+		SQL: `
+CREATE TABLE api_keys (
+    key_id       TEXT PRIMARY KEY,
+    key_hmac     TEXT NOT NULL,
+    user_id      TEXT NOT NULL REFERENCES users(user_id),
+    name         TEXT NOT NULL,
+    scopes       TEXT,
+    expires_at   DATETIME,
+    last_used_at DATETIME,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_api_keys_user ON api_keys(user_id);
+
+CREATE TABLE bridge_connectors (
+    connector_id   TEXT PRIMARY KEY,
+    connector_type TEXT NOT NULL,
+    name           TEXT NOT NULL,
+    enabled        INTEGER NOT NULL DEFAULT 1,
+    config         TEXT NOT NULL,
+    config_secret  BLOB,
+    config_nonce   BLOB,
+    created_by     TEXT NOT NULL REFERENCES users(user_id),
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE bridge_control (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
