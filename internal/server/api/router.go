@@ -96,6 +96,8 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 				r.Get("/sessions", sessionHandler.ListSessions)
 				r.Get("/sessions/{sessionID}", sessionHandler.GetSession)
 				r.Delete("/sessions/{sessionID}", sessionHandler.TerminateSession)
+				r.Post("/sessions/{sessionID}/inject", sessionHandler.InjectSession)
+				r.Get("/sessions/{sessionID}/injections", sessionHandler.ListInjections)
 			}
 		})
 	})

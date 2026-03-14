@@ -16,10 +16,18 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
+
+// noopSubscriber is a minimal event.Subscriber for handler tests.
+type noopSubscriber struct{}
+
+func (n *noopSubscriber) Subscribe(_ string, _ event.HandlerFunc, _ event.SubscriberOptions) func() {
+	return func() {}
+}
 
 // mockMachineStore implements connmgr.MachineStore for tests.
 type mockMachineStore struct{}
@@ -87,11 +95,13 @@ func TestCreateSession(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	body := `{"machine_id":"machine-a","command":"claude","working_dir":"/tmp"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
@@ -142,11 +152,13 @@ func TestListSessions(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create 2 sessions
 	for i := range 2 {
@@ -184,11 +196,13 @@ func TestTerminateSession(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session
 	body := `{"machine_id":"machine-a"}`
@@ -268,11 +282,13 @@ func TestGetSession_AuthorizationNonOwner(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session as user-owner
 	ownerClaims := func(r *http.Request) *session.UserClaims {
@@ -329,11 +345,13 @@ func TestGetSession_AdminCanAccessAny(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session as user-owner
 	ownerClaims := func(r *http.Request) *session.UserClaims {
@@ -381,11 +399,13 @@ func TestListSessions_FiltersByOwnership(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create session as user-a
 	claimsA := func(r *http.Request) *session.UserClaims {
@@ -472,11 +492,13 @@ func setupTemplateTestEnv(t *testing.T, userID string) (
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	getClaims := func(r *http.Request) *session.UserClaims {
 		return &session.UserClaims{UserID: userID, Role: "user"}
@@ -789,11 +811,13 @@ func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session directly in the DB
 	if err := st.CreateSession(&store.Session{
@@ -828,5 +852,236 @@ func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
 	r.ServeHTTP(listW, listReq)
 	if listW.Code != http.StatusUnauthorized {
 		t.Errorf("LIST with nil claims: status = %d, want 401", listW.Code)
+	}
+}
+
+// --- Inject + Injection History Tests ---
+
+// setupInjectTestEnv creates a handler with inject routes, a running session, and a connected agent.
+func setupInjectTestEnv(t *testing.T) (chi.Router, *store.Store, string) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	cm := connmgr.NewConnectionManager(&mockMachineStore{}, nil)
+	reg := session.NewRegistry(slog.Default())
+	recorder := &commandRecorder{}
+
+	createTestUser(t, st, "inject-user")
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
+
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "inject-user", Role: "user"}
+	}
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+
+	// Wire up the injection queue so InjectSession doesn't return 503.
+	injQueue := session.NewInjectionQueue(cm, st, st, &noopSubscriber{}, slog.Default())
+	t.Cleanup(func() { injQueue.Close() })
+	handler.SetInjectionQueue(injQueue)
+
+	// Create a running session directly in the DB.
+	sessionID := "sess-inject-test"
+	if err := st.CreateSession(&store.Session{
+		SessionID: sessionID,
+		MachineID: "machine-a",
+		UserID:    "inject-user",
+		Command:   "claude",
+		Status:    store.StatusRunning,
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/sessions/{sessionID}/inject", handler.InjectSession)
+	r.Get("/api/v1/sessions/{sessionID}/injections", handler.ListInjections)
+
+	return r, st, sessionID
+}
+
+func TestInjectSession_ValidReturns202(t *testing.T) {
+	router, _, sessionID := setupInjectTestEnv(t)
+
+	body := `{"text":"hello world"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sessionID+"/inject", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusAccepted, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["injection_id"] == nil || resp["injection_id"] == "" {
+		t.Error("expected non-empty injection_id in response")
+	}
+	if resp["queued_at"] == nil || resp["queued_at"] == "" {
+		t.Error("expected non-empty queued_at in response")
+	}
+}
+
+func TestInjectSession_NonExistentSession404(t *testing.T) {
+	router, _, _ := setupInjectTestEnv(t)
+
+	body := `{"text":"hello"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/nonexistent-id/inject", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestInjectSession_TerminatedSession409(t *testing.T) {
+	router, st, sessionID := setupInjectTestEnv(t)
+
+	// Terminate the session.
+	if err := st.UpdateSessionStatus(sessionID, store.StatusTerminated); err != nil {
+		t.Fatalf("UpdateSessionStatus: %v", err)
+	}
+
+	body := `{"text":"hello"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sessionID+"/inject", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusConflict, w.Body.String())
+	}
+}
+
+func TestInjectSession_EmptyText400(t *testing.T) {
+	router, _, sessionID := setupInjectTestEnv(t)
+
+	body := `{"text":""}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sessionID+"/inject", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestListInjections_ReturnsInjectionList(t *testing.T) {
+	router, st, sessionID := setupInjectTestEnv(t)
+
+	// Create two injection records directly in the store.
+	for i := range 2 {
+		_, err := st.CreateInjection(context.Background(), &store.Injection{
+			SessionID:  sessionID,
+			UserID:     "inject-user",
+			TextLength: 10 + i,
+			Source:     "api",
+		})
+		if err != nil {
+			t.Fatalf("CreateInjection %d: %v", i, err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID+"/injections", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var injections []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&injections); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(injections) != 2 {
+		t.Errorf("injections count = %d, want 2", len(injections))
+	}
+}
+
+func TestListInjections_EmptyListForNoInjections(t *testing.T) {
+	router, _, sessionID := setupInjectTestEnv(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+sessionID+"/injections", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var injections []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&injections); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(injections) != 0 {
+		t.Errorf("injections count = %d, want 0", len(injections))
+	}
+}
+
+func TestInjectSession_NonOwnerReturns404(t *testing.T) {
+	cm, recorder, st, reg := setupAuthTestEnv(t)
+
+	createTestUser(t, st, "owner-user")
+	createTestUser(t, st, "other-user")
+
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
+
+	// Create a running session owned by owner-user.
+	sessionID := "sess-inject-auth"
+	if err := st.CreateSession(&store.Session{
+		SessionID: sessionID,
+		MachineID: "machine-a",
+		UserID:    "owner-user",
+		Command:   "claude",
+		Status:    store.StatusRunning,
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	// Attempt inject as other-user (non-admin).
+	otherClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "other-user", Role: "user"}
+	}
+	otherHandler := session.NewSessionHandler(st, cm, reg, otherClaims, slog.Default())
+	otherRouter := chi.NewRouter()
+	otherRouter.Post("/api/v1/sessions/{sessionID}/inject", otherHandler.InjectSession)
+
+	body := `{"text":"should not work"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions/"+sessionID+"/inject", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	otherRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("inject by non-owner: status = %d, want 404; body = %s", w.Code, w.Body.String())
 	}
 }
