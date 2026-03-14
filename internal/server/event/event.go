@@ -28,6 +28,11 @@ const (
 	TypeTriggerCron         = "trigger.cron"
 	TypeTriggerWebhook      = "trigger.webhook"
 	TypeTriggerJobCompleted = "trigger.job_completed"
+
+	// Template lifecycle events.
+	TypeTemplateCreated = "template.created"
+	TypeTemplateUpdated = "template.updated"
+	TypeTemplateDeleted = "template.deleted"
 )
 
 // Event is the envelope for all bus messages.

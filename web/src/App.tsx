@@ -16,6 +16,8 @@ import { EventsPage } from './views/EventsPage.tsx'
 import { AdminPage } from './views/AdminPage.tsx'
 import { ProvisioningPage } from './views/ProvisioningPage.tsx'
 import { CredentialsPage } from './views/CredentialsPage.tsx'
+import { TemplatesPage } from './views/TemplatesPage.tsx'
+import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { useAuthStore } from './stores/auth.ts'
 
@@ -71,6 +73,9 @@ function App() {
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/new" element={<JobEditor />} />
             <Route path="/jobs/:id" element={<JobEditor />} />
+            <Route path="/templates" element={<TemplatesPage />} />
+            <Route path="/templates/new" element={<TemplateEditor />} />
+            <Route path="/templates/:id/edit" element={<TemplateEditor />} />
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/runs/:id" element={<RunDetail />} />
             <Route path="/webhooks" element={<WebhooksPage />} />

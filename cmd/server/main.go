@@ -365,6 +365,10 @@ func newServeCmd() *cobra.Command {
 			provisionSvc := provision.NewService(s, cfg.CA.GetCADir(), httpAddr, grpcAddr)
 			provisionHandler := handler.NewProvisionHandler(provisionSvc, s, handlerClaimsGetter)
 
+			// Template handler
+			templateHandler := handler.NewTemplateHandler(s, handlerClaimsGetter)
+			templateHandler.SetPublisher(eventBus)
+
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
 			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler)
@@ -372,6 +376,12 @@ func newServeCmd() *cobra.Command {
 			// Agent binary download endpoint (public, no JWT required).
 			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)
 			agentdl.RegisterRoutes(router, dlHandler)
+
+			// Template routes: JWT-protected, registered after NewRouter (provisionHandler pattern).
+			router.Group(func(r chi.Router) {
+				r.Use(api.JWTAuthMiddleware(authSvc))
+				handler.RegisterTemplateRoutes(r, templateHandler)
+			})
 
 			// Provisioning: JWT-protected route for creating tokens.
 			router.Group(func(r chi.Router) {
