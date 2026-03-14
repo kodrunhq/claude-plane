@@ -37,9 +37,11 @@
 | `internal/server/store/events.go` | Add `ListEventsAfter` cursor-based query |
 | `internal/server/store/events_test.go` | Tests for cursor query |
 | `internal/server/handler/events.go` | Add event feed endpoint |
-| `internal/server/event/event.go` | Add `TypeSessionTerminated` constant |
-| `internal/server/event/builders.go` | Add `NewSessionTerminatedEvent` builder with reason field |
+| `internal/server/event/event.go` | Add `TypeSessionTerminated`, `TypeJobRunStepCompleted`, `TypeJobRunStepFailed` constants |
+| `internal/server/event/builders.go` | Add `NewSessionTerminatedEvent`, `NewRunStepEvent` builders |
 | `internal/server/session/handler.go` | Change `TerminateSession` to emit `TypeSessionTerminated` instead of `TypeSessionExited` |
+| `internal/server/orchestrator/dag_runner.go` | Add `publisher.Publish()` calls for step completed/failed events |
+| `internal/server/config/config.go` | Add `BridgeHealthURL` field for bridge status proxy |
 
 ### Bridge Binary — Create
 | File | Responsibility |
@@ -335,14 +337,28 @@ git commit -m "feat: add bridge connector config and control store"
 - Modify: `internal/server/event/builders.go`
 - Modify: `internal/server/session/handler.go`
 
-- [ ] **Step 1: Add ListEventsAfter store method**
+- [ ] **Step 1: Write failing test for ListEventsAfter**
+
+In `internal/server/store/events_test.go`, add test cases:
+- Insert 5 events with different timestamps, query with cursor after event 2, expect events 3-5
+- Query with empty cursor returns most recent events
+- Query with limit=2 returns only 2 events
+- Compound cursor `"2026-03-14T10:00:00Z|event-uuid"` parsed correctly
+
+Run: `go test -race ./internal/server/store/ -run TestListEventsAfter -v`
+Expected: FAIL
+
+- [ ] **Step 2: Implement ListEventsAfter store method**
 
 Cursor-based query using compound `(timestamp, event_id)`:
 ```go
 func (s *Store) ListEventsAfter(ctx context.Context, afterTimestamp time.Time, afterEventID string, limit int) ([]Event, error)
 ```
 
-- [ ] **Step 2: Add event feed handler**
+Run: `go test -race ./internal/server/store/ -run TestListEventsAfter -v`
+Expected: PASS
+
+- [ ] **Step 3: Add event feed handler**
 
 In `handler/events.go`, add:
 ```go
@@ -369,9 +385,27 @@ func NewSessionTerminatedEvent(sessionID, machineID, reason string) Event {
         "reason":     reason,
     })
 }
+
+func NewRunStepEvent(eventType, runID, runStepID, stepID, status string) Event {
+    return newEvent(eventType, "orchestrator", map[string]any{
+        "run_id":      runID,
+        "run_step_id": runStepID,
+        "step_id":     stepID,
+        "status":      status,
+    })
+}
 ```
 
-- [ ] **Step 4: Fix TerminateSession to use new event type**
+- [ ] **Step 4a: Add publisher.Publish calls for step events in orchestrator**
+
+In `internal/server/orchestrator/dag_runner.go`, where step status is updated to `completed` or `failed`, add:
+```go
+publisher.Publish(ctx, event.NewRunStepEvent(event.TypeJobRunStepCompleted, runID, runStepID, stepID, "completed"))
+// or for failures:
+publisher.Publish(ctx, event.NewRunStepEvent(event.TypeJobRunStepFailed, runID, runStepID, stepID, "failed"))
+```
+
+- [ ] **Step 4b: Fix TerminateSession to use new event type**
 
 In `session/handler.go` line 269, change:
 ```go
@@ -406,10 +440,15 @@ git commit -m "feat: add event feed endpoint and session.terminated event type"
 
 ```go
 type BridgeHandler struct {
-    store     *store.Store
-    getClaims ClaimsGetter
-    encKey    []byte
+    store          *store.Store
+    getClaims      ClaimsGetter
+    encKey         []byte           // from server config encryption_key — must be plumbed via constructor
+    bridgeHealthURL string          // from server config bridge_health_url — for proxying bridge health
 }
+
+// Constructor must receive encKey from server config. If nil, connector secret
+// encryption/decryption will return errors (fail-safe, not fail-silent).
+// bridgeHealthURL is optional — if empty, GET /api/v1/bridge/status omits healthy field.
 
 func RegisterBridgeRoutes(r chi.Router, h *BridgeHandler) {
     r.Post("/api/v1/bridge/connectors", h.CreateConnector)
@@ -426,10 +465,13 @@ func RegisterBridgeRoutes(r chi.Router, h *BridgeHandler) {
 
 - [ ] **Step 2: Refactor NewRouter to use HandlerSet struct**
 
-Replace the growing parameter list with:
+Replace the growing parameter list with a single `HandlerSet` struct. Move `Session`, `WS`, and `EventsWS` into the struct too — eliminate all individual handler parameters:
+
 ```go
 type HandlerSet struct {
     Session    *session.SessionHandler
+    WS         http.HandlerFunc
+    EventsWS   http.HandlerFunc
     Job        *handler.JobHandler
     Run        *handler.RunHandler
     Event      *handler.EventHandler
@@ -444,10 +486,10 @@ type HandlerSet struct {
     Bridge     *handler.BridgeHandler
 }
 
-func NewRouter(h *Handlers, hs HandlerSet, wsHandler, eventsWSHandler http.HandlerFunc) chi.Router
+func NewRouter(h *Handlers, hs HandlerSet) chi.Router
 ```
 
-Update all callers.
+Update all callers of `NewRouter` (server main, tests) to construct `HandlerSet`.
 
 - [ ] **Step 3: Run tests and commit**
 
@@ -489,7 +531,22 @@ type Config struct {
 
 - [ ] **Step 2: Claude-plane API client**
 
-HTTP client with all methods from spec section 5.5. Uses `Authorization: Bearer cpk_...` header. Each method maps to one REST call.
+HTTP client with all methods from spec section 5.5. Uses `Authorization: Bearer cpk_...` header. Each method maps to one REST call. Key methods:
+
+```go
+func (c *Client) ListTemplates(ctx context.Context) ([]SessionTemplate, error)
+func (c *Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
+func (c *Client) InjectSession(ctx context.Context, sessionID string, req InjectRequest) (*InjectionResult, error)
+func (c *Client) ListSessions(ctx context.Context, opts ListSessionsOptions) ([]Session, error)
+func (c *Client) GetSession(ctx context.Context, sessionID string) (*Session, error)
+func (c *Client) KillSession(ctx context.Context, sessionID string) error
+func (c *Client) ListMachines(ctx context.Context) ([]Machine, error)
+func (c *Client) PollEvents(ctx context.Context, afterCursor string) ([]Event, string, error)
+func (c *Client) GetConnectorConfigs(ctx context.Context) ([]ConnectorConfig, error)
+func (c *Client) CheckRestartSignal(ctx context.Context, bootTime time.Time) (bool, error)
+```
+
+`CheckRestartSignal` calls `GET /api/v1/bridge/status`, parses `restart_requested_at` from response, and returns `true` if it is after `bootTime`. Test cases: no restart requested → false; restart before boot → false; restart after boot → true.
 
 - [ ] **Step 3: State persistence**
 

@@ -10,7 +10,9 @@
 
 **Design Spec:** `docs/superpowers/specs/2026-03-14-v2-templates-injection-bridge-design.md` — Section 8
 
-**Depends on:** Phase 3 (bridge core + Telegram) must be complete — uses connector interface, bridge lifecycle, state store, API client.
+**Depends on:** Phase 1 (templates — `useTemplates()` hook used in frontend), Phase 2 (injection — inject endpoint used by bridge), and Phase 3 (bridge core + Telegram — connector interface, bridge lifecycle, state store, API client).
+
+**SDK Decision:** Use `net/http` directly for GitHub REST API calls (no `google/go-github` dependency). GitHub's REST API is simple enough that a thin HTTP client with JSON parsing is cleaner than importing a large SDK. This keeps the bridge binary small and avoids version coupling.
 
 ---
 
@@ -115,10 +117,13 @@ Test cases:
 - [ ] **Step 2: Implement variable extractors**
 
 ```go
-func ExtractPRVariables(pr *github.PullRequest, repo string) map[string]string
-func ExtractCheckRunVariables(cr *github.CheckRun, repo string) map[string]string
-func ExtractIssueVariables(issue *github.Issue, repo string) map[string]string
+// Uses plain structs parsed from GitHub REST API JSON responses (no SDK dependency).
+func ExtractPRVariables(pr PRData, repo string) map[string]string
+func ExtractCheckRunVariables(cr CheckRunData, repo string) map[string]string
+func ExtractIssueVariables(issue IssueData, repo string) map[string]string
 ```
+
+`PRData`, `CheckRunData`, `IssueData` are lightweight structs defined in `variables.go` with only the fields needed for variable extraction. Parsed directly from `json.Decoder`.
 
 Each returns a flat `map[string]string` ready for template variable substitution. `CHECK_OUTPUT` truncated to 4096 bytes.
 
@@ -207,6 +212,14 @@ Test cases:
 - [ ] **Step 2: Implement GitHub connector**
 
 ```go
+// WatchConfig represents a single repository watch parsed from connector config JSON.
+type WatchConfig struct {
+    Repo         string        `json:"repo"`          // "owner/repo"
+    Template     string        `json:"template"`      // template name for session creation
+    PollInterval string        `json:"poll_interval"` // e.g., "60s"
+    Triggers     TriggerConfig `json:"triggers"`
+}
+
 type GitHub struct {
     token    string
     watches  []WatchConfig
@@ -252,15 +265,22 @@ case "github":
     conn, err = github.New(connConfig, b.client, b.state, b.logger)
 ```
 
-- [ ] **Step 2: Build and verify**
+- [ ] **Step 2: Add integration test for GitHub factory path**
+
+In `internal/bridge/bridge_test.go`, add a test case that verifies the factory instantiates a GitHub connector from a connector config with `connector_type: "github"`. Use a mock HTTP server for GitHub API validation.
+
+- [ ] **Step 3: Build and verify**
 
 Run: `go build -o claude-plane-bridge ./cmd/bridge`
 Expected: builds successfully
 
-- [ ] **Step 3: Commit**
+Run: `go test -race ./internal/bridge/ -v`
+Expected: PASS
+
+- [ ] **Step 4: Commit**
 
 ```
-git add internal/bridge/bridge.go
+git add internal/bridge/bridge.go internal/bridge/bridge_test.go
 git commit -m "feat: register GitHub connector in bridge factory"
 ```
 
