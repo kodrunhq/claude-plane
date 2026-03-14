@@ -123,8 +123,8 @@ func TestFormatEvent_Default(t *testing.T) {
 		"key": "value",
 	})
 	got := telegram.FormatEvent(e)
-	// Default must start with the event type header
-	prefix := "📢 *custom.event*\n"
+	// Default must start with the escaped event type header (MarkdownV2)
+	prefix := "📢 *custom\\.event*\n"
 	if len(got) < len(prefix) || got[:len(prefix)] != prefix {
 		t.Errorf("FormatEvent(default) missing prefix\ngot: %q", got)
 	}
