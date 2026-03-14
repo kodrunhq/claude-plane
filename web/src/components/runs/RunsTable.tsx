@@ -11,6 +11,13 @@ interface RunsTableProps {
   onRowClick: (runId: string) => void;
 }
 
+function formatMachineIds(ids: string | undefined): string {
+  if (!ids) return '—';
+  const machines = ids.split(',');
+  if (machines.length === 1) return machines[0].slice(0, 12);
+  return `${machines[0].slice(0, 12)} +${machines.length - 1}`;
+}
+
 export function RunsTable({ runs, showJobName = false, compact = false, onRowClick }: RunsTableProps) {
   if (runs.length === 0) {
     return <EmptyState title="No runs found" description="No runs match the current filters." />;
@@ -58,11 +65,8 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
               <td className="px-4 py-2 text-text-primary">{run.job_name ?? run.job_id.slice(0, 8)}</td>
             )}
             {!compact && (
-              <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={run.machine_id ?? ''}>
-                {run.machine_id ? (run.machine_id.includes(',')
-                  ? `${run.machine_id.split(',')[0].slice(0, 12)} +${run.machine_id.split(',').length - 1}`
-                  : run.machine_id.slice(0, 12))
-                : '—'}
+              <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={run.machine_ids ?? ''}>
+                {formatMachineIds(run.machine_ids)}
               </td>
             )}
             <td className="px-4 py-2 text-text-secondary">{run.trigger_type ?? 'manual'}</td>

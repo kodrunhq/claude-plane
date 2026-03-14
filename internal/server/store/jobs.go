@@ -54,7 +54,7 @@ type ListRunsOptions struct {
 type RunWithJobName struct {
 	Run
 	JobName   string `json:"job_name"`
-	MachineID string `json:"machine_id,omitempty"`
+	MachineIDs string `json:"machine_ids,omitempty"`
 }
 
 // JobWithStats extends Job with computed stats for list views.
@@ -747,7 +747,7 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 			rj.CompletedAt = &endedAt.Time
 		}
 		if machineID.Valid {
-			rj.MachineID = machineID.String
+			rj.MachineIDs = machineID.String
 		}
 		results = append(results, rj)
 	}

@@ -47,7 +47,7 @@ export interface Run {
   started_at?: string;
   completed_at?: string;
   created_at: string;
-  machine_id?: string;      // comma-separated machine IDs from run steps
+  machine_ids?: string;     // comma-separated machine IDs from run steps
 }
 
 export interface ListRunsParams {

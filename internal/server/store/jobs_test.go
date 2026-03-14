@@ -510,3 +510,221 @@ func TestJobStore_DeleteJobCascades(t *testing.T) {
 		t.Errorf("run_steps count = %d, want 0", count)
 	}
 }
+
+func TestJobStore_ListJobsWithStats(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	// Seed machines to satisfy FK constraints
+	if err := s.UpsertMachine("nuc-01", 5); err != nil {
+		t.Fatalf("UpsertMachine nuc-01: %v", err)
+	}
+	if err := s.UpsertMachine("nuc-02", 5); err != nil {
+		t.Fatalf("UpsertMachine nuc-02: %v", err)
+	}
+
+	jobA, err := s.CreateJob(ctx, "Job A", "desc A", "")
+	if err != nil {
+		t.Fatalf("CreateJob A: %v", err)
+	}
+	if _, err := s.CreateJob(ctx, "Job B", "", ""); err != nil {
+		t.Fatalf("CreateJob B: %v", err)
+	}
+
+	// Add steps with machine_id to job A
+	stepA, err := s.CreateStep(ctx, CreateStepParams{
+		JobID: jobA.JobID, Name: "step1", MachineID: "nuc-01", SortOrder: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateStep 1: %v", err)
+	}
+	if _, err := s.CreateStep(ctx, CreateStepParams{
+		JobID: jobA.JobID, Name: "step2", MachineID: "nuc-02", SortOrder: 2,
+	}); err != nil {
+		t.Fatalf("CreateStep 2: %v", err)
+	}
+
+	// Add a run to job A so last_run_status is populated
+	run, err := s.CreateRun(ctx, jobA.JobID, "manual")
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	if err := s.InsertRunSteps(ctx, run.RunID, []Step{*stepA}); err != nil {
+		t.Fatalf("InsertRunSteps: %v", err)
+	}
+	if err := s.UpdateRunStatus(ctx, run.RunID, StatusCompleted); err != nil {
+		t.Fatalf("UpdateRunStatus: %v", err)
+	}
+
+	// Add a cron schedule to job A
+	_, _ = s.CreateSchedule(ctx, CreateScheduleParams{
+		JobID: jobA.JobID, CronExpr: "0 * * * *",
+	})
+
+	// List all jobs (admin view)
+	jobs, err := s.ListJobsWithStats(ctx, "")
+	if err != nil {
+		t.Fatalf("ListJobsWithStats: %v", err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("count = %d, want 2", len(jobs))
+	}
+
+	// Jobs are ordered by created_at DESC, so jobB is first
+	var jA, jB *JobWithStats
+	for i := range jobs {
+		if jobs[i].JobID == jobA.JobID {
+			jA = &jobs[i]
+		} else {
+			jB = &jobs[i]
+		}
+	}
+
+	// Job A: 2 steps, completed, cron trigger, two machines
+	if jA.StepCount != 2 {
+		t.Errorf("jobA StepCount = %d, want 2", jA.StepCount)
+	}
+	if jA.LastRunStatus != StatusCompleted {
+		t.Errorf("jobA LastRunStatus = %q, want %q", jA.LastRunStatus, StatusCompleted)
+	}
+	if jA.TriggerType != "cron" {
+		t.Errorf("jobA TriggerType = %q, want %q", jA.TriggerType, "cron")
+	}
+	// machine_ids should contain both nuc-01 and nuc-02
+	if jA.MachineIDs == "" {
+		t.Error("jobA MachineIDs is empty, want nuc-01,nuc-02")
+	}
+
+	// Job B: 0 steps, no runs, manual trigger
+	if jB.StepCount != 0 {
+		t.Errorf("jobB StepCount = %d, want 0", jB.StepCount)
+	}
+	if jB.LastRunStatus != "" {
+		t.Errorf("jobB LastRunStatus = %q, want empty", jB.LastRunStatus)
+	}
+	if jB.TriggerType != "manual" {
+		t.Errorf("jobB TriggerType = %q, want %q", jB.TriggerType, "manual")
+	}
+
+	// User filtering with empty userID returns all
+	allJobs, err := s.ListJobsWithStats(ctx, "")
+	if err != nil {
+		t.Fatalf("ListJobsWithStats empty user: %v", err)
+	}
+	if len(allJobs) != 2 {
+		t.Errorf("empty user filter count = %d, want 2", len(allJobs))
+	}
+}
+
+func TestJobStore_ListJobsWithStats_TriggerTypes(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	// Job with event trigger only
+	jobEvent, _ := s.CreateJob(ctx, "Event Job", "", "")
+	_, _ = s.CreateJobTrigger(ctx, JobTrigger{
+		JobID: jobEvent.JobID, EventType: "run.completed", Enabled: true,
+	})
+
+	// Job with both cron and event trigger
+	jobMixed, _ := s.CreateJob(ctx, "Mixed Job", "", "")
+	_, _ = s.CreateSchedule(ctx, CreateScheduleParams{
+		JobID: jobMixed.JobID, CronExpr: "0 0 * * *",
+	})
+	_, _ = s.CreateJobTrigger(ctx, JobTrigger{
+		JobID: jobMixed.JobID, EventType: "session.started", Enabled: true,
+	})
+
+	jobs, err := s.ListJobsWithStats(ctx, "")
+	if err != nil {
+		t.Fatalf("ListJobsWithStats: %v", err)
+	}
+
+	triggerTypes := make(map[string]string)
+	for _, j := range jobs {
+		triggerTypes[j.Name] = j.TriggerType
+	}
+
+	if triggerTypes["Event Job"] != "event" {
+		t.Errorf("Event Job trigger = %q, want %q", triggerTypes["Event Job"], "event")
+	}
+	if triggerTypes["Mixed Job"] != "mixed" {
+		t.Errorf("Mixed Job trigger = %q, want %q", triggerTypes["Mixed Job"], "mixed")
+	}
+}
+
+func TestJobStore_ListAllRuns_IncludesMachineIDs(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	// Seed machines for FK
+	_ = s.UpsertMachine("nuc-01", 5)
+	_ = s.UpsertMachine("nuc-02", 5)
+
+	job, err := s.CreateJob(ctx, "Job", "", "")
+	if err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+	step1, err := s.CreateStep(ctx, CreateStepParams{
+		JobID: job.JobID, Name: "s1", MachineID: "nuc-01", SortOrder: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateStep 1: %v", err)
+	}
+	step2, err := s.CreateStep(ctx, CreateStepParams{
+		JobID: job.JobID, Name: "s2", MachineID: "nuc-02", SortOrder: 2,
+	})
+	if err != nil {
+		t.Fatalf("CreateStep 2: %v", err)
+	}
+
+	run, err := s.CreateRun(ctx, job.JobID, "manual")
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	_ = s.InsertRunSteps(ctx, run.RunID, []Step{*step1, *step2})
+
+	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	if err != nil {
+		t.Fatalf("ListAllRuns: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("count = %d, want 1", len(runs))
+	}
+
+	// MachineIDs should be a comma-separated list of distinct machine IDs
+	ids := runs[0].MachineIDs
+	if ids == "" {
+		t.Fatal("MachineIDs is empty, want nuc-01,nuc-02")
+	}
+	// GROUP_CONCAT order is not guaranteed, so check both are present
+	if !(contains(ids, "nuc-01") && contains(ids, "nuc-02")) {
+		t.Errorf("MachineIDs = %q, want to contain both nuc-01 and nuc-02", ids)
+	}
+
+	// Run without run_steps should have empty MachineIDs
+	run2, err := s.CreateRun(ctx, job.JobID, "manual")
+	if err != nil {
+		t.Fatalf("CreateRun 2: %v", err)
+	}
+
+	runs, _ = s.ListAllRuns(ctx, ListRunsOptions{})
+	for _, r := range runs {
+		if r.RunID == run2.RunID && r.MachineIDs != "" {
+			t.Errorf("run without steps: MachineIDs = %q, want empty", r.MachineIDs)
+		}
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
+}
+
+func containsSubstr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
