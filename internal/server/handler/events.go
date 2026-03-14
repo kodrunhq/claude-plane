@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,7 @@ const (
 // EventQueryStore is the read interface required by EventHandler.
 type EventQueryStore interface {
 	ListEvents(ctx context.Context, filter store.EventFilter) ([]event.Event, error)
+	ListEventsAfter(ctx context.Context, afterTimestamp time.Time, afterEventID string, limit int) ([]event.Event, error)
 }
 
 // EventHandler handles REST endpoints for querying the event audit trail.
@@ -34,6 +36,7 @@ func NewEventHandler(store EventQueryStore) *EventHandler {
 // RegisterEventRoutes mounts all event-related routes on the given router.
 func RegisterEventRoutes(r chi.Router, h *EventHandler) {
 	r.Get("/api/v1/events", h.ListEvents)
+	r.Get("/api/v1/events/feed", h.Feed)
 }
 
 // ListEvents handles GET /api/v1/events.
@@ -100,4 +103,78 @@ func (h *EventHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, events)
+}
+
+// feedResponse is the JSON envelope returned by Feed.
+type feedResponse struct {
+	Events     []event.Event `json:"events"`
+	NextCursor string        `json:"next_cursor"`
+}
+
+// Feed handles GET /api/v1/events/feed.
+//
+// Query parameters:
+//   - after — compound cursor "timestamp|event_id" (RFC3339 timestamp, optional)
+//   - limit — max results (default 100, max 500)
+//
+// Response: { "events": [...], "next_cursor": "timestamp|event_id" }
+// next_cursor is empty when no events were returned.
+func (h *EventHandler) Feed(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	var afterTimestamp time.Time
+	var afterEventID string
+
+	if afterStr := q.Get("after"); afterStr != "" {
+		parts := strings.SplitN(afterStr, "|", 2)
+		if len(parts) != 2 {
+			writeError(w, http.StatusBadRequest, "invalid 'after' cursor: expected format 'timestamp|event_id'")
+			return
+		}
+		ts, err := time.Parse(time.RFC3339Nano, parts[0])
+		if err != nil {
+			// Try RFC3339 without nanoseconds.
+			ts, err = time.Parse(time.RFC3339, parts[0])
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid 'after' cursor: timestamp must be RFC3339 format")
+				return
+			}
+		}
+		afterTimestamp = ts
+		afterEventID = parts[1]
+	}
+
+	limit := 100
+	if limitStr := q.Get("limit"); limitStr != "" {
+		v, err := strconv.Atoi(limitStr)
+		if err != nil || v < 1 {
+			writeError(w, http.StatusBadRequest, "invalid 'limit' parameter: must be a positive integer")
+			return
+		}
+		if v > maxEventsLimit {
+			v = maxEventsLimit
+		}
+		limit = v
+	}
+
+	events, err := h.store.ListEventsAfter(r.Context(), afterTimestamp, afterEventID, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if events == nil {
+		events = []event.Event{}
+	}
+
+	var nextCursor string
+	if len(events) > 0 {
+		last := events[len(events)-1]
+		nextCursor = last.Timestamp.UTC().Format(time.RFC3339Nano) + "|" + last.EventID
+	}
+
+	writeJSON(w, http.StatusOK, feedResponse{
+		Events:     events,
+		NextCursor: nextCursor,
+	})
 }

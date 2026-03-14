@@ -281,6 +281,7 @@ func TestDAGRunner_CancelBeforeStart(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		func(runID, status string) {},
 	)
 

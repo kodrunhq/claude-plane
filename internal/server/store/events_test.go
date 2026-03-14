@@ -300,3 +300,92 @@ func TestPurgeEvents_NoneToDelete(t *testing.T) {
 		t.Errorf("PurgeEvents deleted = %d, want 0", n)
 	}
 }
+
+// TestListEventsAfter_Cursor inserts 5 events and verifies that querying with
+// the cursor pointing to event 2 returns events 3-5.
+func TestListEventsAfter_Cursor(t *testing.T) {
+	s := newTestStoreForEvents(t)
+	ctx := context.Background()
+
+	base := time.Now().UTC().Truncate(time.Second)
+	events := make([]event.Event, 5)
+	for i := range events {
+		e := makeEvent(event.TypeRunCreated, "orchestrator")
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
+		if err := s.InsertEvent(ctx, e); err != nil {
+			t.Fatalf("InsertEvent %d: %v", i, err)
+		}
+		events[i] = e
+	}
+
+	// Cursor after event index 1 (the second event).
+	afterTS := events[1].Timestamp
+	afterID := events[1].EventID
+
+	result, err := s.ListEventsAfter(ctx, afterTS, afterID, 100)
+	if err != nil {
+		t.Fatalf("ListEventsAfter: %v", err)
+	}
+	if len(result) != 3 {
+		t.Fatalf("count = %d, want 3", len(result))
+	}
+	for i, got := range result {
+		want := events[i+2]
+		if got.EventID != want.EventID {
+			t.Errorf("result[%d] EventID = %q, want %q", i, got.EventID, want.EventID)
+		}
+	}
+}
+
+// TestListEventsAfter_ZeroCursor verifies that a zero cursor returns the most
+// recent events in ascending order.
+func TestListEventsAfter_ZeroCursor(t *testing.T) {
+	s := newTestStoreForEvents(t)
+	ctx := context.Background()
+
+	base := time.Now().UTC().Truncate(time.Second)
+	for i := 0; i < 5; i++ {
+		e := makeEvent(event.TypeRunCreated, "orchestrator")
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
+		if err := s.InsertEvent(ctx, e); err != nil {
+			t.Fatalf("InsertEvent %d: %v", i, err)
+		}
+	}
+
+	result, err := s.ListEventsAfter(ctx, time.Time{}, "", 100)
+	if err != nil {
+		t.Fatalf("ListEventsAfter: %v", err)
+	}
+	if len(result) != 5 {
+		t.Errorf("count = %d, want 5", len(result))
+	}
+	// Verify ascending order.
+	for i := 1; i < len(result); i++ {
+		if result[i].Timestamp.Before(result[i-1].Timestamp) {
+			t.Errorf("results not in ascending order at index %d", i)
+		}
+	}
+}
+
+// TestListEventsAfter_Limit verifies that the limit parameter is respected.
+func TestListEventsAfter_Limit(t *testing.T) {
+	s := newTestStoreForEvents(t)
+	ctx := context.Background()
+
+	base := time.Now().UTC().Truncate(time.Second)
+	for i := 0; i < 5; i++ {
+		e := makeEvent(event.TypeRunCreated, "orchestrator")
+		e.Timestamp = base.Add(time.Duration(i) * time.Second)
+		if err := s.InsertEvent(ctx, e); err != nil {
+			t.Fatalf("InsertEvent %d: %v", i, err)
+		}
+	}
+
+	result, err := s.ListEventsAfter(ctx, time.Time{}, "", 2)
+	if err != nil {
+		t.Fatalf("ListEventsAfter: %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("count = %d, want 2", len(result))
+	}
+}

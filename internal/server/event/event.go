@@ -34,6 +34,10 @@ const (
 	TypeTemplateCreated = "template.created"
 	TypeTemplateUpdated = "template.updated"
 	TypeTemplateDeleted = "template.deleted"
+
+	// Run step events.
+	TypeJobRunStepCompleted = "run.step.completed"
+	TypeJobRunStepFailed    = "run.step.failed"
 )
 
 // Event is the envelope for all bus messages.

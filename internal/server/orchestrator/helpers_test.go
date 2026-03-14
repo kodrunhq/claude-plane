@@ -121,7 +121,7 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 		close(tr.done)
 	}
 
-	tr.dag = NewDAGRunner(runID, runSteps, deps, executor, nil, onComplete)
+	tr.dag = NewDAGRunner(runID, runSteps, deps, executor, nil, nil, onComplete)
 	return tr
 }
 

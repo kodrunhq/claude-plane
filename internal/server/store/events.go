@@ -128,6 +128,61 @@ func (s *Store) PurgeEvents(ctx context.Context, before time.Time) (int64, error
 	return n, nil
 }
 
+const defaultFeedLimit = 100
+
+// ListEventsAfter returns up to limit events after the given cursor point,
+// ordered ASC (oldest first). The cursor is compound (afterTimestamp, afterEventID)
+// to handle timestamp ties. If afterTimestamp is zero and afterEventID is empty,
+// returns the most recent limit events ordered ASC. Default limit: 100.
+func (s *Store) ListEventsAfter(ctx context.Context, afterTimestamp time.Time, afterEventID string, limit int) ([]event.Event, error) {
+	if limit <= 0 {
+		limit = defaultFeedLimit
+	}
+
+	var (
+		rows *sql.Rows
+		err  error
+	)
+
+	if afterTimestamp.IsZero() && afterEventID == "" {
+		// No cursor: return the most recent limit events, then re-order ASC.
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT event_id, event_type, timestamp, source, payload FROM (
+				SELECT event_id, event_type, timestamp, source, payload FROM events
+				ORDER BY timestamp DESC, event_id DESC
+				LIMIT ?
+			) ORDER BY timestamp ASC, event_id ASC`,
+			limit,
+		)
+	} else {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT event_id, event_type, timestamp, source, payload FROM events
+			WHERE (timestamp > ? OR (timestamp = ? AND event_id > ?))
+			ORDER BY timestamp ASC, event_id ASC
+			LIMIT ?`,
+			afterTimestamp.UTC(), afterTimestamp.UTC(), afterEventID, limit,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list events after: %w", err)
+	}
+	defer rows.Close()
+
+	var events []event.Event
+	for rows.Next() {
+		var e event.Event
+		var payloadStr string
+		if err := rows.Scan(&e.EventID, &e.Type, &e.Timestamp, &e.Source, &payloadStr); err != nil {
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		if err := json.Unmarshal([]byte(payloadStr), &e.Payload); err != nil {
+			return nil, fmt.Errorf("unmarshal event payload: %w", err)
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
 // escapeForLIKE escapes SQL LIKE special characters in s so that they are
 // treated as literals. The caller must add ESCAPE '\' to the LIKE clause.
 func escapeForLIKE(s string) string {
