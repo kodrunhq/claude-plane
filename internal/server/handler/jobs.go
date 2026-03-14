@@ -129,22 +129,22 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListJobs handles GET /api/v1/jobs.
+// Returns jobs enriched with step_count and last_run_status.
 func (h *JobHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	c := h.claims(r)
 
-	var jobs []store.Job
-	var err error
+	userID := ""
 	if c != nil && c.Role != "admin" {
-		jobs, err = h.store.ListJobsByUser(r.Context(), c.UserID)
-	} else {
-		jobs, err = h.store.ListJobs(r.Context())
+		userID = c.UserID
 	}
+
+	jobs, err := h.store.ListJobsWithStats(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	if jobs == nil {
-		jobs = []store.Job{}
+		jobs = []store.JobWithStats{}
 	}
 	writeJSON(w, http.StatusOK, jobs)
 }

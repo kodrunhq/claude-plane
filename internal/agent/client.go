@@ -28,6 +28,8 @@ type SessionProvider interface {
 	StartRelay(sendCh chan<- *pb.AgentEvent)
 	// StopRelay stops the event relay.
 	StopRelay()
+	// ActiveSessionCount returns the number of active sessions.
+	ActiveSessionCount() int32
 }
 
 // AgentClient manages the gRPC connection to the server with reconnection.
@@ -166,6 +168,13 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 		c.sessions.StartRelay(sendCh)
 	}
 
+	// Periodic health reporting goroutine.
+	healthCtx, healthCancel := context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.sendHealthEvents(healthCtx, sendCh)
+	}()
 	// Receive loop: dispatch server commands.
 	var recvErr error
 	for {
@@ -182,7 +191,8 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 		}
 	}
 
-	// Cleanup: stop relay, close sendCh, wait for sender goroutine.
+	// Cleanup: stop health reporting, relay, close sendCh, wait for goroutines.
+	healthCancel()
 	if c.sessions != nil {
 		c.sessions.StopRelay()
 	}
@@ -206,6 +216,48 @@ func (c *AgentClient) waitWithBackoff(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// sendHealthEvents periodically sends health metrics to the server.
+func (c *AgentClient) sendHealthEvents(ctx context.Context, sendCh chan<- *pb.AgentEvent) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Send an initial health event immediately on connect.
+	c.emitHealthEvent(sendCh)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.emitHealthEvent(sendCh)
+		}
+	}
+}
+
+func (c *AgentClient) emitHealthEvent(sendCh chan<- *pb.AgentEvent) {
+	var activeSessions int32
+	if c.sessions != nil {
+		activeSessions = c.sessions.ActiveSessionCount()
+	}
+	res := CollectResources(activeSessions, int32(c.cfg.Agent.MaxSessions))
+	evt := &pb.AgentEvent{
+		Event: &pb.AgentEvent_Health{
+			Health: &pb.HealthEvent{
+				CpuCores:        res.CPUCores,
+				MemoryTotalMb:   res.TotalMemoryMB,
+				MemoryUsedMb:    res.UsedMemoryMB,
+				ActiveSessions:  res.ActiveSessions,
+				MaxSessions:     res.MaxSessions,
+			},
+		},
+	}
+	select {
+	case sendCh <- evt:
+	default:
+		c.logger.Debug("send channel full, dropping health event")
 	}
 }
 

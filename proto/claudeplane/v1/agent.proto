@@ -139,6 +139,9 @@ message HealthEvent {
   int64 disk_free_bytes = 3;
   int32 active_sessions = 4;
   int32 max_sessions = 5;
+  int32 cpu_cores = 6;
+  int64 memory_total_mb = 7;
+  int64 memory_used_mb = 8;
 }
 
 message ScrollbackChunkEvent {

@@ -504,5 +504,12 @@ func (sm *SessionManager) StopRelay() {
 	sm.relayMu.Unlock()
 }
 
+// ActiveSessionCount returns the number of active sessions.
+func (sm *SessionManager) ActiveSessionCount() int32 {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return int32(len(sm.sessions))
+}
+
 // Compile-time interface check.
 var _ SessionProvider = (*SessionManager)(nil)

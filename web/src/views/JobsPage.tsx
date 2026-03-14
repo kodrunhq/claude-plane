@@ -1,10 +1,11 @@
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Play, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Play, AlertCircle, RefreshCw, Search } from 'lucide-react';
 import { useJobs, useTriggerRun } from '../hooks/useJobs.ts';
 import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
-import { ScheduleIndicator } from '../components/jobs/ScheduleIndicator.tsx';
 import { toast } from 'sonner';
+import type { Job } from '../types/job.ts';
 
 const statusColors: Record<string, string> = {
   pending: 'text-gray-400',
@@ -14,10 +15,59 @@ const statusColors: Record<string, string> = {
   cancelled: 'text-yellow-400',
 };
 
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'running', label: 'Running' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+const SELECT_CLASS =
+  'rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary';
+
+function TriggerBadge({ type }: { type: string }) {
+  const styles: Record<string, string> = {
+    manual: 'bg-gray-500/20 text-gray-400',
+    cron: 'bg-blue-500/20 text-blue-400',
+    event: 'bg-purple-500/20 text-purple-400',
+    mixed: 'bg-amber-500/20 text-amber-400',
+  };
+  return (
+    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${styles[type] ?? styles.manual}`}>
+      {type}
+    </span>
+  );
+}
+
+function formatMachineIds(ids: string | undefined): string {
+  if (!ids) return '—';
+  const machines = ids.split(',');
+  if (machines.length === 1) return machines[0].slice(0, 12);
+  return `${machines[0].slice(0, 12)} +${machines.length - 1}`;
+}
+
 export function JobsPage() {
   const navigate = useNavigate();
   const { data: jobs, isLoading, error, refetch } = useJobs();
   const triggerRun = useTriggerRun();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const filteredJobs = useMemo(() => {
+    if (!jobs) return [];
+    return jobs.filter((job: Job) => {
+      const matchesSearch =
+        searchQuery === '' ||
+        job.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.job_id.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus =
+        statusFilter === 'all' || job.last_run_status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [jobs, searchQuery, statusFilter]);
 
   async function handleRun(e: React.MouseEvent, jobId: string) {
     e.stopPropagation();
@@ -63,6 +113,29 @@ export function JobsPage() {
         </button>
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+          <input
+            type="text"
+            placeholder="Search by name or ID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-9 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/50"
+          />
+        </div>
+        <div>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={SELECT_CLASS}>
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }, (_, i) => (
@@ -72,47 +145,83 @@ export function JobsPage() {
             </div>
           ))}
         </div>
-      ) : !jobs || jobs.length === 0 ? (
-        <EmptyState title="No jobs yet" description="Create your first job to get started." />
+      ) : filteredJobs.length === 0 ? (
+        <EmptyState
+          title={jobs && jobs.length > 0 ? 'No matching jobs' : 'No jobs yet'}
+          description={jobs && jobs.length > 0 ? 'Try adjusting your search or filters.' : 'Create your first job to get started.'}
+        />
       ) : (
-        <div className="space-y-2">
-          {jobs.map((job) => (
-            <div
-              key={job.job_id}
-              onClick={() => navigate(`/jobs/${job.job_id}`)}
-              className="bg-bg-secondary rounded-lg p-4 flex items-center gap-4 cursor-pointer hover:bg-bg-tertiary/50 transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-text-primary truncate">
-                    {job.name}
-                  </span>
-                  <span className="text-xs text-text-secondary">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
+              <th className="px-4 py-2">Name</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Steps</th>
+              <th className="px-4 py-2">Machine</th>
+              <th className="px-4 py-2">Trigger</th>
+              <th className="px-4 py-2">Created</th>
+              <th className="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredJobs.map((job: Job) => (
+              <tr
+                key={job.job_id}
+                onClick={() => navigate(`/jobs/${job.job_id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/jobs/${job.job_id}`);
+                  }
+                }}
+                tabIndex={0}
+                role="button"
+                className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-border-primary/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
+              >
+                <td className="px-4 py-2">
+                  <div className="text-text-primary font-medium truncate">{job.name}</div>
+                  {job.description && (
+                    <div className="text-xs text-text-secondary truncate mt-0.5">{job.description}</div>
+                  )}
+                  <div className="font-mono text-xs text-text-secondary/60 mt-0.5" title={job.job_id}>
                     {truncateId(job.job_id)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-1 text-xs text-text-secondary">
-                  <span>{job.step_count ?? 0} steps</span>
-                  {job.last_run_status && (
-                    <span className={statusColors[job.last_run_status] ?? 'text-gray-400'}>
+                  </div>
+                </td>
+                <td className="px-4 py-2">
+                  {job.last_run_status ? (
+                    <span className={`text-xs ${statusColors[job.last_run_status] ?? 'text-gray-400'}`}>
                       {job.last_run_status}
                     </span>
+                  ) : (
+                    <span className="text-xs text-text-secondary/40">—</span>
                   )}
-                  <ScheduleIndicator jobId={job.job_id} />
-                  <span>{formatTimeAgo(job.created_at)}</span>
-                </div>
-              </div>
-              <button
-                onClick={(e) => handleRun(e, job.job_id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors shrink-0"
-                title="Run job"
-              >
-                <Play size={14} />
-                Run
-              </button>
-            </div>
-          ))}
-        </div>
+                </td>
+                <td className="px-4 py-2 text-text-secondary">
+                  {job.step_count ?? 0}
+                </td>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={job.machine_ids ?? ''}>
+                  {formatMachineIds(job.machine_ids)}
+                </td>
+                <td className="px-4 py-2">
+                  <TriggerBadge type={job.trigger_type ?? 'manual'} />
+                </td>
+                <td className="px-4 py-2 text-text-secondary">
+                  {formatTimeAgo(job.created_at)}
+                </td>
+                <td className="px-4 py-2">
+                  <button
+                    onClick={(e) => handleRun(e, job.job_id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors shrink-0"
+                    title="Run job"
+                  >
+                    <Play size={14} />
+                    Run
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );

@@ -19,10 +19,11 @@ import (
 // noopSessionProvider is a no-op SessionProvider for tests.
 type noopSessionProvider struct{}
 
-func (n *noopSessionProvider) GetStates() []*pb.SessionState        { return nil }
-func (n *noopSessionProvider) HandleCommand(cmd *pb.ServerCommand)   {}
+func (n *noopSessionProvider) GetStates() []*pb.SessionState          { return nil }
+func (n *noopSessionProvider) HandleCommand(cmd *pb.ServerCommand)     {}
 func (n *noopSessionProvider) StartRelay(sendCh chan<- *pb.AgentEvent) {}
-func (n *noopSessionProvider) StopRelay()                            {}
+func (n *noopSessionProvider) StopRelay()                              {}
+func (n *noopSessionProvider) ActiveSessionCount() int32               { return 0 }
 
 // setupTestEnv generates CA, server, and agent certs and returns paths + config.
 func setupTestEnv(t *testing.T, machineID string) (caDir, serverDir string, agentCfg *config.AgentConfig) {

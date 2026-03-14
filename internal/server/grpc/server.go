@@ -270,6 +270,21 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				}
 			}
 
+			// Handle health events — store in the connected agent's in-memory state.
+			if health := res.event.GetHealth(); health != nil {
+				if s.agentConnMgr != nil {
+					if agent := s.agentConnMgr.GetAgent(machineID); agent != nil {
+						agent.UpdateHealth(&connmgr.HealthInfo{
+							CPUCores:       health.GetCpuCores(),
+							MemoryTotalMB:  health.GetMemoryTotalMb(),
+							MemoryUsedMB:   health.GetMemoryUsedMb(),
+							ActiveSessions: health.GetActiveSessions(),
+							MaxSessions:    health.GetMaxSessions(),
+						})
+					}
+				}
+			}
+
 			// Handle session lifecycle events to update DB status.
 			if ss := res.event.GetSessionStatus(); ss != nil {
 				if s.sessionStore != nil {

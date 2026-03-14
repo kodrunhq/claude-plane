@@ -13,7 +13,7 @@ const STATUS_OPTIONS = ['all', 'running', 'created', 'completed', 'failed', 'ter
 export function SessionsPage() {
   const navigate = useNavigate();
 
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('running');
   const [machineFilter, setMachineFilter] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [terminateId, setTerminateId] = useState<string | null>(null);

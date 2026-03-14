@@ -11,12 +11,21 @@ import (
 
 // machineResponse is the JSON representation of a machine for API responses.
 type machineResponse struct {
-	MachineID   string     `json:"machine_id"`
-	DisplayName string     `json:"display_name"`
-	Status      string     `json:"status"`
-	MaxSessions int32      `json:"max_sessions"`
-	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	MachineID      string              `json:"machine_id"`
+	DisplayName    string              `json:"display_name"`
+	Status         string              `json:"status"`
+	MaxSessions    int32               `json:"max_sessions"`
+	LastSeenAt     *time.Time          `json:"last_seen_at,omitempty"`
+	CreatedAt      time.Time           `json:"created_at"`
+	Health         *machineHealthResponse `json:"health,omitempty"`
+}
+
+type machineHealthResponse struct {
+	CPUCores       int32 `json:"cpu_cores"`
+	MemoryTotalMB  int64 `json:"memory_total_mb"`
+	MemoryUsedMB   int64 `json:"memory_used_mb"`
+	ActiveSessions int32 `json:"active_sessions"`
+	MaxSessions    int32 `json:"max_sessions"`
 }
 
 // ListMachines handles GET /api/v1/machines.
@@ -39,11 +48,20 @@ func (h *Handlers) ListMachines(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:   m.CreatedAt,
 		}
 
-		// Overlay live status from connection manager
+		// Overlay live status and health from connection manager
 		if agent := h.connMgr.GetAgent(m.MachineID); agent != nil {
 			resp.Status = "connected"
 			now := time.Now()
 			resp.LastSeenAt = &now
+			if hi := agent.GetHealth(); hi != nil {
+				resp.Health = &machineHealthResponse{
+					CPUCores:       hi.CPUCores,
+					MemoryTotalMB:  hi.MemoryTotalMB,
+					MemoryUsedMB:   hi.MemoryUsedMB,
+					ActiveSessions: hi.ActiveSessions,
+					MaxSessions:    hi.MaxSessions,
+				}
+			}
 		}
 
 		result = append(result, resp)
@@ -76,11 +94,20 @@ func (h *Handlers) GetMachine(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   machine.CreatedAt,
 	}
 
-	// Overlay live status from connection manager
+	// Overlay live status and health from connection manager
 	if agent := h.connMgr.GetAgent(machine.MachineID); agent != nil {
 		resp.Status = "connected"
 		now := time.Now()
 		resp.LastSeenAt = &now
+		if hi := agent.GetHealth(); hi != nil {
+			resp.Health = &machineHealthResponse{
+				CPUCores:       hi.CPUCores,
+				MemoryTotalMB:  hi.MemoryTotalMB,
+				MemoryUsedMB:   hi.MemoryUsedMB,
+				ActiveSessions: hi.ActiveSessions,
+				MaxSessions:    hi.MaxSessions,
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)
