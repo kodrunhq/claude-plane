@@ -4,6 +4,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -208,15 +209,18 @@ func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 
 // addStepRequest is the JSON body for POST /api/v1/jobs/{jobID}/steps.
 type addStepRequest struct {
-	Name           string `json:"name"`
-	Prompt         string `json:"prompt"`
-	MachineID      string `json:"machine_id"`
-	WorkingDir     string `json:"working_dir"`
-	Command        string `json:"command"`
-	Args           string `json:"args"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	SortOrder      int    `json:"sort_order"`
-	OnFailure      string `json:"on_failure"`
+	Name            string `json:"name"`
+	Prompt          string `json:"prompt"`
+	MachineID       string `json:"machine_id"`
+	WorkingDir      string `json:"working_dir"`
+	Command         string `json:"command"`
+	Args            string `json:"args"`
+	TimeoutSeconds  int    `json:"timeout_seconds"`
+	SortOrder       int    `json:"sort_order"`
+	OnFailure       string `json:"on_failure"`
+	SkipPermissions *int   `json:"skip_permissions"`
+	Model           string `json:"model"`
+	DelaySeconds    int    `json:"delay_seconds"`
 }
 
 // AddStep handles POST /api/v1/jobs/{jobID}/steps.
@@ -238,12 +242,31 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		req.Command = "claude"
 	}
 
+	// Default step name from current step count when empty.
+	if req.Name == "" {
+		req.Name = fmt.Sprintf("Step %d", len(detail.Steps)+1)
+	}
+
+	// Validate model.
+	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" {
+		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku")
+		return
+	}
+
+	// Validate delay.
+	if req.DelaySeconds < 0 || req.DelaySeconds > 86400 {
+		writeError(w, http.StatusBadRequest, "delay_seconds must be between 0 and 86400")
+		return
+	}
+
 	step, err := h.store.CreateStep(r.Context(), store.CreateStepParams{
 		JobID: detail.Job.JobID, Name: req.Name, Prompt: req.Prompt,
 		MachineID: req.MachineID, WorkingDir: req.WorkingDir,
 		Command: req.Command, Args: req.Args,
 		TimeoutSeconds: req.TimeoutSeconds, SortOrder: req.SortOrder,
 		OnFailure: req.OnFailure,
+		SkipPermissions: req.SkipPermissions, Model: req.Model,
+		DelaySeconds: req.DelaySeconds,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -254,15 +277,18 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 
 // updateStepRequest is the JSON body for PUT /api/v1/jobs/{jobID}/steps/{stepID}.
 type updateStepRequest struct {
-	Name           string `json:"name"`
-	Prompt         string `json:"prompt"`
-	MachineID      string `json:"machine_id"`
-	WorkingDir     string `json:"working_dir"`
-	Command        string `json:"command"`
-	Args           string `json:"args"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	SortOrder      int    `json:"sort_order"`
-	OnFailure      string `json:"on_failure"`
+	Name            string `json:"name"`
+	Prompt          string `json:"prompt"`
+	MachineID       string `json:"machine_id"`
+	WorkingDir      string `json:"working_dir"`
+	Command         string `json:"command"`
+	Args            string `json:"args"`
+	TimeoutSeconds  int    `json:"timeout_seconds"`
+	SortOrder       int    `json:"sort_order"`
+	OnFailure       string `json:"on_failure"`
+	SkipPermissions *int   `json:"skip_permissions"`
+	Model           string `json:"model"`
+	DelaySeconds    int    `json:"delay_seconds"`
 }
 
 // UpdateStep handles PUT /api/v1/jobs/{jobID}/steps/{stepID}.
@@ -289,12 +315,26 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		req.Command = "claude"
 	}
 
+	// Validate model.
+	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" {
+		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku")
+		return
+	}
+
+	// Validate delay.
+	if req.DelaySeconds < 0 || req.DelaySeconds > 86400 {
+		writeError(w, http.StatusBadRequest, "delay_seconds must be between 0 and 86400")
+		return
+	}
+
 	err := h.store.UpdateStep(r.Context(), store.UpdateStepParams{
 		StepID: stepID, Name: req.Name, Prompt: req.Prompt,
 		MachineID: req.MachineID, WorkingDir: req.WorkingDir,
 		Command: req.Command, Args: req.Args,
 		TimeoutSeconds: req.TimeoutSeconds, SortOrder: req.SortOrder,
 		OnFailure: req.OnFailure,
+		SkipPermissions: req.SkipPermissions, Model: req.Model,
+		DelaySeconds: req.DelaySeconds,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

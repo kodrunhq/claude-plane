@@ -79,16 +79,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		return nil, fmt.Errorf("get run steps: %w", err)
 	}
 
-	// Populate OnFailure from the original steps
-	onFailureMap := make(map[string]string)
-	for _, s := range steps {
-		onFailureMap[s.StepID] = s.OnFailure
-	}
-	for i := range detail.RunSteps {
-		if of, ok := onFailureMap[detail.RunSteps[i].StepID]; ok {
-			detail.RunSteps[i].OnFailure = of
-		}
-	}
+	// OnFailure is now populated from on_failure_snapshot by GetRunWithSteps.
 
 	// Build and start DAGRunner
 	capturedJobID := jobID
@@ -179,20 +170,7 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		return fmt.Errorf("re-read run: %w", err)
 	}
 
-	// Get on_failure from original steps
-	steps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID)
-	if err != nil {
-		return fmt.Errorf("get steps for on_failure: %w", err)
-	}
-	onFailureMap := make(map[string]string)
-	for _, s := range steps {
-		onFailureMap[s.StepID] = s.OnFailure
-	}
-	for i := range detail.RunSteps {
-		if of, ok := onFailureMap[detail.RunSteps[i].StepID]; ok {
-			detail.RunSteps[i].OnFailure = of
-		}
-	}
+	// OnFailure is now populated from on_failure_snapshot by GetRunWithSteps.
 
 	// Build new DAGRunner from current DB state
 	retryJobID := detail.Run.JobID

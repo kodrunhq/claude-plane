@@ -24,6 +24,9 @@ export interface Step {
   timeout_seconds?: number;
   sort_order?: number;
   on_failure?: string;
+  skip_permissions?: number | null;
+  model?: string;
+  delay_seconds?: number;
 }
 
 export interface StepDependency {
@@ -86,6 +89,9 @@ export interface CreateStepParams {
   working_dir?: string;
   command?: string;
   args?: string;
+  skip_permissions?: number | null;
+  model?: string;
+  delay_seconds?: number;
 }
 
 export interface UpdateStepParams {
@@ -95,4 +101,7 @@ export interface UpdateStepParams {
   working_dir?: string;
   command?: string;
   args?: string;
+  skip_permissions?: number | null;
+  model?: string;
+  delay_seconds?: number;
 }

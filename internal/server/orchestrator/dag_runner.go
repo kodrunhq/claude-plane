@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
@@ -124,7 +125,30 @@ func (d *DAGRunner) Start(parentCtx context.Context) {
 	d.mu.Unlock()
 
 	for _, step := range toLaunch {
-		d.executor.ExecuteStep(ctx, step, d.OnStepCompleted)
+		d.launchStep(ctx, step)
+	}
+}
+
+// launchStep starts a step, applying any configured delay before execution.
+// If DelaySecondsSnapshot > 0, the step waits in a goroutine before calling
+// ExecuteStep, respecting context cancellation during the wait.
+func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
+	delay := time.Duration(rs.DelaySecondsSnapshot) * time.Second
+	if delay > 0 {
+		go func() {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
+			case <-ctx.Done():
+				// Step was marked running before delay started; signal completion
+				// so the DAG runner can transition it to cancelled/failed.
+				d.OnStepCompleted(rs.StepID, 1)
+			}
+		}()
+	} else {
+		go d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 	}
 }
 
@@ -151,10 +175,10 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		rs.Status = store.StatusFailed
 		ec := exitCode
 		rs.ExitCode = &ec
+		d.failed = true
 		d.updateRunStepInDB(rs.RunStepID, store.StatusFailed, "", exitCode)
 
 		if rs.OnFailure == "fail_run" {
-			d.failed = true
 			// Mark remaining pending steps as skipped
 			for _, s := range d.steps {
 				if s.Status == store.StatusPending {
@@ -226,14 +250,18 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 
 	// Launch outside the lock to prevent deadlocks
 	for _, step := range toLaunch {
-		d.executor.ExecuteStep(ctx, step, d.OnStepCompleted)
+		d.launchStep(ctx, step)
 	}
 }
 
-// Cancel stops the DAGRunner context. Safe to call before Start().
+// Cancel stops the DAGRunner context. Safe to call before Start() and
+// concurrently with Start().
 func (d *DAGRunner) Cancel() {
-	if d.cancel != nil {
-		d.cancel()
+	d.mu.Lock()
+	cancel := d.cancel
+	d.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
