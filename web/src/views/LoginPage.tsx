@@ -22,15 +22,31 @@ export function LoginPage() {
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-bg-primary">
-      <div className="w-full max-w-sm p-8 rounded-lg bg-bg-secondary border border-gray-700">
-        <h1 className="text-xl font-semibold text-text-primary tracking-wide font-mono text-center mb-6">
-          claude-plane
-        </h1>
+    <div className="h-screen flex items-center justify-center bg-bg-primary relative overflow-hidden">
+      {/* Background glow effects */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-accent-primary/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent-purple/5 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-sm p-8 rounded-xl bg-bg-secondary border border-border-primary shadow-2xl">
+        <div className="text-center mb-8">
+          <h1
+            className="text-2xl font-bold tracking-wide font-mono"
+            style={{
+              background: 'linear-gradient(135deg, #3b82f6, #06b6d4, #a855f7)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            claude-plane
+          </h1>
+          <p className="text-xs text-text-secondary mt-2">Control Plane for Claude CLI</p>
+        </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-sm text-text-secondary">
+            <label htmlFor="email" className="text-sm text-text-secondary font-medium">
               Email
             </label>
             <input
@@ -39,14 +55,14 @@ export function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="px-3 py-2 rounded-md bg-bg-primary border border-gray-700 text-text-primary text-sm placeholder:text-text-secondary/50 focus:outline-none focus:border-accent-primary transition-colors"
+              className="px-3 py-2.5 rounded-lg bg-bg-primary border border-border-primary text-text-primary text-sm placeholder:text-text-secondary/40 focus:outline-none focus:border-accent-primary focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] transition-all"
               placeholder="admin@localhost"
               autoFocus
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-sm text-text-secondary">
+            <label htmlFor="password" className="text-sm text-text-secondary font-medium">
               Password
             </label>
             <input
@@ -55,7 +71,7 @@ export function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="px-3 py-2 rounded-md bg-bg-primary border border-gray-700 text-text-primary text-sm placeholder:text-text-secondary/50 focus:outline-none focus:border-accent-primary transition-colors"
+              className="px-3 py-2.5 rounded-lg bg-bg-primary border border-border-primary text-text-primary text-sm placeholder:text-text-secondary/40 focus:outline-none focus:border-accent-primary focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] transition-all"
             />
           </div>
 
@@ -66,7 +82,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 px-4 py-2 rounded-md bg-accent-primary text-bg-primary text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+            className="mt-2 px-4 py-2.5 rounded-lg bg-accent-primary text-white text-sm font-medium hover:bg-accent-primary/90 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] disabled:opacity-50 disabled:hover:shadow-none transition-all"
           >
             {submitting ? 'Signing in...' : 'Sign in'}
           </button>
