@@ -7,6 +7,7 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -68,8 +69,22 @@ func (b *Bridge) Run(ctx context.Context) error {
 func (b *Bridge) RunWithInterval(ctx context.Context, pollInterval time.Duration) error {
 	b.bootTime = time.Now()
 
+	// Apply default health address if not configured.
+	if b.healthAddr == "" {
+		b.healthAddr = "localhost:9091"
+		b.logger.Warn("health address not configured, defaulting to localhost:9091")
+	}
+
 	// Start the health HTTP server.
-	healthSrv := b.startHealthServer()
+	healthSrv, healthErrCh := b.startHealthServer()
+
+	// Give the health server 100 ms to confirm it bound successfully.
+	select {
+	case err := <-healthErrCh:
+		return err
+	case <-time.After(100 * time.Millisecond):
+		b.logger.Info("health server started", "addr", b.healthAddr)
+	}
 
 	// Derive a child context so we can cancel connectors independently.
 	connCtx, cancelConn := context.WithCancel(ctx)
@@ -141,8 +156,9 @@ loop:
 }
 
 // startHealthServer creates and starts the HTTP health endpoint in a goroutine.
-// It returns the *http.Server so the caller can shut it down cleanly.
-func (b *Bridge) startHealthServer() *http.Server {
+// It returns the *http.Server so the caller can shut it down cleanly, and a
+// buffered error channel that receives any startup failure.
+func (b *Bridge) startHealthServer() (*http.Server, <-chan error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", b.handleHealthz)
 
@@ -151,13 +167,14 @@ func (b *Bridge) startHealthServer() *http.Server {
 		Handler: mux,
 	}
 
+	errCh := make(chan error, 1)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			b.logger.Error("health server error", "error", err)
+			errCh <- fmt.Errorf("health server failed to start on %s: %w", b.healthAddr, err)
 		}
 	}()
 
-	return srv
+	return srv, errCh
 }
 
 // handleHealthz writes a JSON health response including per-connector status.
