@@ -377,8 +377,8 @@ func TestGitHub_Start_SessionCreation_UsesTemplateAndMachine(t *testing.T) {
 		t.Errorf("MachineID = %q, want %q", req.MachineID, "worker-1")
 	}
 	// Variables should include PR_NUMBER.
-	if req.Vars["PR_NUMBER"] != "42" {
-		t.Errorf("Vars[PR_NUMBER] = %q, want 42", req.Vars["PR_NUMBER"])
+	if req.Variables["PR_NUMBER"] != "42" {
+		t.Errorf("Variables[PR_NUMBER] = %q, want 42", req.Variables["PR_NUMBER"])
 	}
 }
 

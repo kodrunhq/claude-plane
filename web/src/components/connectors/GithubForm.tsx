@@ -60,6 +60,7 @@ function hydrateWatches(raw: unknown): WatchData[] {
     }
 
     return {
+      id: `watch-hydrated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       repo: String(item.repo ?? ''),
       template: String(item.template ?? ''),
       machine_id: String(item.machine_id ?? ''),
@@ -237,7 +238,7 @@ export function GithubForm({ connector, onClose, onSaved }: GithubFormProps) {
               <div className="flex flex-col gap-3">
                 {watches.map((watch, i) => (
                   <WatchEditor
-                    key={i}
+                    key={watch.id}
                     index={i}
                     watch={watch}
                     onChange={(updated) => updateWatch(i, updated)}

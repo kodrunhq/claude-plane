@@ -41,7 +41,7 @@ type CreateSessionRequest struct {
 	InitialPrompt string            `json:"initial_prompt,omitempty"`
 	TemplateID    string            `json:"template_id,omitempty"`
 	TemplateName  string            `json:"template_name,omitempty"`
-	Vars          map[string]string `json:"vars,omitempty"`
+	Variables     map[string]string `json:"variables,omitempty"`
 }
 
 // InjectRequest is the payload for injecting text into a running session.

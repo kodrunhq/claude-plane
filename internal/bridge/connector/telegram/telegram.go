@@ -356,7 +356,7 @@ func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
 	req := client.CreateSessionRequest{
 		MachineID:  machineID,
 		TemplateID: templateID,
-		Vars:       cmd.Vars,
+		Variables:  cmd.Vars,
 	}
 	session, err := t.apiClient.CreateSession(ctx, req)
 	if err != nil {

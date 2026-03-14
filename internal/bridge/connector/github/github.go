@@ -43,7 +43,8 @@ type GitHub struct {
 	stateStore  *state.Store
 	logger      *slog.Logger
 	healthy     atomic.Bool
-	apiBase     string // GitHub API base URL (for testing)
+	apiBase     string       // GitHub API base URL (for testing)
+	httpClient  *http.Client // shared HTTP client for GitHub API calls
 }
 
 // New creates a new GitHub connector. The connectorID is used to namespace
@@ -59,6 +60,7 @@ func New(connectorID string, cfg Config, apiClient *client.Client, stateStore *s
 		stateStore:  stateStore,
 		logger:      logger,
 		apiBase:     defaultAPIBase,
+		httpClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -180,7 +182,7 @@ func (g *GitHub) createSession(ctx context.Context, watch WatchConfig, event Mat
 	req := client.CreateSessionRequest{
 		TemplateName: event.Template,
 		MachineID:    watch.MachineID,
-		Vars:         event.Variables,
+		Variables:    event.Variables,
 	}
 
 	_, err := g.apiClient.CreateSession(ctx, req)
@@ -213,7 +215,7 @@ func (g *GitHub) validateToken(ctx context.Context) (string, error) {
 	req.Header.Set("Authorization", "token "+g.config.Token)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := g.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("GET /user: %w", err)
 	}

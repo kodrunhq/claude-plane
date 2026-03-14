@@ -4,6 +4,7 @@ import { TriggerConfig } from './TriggerConfig.tsx';
 import type { TriggerFilters } from './TriggerConfig.tsx';
 
 export interface WatchData {
+  id: string;  // stable unique key for React rendering
   repo: string;
   template: string;
   machine_id: string;
