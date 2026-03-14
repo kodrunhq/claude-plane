@@ -201,6 +201,25 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 		return
 	}
 
+	// Re-check session status before delivery (mitigates Enqueue TOCTOU race).
+	sess, err := q.sessionStore.GetSession(sessionID)
+	if err != nil {
+		q.logger.Warn("failed to check session status before delivery",
+			"session_id", sessionID, "injection_id", item.InjectionID, "error", err)
+		return
+	}
+	if isTerminalStatus(sess.Status) {
+		q.logger.Info("session terminated before injection delivery",
+			"session_id", sessionID, "injection_id", item.InjectionID)
+		if err := q.auditStore.UpdateInjectionFailed(
+			context.Background(), item.InjectionID, "session terminated",
+		); err != nil {
+			q.logger.Error("failed to mark injection failed",
+				"injection_id", item.InjectionID, "error", err)
+		}
+		return
+	}
+
 	if item.DelayMs > 0 {
 		timer := time.NewTimer(time.Duration(item.DelayMs) * time.Millisecond)
 		select {
