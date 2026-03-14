@@ -173,7 +173,8 @@ func (h *BridgeHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	withSecrets := httputil.IsAPIKeyAuth(r)
+	c := h.getClaims(r)
+	withSecrets := httputil.IsAPIKeyAuth(r) && c != nil && c.HasScope("connectors:read_secret")
 
 	resp := make([]connectorResponse, 0, len(connectors))
 	for i := range connectors {
@@ -202,8 +203,9 @@ func (h *BridgeHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 
 	connectorID := chi.URLParam(r, "connectorID")
 
-	if httputil.IsAPIKeyAuth(r) {
-		c, secretJSON, err := h.store.GetConnectorWithSecret(r.Context(), connectorID, h.encKey)
+	c := h.getClaims(r)
+	if httputil.IsAPIKeyAuth(r) && c != nil && c.HasScope("connectors:read_secret") {
+		full, secretJSON, err := h.store.GetConnectorWithSecret(r.Context(), connectorID, h.encKey)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeError(w, http.StatusNotFound, "connector not found")
@@ -212,11 +214,11 @@ func (h *BridgeHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeJSON(w, http.StatusOK, toConnectorResponse(c, secretJSON))
+		writeJSON(w, http.StatusOK, toConnectorResponse(full, secretJSON))
 		return
 	}
 
-	c, err := h.store.GetConnector(r.Context(), connectorID)
+	connector, err := h.store.GetConnector(r.Context(), connectorID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "connector not found")
@@ -226,7 +228,7 @@ func (h *BridgeHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toConnectorResponse(c, nil))
+	writeJSON(w, http.StatusOK, toConnectorResponse(connector, nil))
 }
 
 // UpdateConnector handles PUT /api/v1/bridge/connectors/{connectorID}.

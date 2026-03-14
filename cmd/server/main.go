@@ -136,7 +136,7 @@ func newServeCmd() *cobra.Command {
 				if c == nil {
 					return nil
 				}
-				return &handler.UserClaims{UserID: c.UserID, Role: c.Role}
+				return &handler.UserClaims{UserID: c.UserID, Role: c.Role, Scopes: c.Scopes}
 			}
 
 			// Step executor — creates real PTY sessions on agents.

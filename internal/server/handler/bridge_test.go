@@ -162,11 +162,18 @@ func TestBridgeHandler_ListConnectors(t *testing.T) {
 	}
 }
 
-func TestBridgeHandler_ListConnectors_APIKeyAuth_IncludesSecrets(t *testing.T) {
+// claimsMiddlewareWithScopes injects a ClaimsGetter that returns fixed claims with scopes.
+func claimsMiddlewareWithScopes(userID, role string, scopes []string) handler.ClaimsGetter {
+	return func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: userID, Role: role, Scopes: scopes}
+	}
+}
+
+func TestBridgeHandler_ListConnectors_APIKeyAuth_WithScope_IncludesSecrets(t *testing.T) {
 	s := newTestStore(t)
 	userID := "bridge-user-5"
 	seedUser(t, s, userID, "admin")
-	h := handler.NewBridgeHandler(s, claimsMiddleware(userID, "admin"), testEncKey)
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"connectors:read_secret"}), testEncKey)
 	r := chi.NewRouter()
 	// Simulate API key auth by setting the context flag the middleware would set.
 	r.Use(func(next http.Handler) http.Handler {
@@ -211,7 +218,151 @@ func TestBridgeHandler_ListConnectors_APIKeyAuth_IncludesSecrets(t *testing.T) {
 
 	secret, ok := result[0]["config_secret"].(string)
 	if !ok || secret == "" {
-		t.Error("expected config_secret in response for API key auth")
+		t.Error("expected config_secret in response for API key auth with connectors:read_secret scope")
+	}
+}
+
+func TestBridgeHandler_ListConnectors_APIKeyAuth_WithoutScope_HidesSecrets(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-user-5b"
+	seedUser(t, s, userID, "admin")
+	// API key auth but no connectors:read_secret scope
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"jobs:read"}), testEncKey)
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := httputil.SetAPIKeyAuth(r.Context())
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+	handler.RegisterBridgeRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	c := &store.BridgeConnector{
+		ConnectorType: "telegram",
+		Name:          "No Scope Bot",
+		Enabled:       true,
+		Config:        "{}",
+		CreatedBy:     userID,
+	}
+	_, err := s.CreateConnector(t.Context(), c, []byte(`{"bot_token":"hidden-token"}`), testEncKey)
+	if err != nil {
+		t.Fatalf("CreateConnector: %v", err)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/v1/bridge/connectors")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result []map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 connector, got %d", len(result))
+	}
+
+	if result[0]["config_secret"] != nil {
+		t.Error("config_secret must not appear for API key without connectors:read_secret scope")
+	}
+}
+
+func TestBridgeHandler_GetConnector_APIKeyAuth_WithScope_IncludesSecrets(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-user-5c"
+	seedUser(t, s, userID, "admin")
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"connectors:read_secret"}), testEncKey)
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := httputil.SetAPIKeyAuth(r.Context())
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+	handler.RegisterBridgeRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	c := &store.BridgeConnector{
+		ConnectorType: "github",
+		Name:          "Scoped GitHub",
+		Enabled:       true,
+		Config:        "{}",
+		CreatedBy:     userID,
+	}
+	created, err := s.CreateConnector(t.Context(), c, []byte(`{"pat":"ghp_secret123"}`), testEncKey)
+	if err != nil {
+		t.Fatalf("CreateConnector: %v", err)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/v1/bridge/connectors/" + created.ConnectorID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	secret, ok := result["config_secret"].(string)
+	if !ok || secret == "" {
+		t.Error("expected config_secret in response for API key auth with connectors:read_secret scope")
+	}
+}
+
+func TestBridgeHandler_GetConnector_APIKeyAuth_WithoutScope_HidesSecrets(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-user-5d"
+	seedUser(t, s, userID, "admin")
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", nil), testEncKey)
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := httputil.SetAPIKeyAuth(r.Context())
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+	handler.RegisterBridgeRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	c := &store.BridgeConnector{
+		ConnectorType: "github",
+		Name:          "No Scope GitHub",
+		Enabled:       true,
+		Config:        "{}",
+		CreatedBy:     userID,
+	}
+	created, err := s.CreateConnector(t.Context(), c, []byte(`{"pat":"ghp_hidden"}`), testEncKey)
+	if err != nil {
+		t.Fatalf("CreateConnector: %v", err)
+	}
+
+	resp, err := http.Get(srv.URL + "/api/v1/bridge/connectors/" + created.ConnectorID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	if result["config_secret"] != nil {
+		t.Error("config_secret must not appear for API key without connectors:read_secret scope")
 	}
 }
 
