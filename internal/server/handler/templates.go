@@ -15,8 +15,8 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
-// varPattern matches template variable placeholders like {{VAR_NAME}}.
-var varPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+// varPattern matches template variable placeholders like ${VAR_NAME}.
+var varPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
 // validVarName matches uppercase identifiers: starts with A-Z, then A-Z0-9_.
 var validVarName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
@@ -103,6 +103,12 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if req.TerminalRows <= 0 {
+		req.TerminalRows = 24
+	}
+	if req.TerminalCols <= 0 {
+		req.TerminalCols = 80
+	}
 
 	if msg := validatePromptVars(req.InitialPrompt); msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
@@ -116,7 +122,11 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Check for duplicate name for the same user.
 	existing, err := h.store.GetTemplateByName(r.Context(), userID, req.Name)
-	if err == nil && existing != nil {
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if existing != nil {
 		writeError(w, http.StatusConflict, "template name already exists")
 		return
 	}
@@ -225,6 +235,12 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if req.TerminalRows <= 0 {
+		req.TerminalRows = 24
+	}
+	if req.TerminalCols <= 0 {
+		req.TerminalCols = 80
+	}
 
 	if msg := validatePromptVars(req.InitialPrompt); msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
@@ -312,7 +328,7 @@ func (h *TemplateHandler) Clone(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, cloned)
 }
 
-// validatePromptVars checks that all {{VAR}} placeholders in a prompt use valid names.
+// validatePromptVars checks that all ${VAR} placeholders in a prompt use valid names.
 func validatePromptVars(prompt string) string {
 	if prompt == "" {
 		return ""
