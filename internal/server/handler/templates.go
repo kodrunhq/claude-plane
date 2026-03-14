@@ -72,6 +72,7 @@ func (h *TemplateHandler) publish(eventType, templateID, userID string) {
 func RegisterTemplateRoutes(r chi.Router, h *TemplateHandler) {
 	r.Post("/api/v1/templates", h.Create)
 	r.Get("/api/v1/templates", h.List)
+	r.Get("/api/v1/templates/by-name/{name}", h.GetByName)
 	r.Get("/api/v1/templates/{templateID}", h.Get)
 	r.Put("/api/v1/templates/{templateID}", h.Update)
 	r.Delete("/api/v1/templates/{templateID}", h.Delete)
@@ -81,6 +82,7 @@ func RegisterTemplateRoutes(r chi.Router, h *TemplateHandler) {
 // createTemplateRequest is the JSON body for POST /api/v1/templates.
 type createTemplateRequest struct {
 	Name           string            `json:"name"`
+	MachineID      string            `json:"machine_id,omitempty"`
 	Description    string            `json:"description,omitempty"`
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
@@ -135,6 +137,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tmpl := &store.SessionTemplate{
 		UserID:         userID,
 		Name:           req.Name,
+		MachineID:      req.MachineID,
 		Description:    req.Description,
 		Command:        req.Command,
 		Args:           req.Args,
@@ -204,9 +207,38 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tmpl)
 }
 
+// GetByName handles GET /api/v1/templates/by-name/{name}.
+func (h *TemplateHandler) GetByName(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	userID := ""
+	if c := h.claims(r); c != nil {
+		userID = c.UserID
+	}
+
+	tmpl, err := h.store.GetTemplateByName(r.Context(), userID, name)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "template not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if !h.authorizeTemplate(w, r, tmpl) {
+		return
+	}
+	writeJSON(w, http.StatusOK, tmpl)
+}
+
 // updateTemplateRequest is the JSON body for PUT /api/v1/templates/{templateID}.
 type updateTemplateRequest struct {
 	Name           string            `json:"name"`
+	MachineID      string            `json:"machine_id,omitempty"`
 	Description    string            `json:"description,omitempty"`
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
@@ -258,6 +290,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.store.UpdateTemplate(r.Context(), templateID, &store.SessionTemplate{
 		Name:           req.Name,
+		MachineID:      req.MachineID,
 		Description:    req.Description,
 		Command:        req.Command,
 		Args:           req.Args,

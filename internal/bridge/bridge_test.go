@@ -3,6 +3,7 @@ package bridge_test
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -216,6 +217,76 @@ func TestBridge_HealthEndpoint(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// TestBridge_EmptyHealthAddrDefaults verifies that an empty health address is
+// replaced with the default "localhost:9091" before the server starts.
+func TestBridge_EmptyHealthAddrDefaults(t *testing.T) {
+	t.Parallel()
+
+	apiClient := &mockAPIClient{restartResult: false}
+	// Pass empty health address — bridge must default to localhost:9091.
+	b := newTestBridge(t, apiClient, "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.RunWithInterval(ctx, time.Hour)
+	}()
+
+	// Give the bridge time to apply the default and start the health server.
+	time.Sleep(200 * time.Millisecond)
+
+	// The health server should be reachable on the default address.
+	resp, err := http.Get("http://localhost:9091/healthz")
+	if err != nil {
+		cancel()
+		<-done
+		t.Fatalf("health server not reachable on default address: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		cancel()
+		<-done
+		t.Fatalf("expected 200 from /healthz on default addr, got %d", resp.StatusCode)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned unexpected error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after context cancellation")
+	}
+}
+
+// TestBridge_InvalidHealthAddrReturnsError verifies that an address that cannot
+// be bound causes RunWithInterval to return an error rather than silently ignoring it.
+func TestBridge_InvalidHealthAddrReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// Hold a port so the bridge cannot bind to it.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to grab a port: %v", err)
+	}
+	defer ln.Close()
+	busyAddr := ln.Addr().String()
+
+	apiClient := &mockAPIClient{restartResult: false}
+	b := newTestBridge(t, apiClient, busyAddr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	runErr := b.RunWithInterval(ctx, time.Hour)
+	if runErr == nil {
+		t.Fatal("expected an error when health server cannot bind, got nil")
+	}
 }
 
 // TestBridge_MultipleConnectors verifies all connectors are started.

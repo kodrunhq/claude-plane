@@ -66,6 +66,15 @@ func (s *Store) UpdateInjectionDelivered(ctx context.Context, injectionID string
 	return nil
 }
 
+// UpdateInjectionFailed clears delivered_at and records the failure reason in metadata.
+func (s *Store) UpdateInjectionFailed(ctx context.Context, injectionID string, reason string) error {
+	_, err := s.writer.ExecContext(ctx,
+		`UPDATE injections SET delivered_at = NULL, metadata = json_set(COALESCE(metadata, '{}'), '$.failure_reason', ?) WHERE injection_id = ?`,
+		reason, injectionID,
+	)
+	return err
+}
+
 // ListInjectionsBySession returns all injections for a session ordered by created_at DESC.
 func (s *Store) ListInjectionsBySession(ctx context.Context, sessionID string) ([]Injection, error) {
 	rows, err := s.reader.QueryContext(ctx,

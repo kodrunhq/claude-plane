@@ -25,16 +25,20 @@ type RetentionCleaner struct {
 	logger *slog.Logger
 }
 
-// NewRetentionCleaner creates a RetentionCleaner with default period (1 hour)
-// and maxAge (7 days). If logger is nil, slog.Default() is used.
-func NewRetentionCleaner(store RetentionStore, logger *slog.Logger) *RetentionCleaner {
+// NewRetentionCleaner creates a RetentionCleaner with default period (1 hour).
+// maxAge controls how old events must be before they are purged; if <= 0 the
+// default of 7 days is used. If logger is nil, slog.Default() is used.
+func NewRetentionCleaner(store RetentionStore, maxAge time.Duration, logger *slog.Logger) *RetentionCleaner {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if maxAge <= 0 {
+		maxAge = defaultMaxAge
 	}
 	return &RetentionCleaner{
 		store:  store,
 		period: defaultRetentionPeriod,
-		maxAge: defaultMaxAge,
+		maxAge: maxAge,
 		logger: logger,
 	}
 }

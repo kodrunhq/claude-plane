@@ -18,9 +18,20 @@ const SessionCookieName = "session_token"
 // Claims represents the JWT claims issued by the claude-plane server.
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID string `json:"uid"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
+	UserID string   `json:"uid"`
+	Email  string   `json:"email"`
+	Role   string   `json:"role"`
+	Scopes []string `json:"scopes,omitempty"`
+}
+
+// HasScope reports whether the claims include the given scope.
+func (c *Claims) HasScope(scope string) bool {
+	for _, s := range c.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
 }
 
 // TokenRevoker defines the interface for checking and adding token revocations.

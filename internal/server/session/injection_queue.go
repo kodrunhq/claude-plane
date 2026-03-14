@@ -29,6 +29,7 @@ var ErrSessionNotRunning = errors.New("session not running")
 // InjectionAuditStore is the narrow interface for injection audit operations.
 type InjectionAuditStore interface {
 	UpdateInjectionDelivered(ctx context.Context, injectionID string, deliveredAt time.Time) error
+	UpdateInjectionFailed(ctx context.Context, injectionID string, reason string) error
 }
 
 // SessionStatusChecker matches store.GetSession (no context param).
@@ -41,6 +42,7 @@ type SessionStatusChecker interface {
 // gets a dedicated drainer goroutine that forwards items to the agent.
 type InjectionQueue struct {
 	mu           sync.Mutex
+	wg           sync.WaitGroup
 	queues       map[string]*sessionQueue
 	connMgr      *connmgr.ConnectionManager
 	auditStore   InjectionAuditStore
@@ -136,6 +138,7 @@ func (q *InjectionQueue) getOrCreateQueue(sessionID, machineID string) *sessionQ
 		machineID: machineID,
 	}
 	q.queues[sessionID] = sq
+	q.wg.Add(1)
 	go q.drainSession(sessionID, sq)
 	return sq
 }
@@ -144,6 +147,7 @@ func (q *InjectionQueue) getOrCreateQueue(sessionID, machineID string) *sessionQ
 // via gRPC. It exits when the done channel is closed, the idle timeout fires,
 // or the queue is garbage-collected.
 func (q *InjectionQueue) drainSession(sessionID string, sq *sessionQueue) {
+	defer q.wg.Done()
 	defer q.removeQueue(sessionID)
 
 	idleTimer := time.NewTimer(q.idleTimeout)
@@ -167,6 +171,7 @@ func (q *InjectionQueue) drainSession(sessionID string, sq *sessionQueue) {
 			q.processItem(sessionID, sq.machineID, item, sq)
 
 		case <-sq.done:
+			q.drainRemaining(sessionID, sq)
 			return
 
 		case <-idleTimer.C:
@@ -196,6 +201,25 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 		return
 	}
 
+	// Re-check session status before delivery (mitigates Enqueue TOCTOU race).
+	sess, err := q.sessionStore.GetSession(sessionID)
+	if err != nil {
+		q.logger.Warn("failed to check session status before delivery",
+			"session_id", sessionID, "injection_id", item.InjectionID, "error", err)
+		return
+	}
+	if isTerminalStatus(sess.Status) {
+		q.logger.Info("session terminated before injection delivery",
+			"session_id", sessionID, "injection_id", item.InjectionID)
+		if err := q.auditStore.UpdateInjectionFailed(
+			context.Background(), item.InjectionID, "session terminated",
+		); err != nil {
+			q.logger.Error("failed to mark injection failed",
+				"injection_id", item.InjectionID, "error", err)
+		}
+		return
+	}
+
 	if item.DelayMs > 0 {
 		timer := time.NewTimer(time.Duration(item.DelayMs) * time.Millisecond)
 		select {
@@ -203,7 +227,14 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 			// delay elapsed, proceed
 		case <-sq.done:
 			timer.Stop()
-			return // session terminated during delay
+			// Mark as failed — item was already dequeued so drainRemaining won't see it.
+			if err := q.auditStore.UpdateInjectionFailed(
+				context.Background(), item.InjectionID, "queue shutdown",
+			); err != nil {
+				q.logger.Error("failed to mark injection failed",
+					"injection_id", item.InjectionID, "error", err)
+			}
+			return
 		}
 	}
 
@@ -233,6 +264,27 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 	if err := q.auditStore.UpdateInjectionDelivered(context.Background(), item.InjectionID, deliveredAt); err != nil {
 		q.logger.Error("failed to update injection delivery",
 			"injection_id", item.InjectionID, "error", err)
+	}
+}
+
+// drainRemaining reads any buffered items from the session queue and marks
+// each as failed. Called during shutdown to avoid silently discarding items.
+func (q *InjectionQueue) drainRemaining(sessionID string, sq *sessionQueue) {
+	for {
+		select {
+		case item, ok := <-sq.items:
+			if !ok {
+				return
+			}
+			q.logger.Warn("marking buffered injection as failed on shutdown",
+				"session_id", sessionID, "injection_id", item.InjectionID)
+			if err := q.auditStore.UpdateInjectionFailed(context.Background(), item.InjectionID, "queue shutdown"); err != nil {
+				q.logger.Error("failed to mark injection as failed",
+					"injection_id", item.InjectionID, "error", err)
+			}
+		default:
+			return
+		}
 	}
 }
 
@@ -281,6 +333,8 @@ func (q *InjectionQueue) Close() {
 	for _, sq := range queues {
 		sq.closeOnce.Do(func() { close(sq.done) })
 	}
+
+	q.wg.Wait()
 }
 
 // isTerminalStatus returns true if the session status indicates it has ended.

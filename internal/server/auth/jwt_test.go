@@ -209,6 +209,30 @@ func TestIssueTokenUniqueness(t *testing.T) {
 	}
 }
 
+func TestHasScope(t *testing.T) {
+	tests := []struct {
+		name   string
+		scopes []string
+		query  string
+		want   bool
+	}{
+		{"present scope", []string{"connectors:read_secret", "jobs:read"}, "connectors:read_secret", true},
+		{"absent scope", []string{"jobs:read"}, "connectors:read_secret", false},
+		{"nil scopes", nil, "connectors:read_secret", false},
+		{"empty scopes", []string{}, "connectors:read_secret", false},
+		{"single match", []string{"connectors:read_secret"}, "connectors:read_secret", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Claims{Scopes: tt.scopes}
+			if got := c.HasScope(tt.query); got != tt.want {
+				t.Errorf("HasScope(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateWrongSignature(t *testing.T) {
 	svc := NewService([]byte("test-secret-key-32bytes-long!!!!"), 15*time.Minute, newTestBlocklist())
 

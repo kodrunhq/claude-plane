@@ -17,10 +17,17 @@ import (
 
 // --- Mocks ---
 
+type failedRecord struct {
+	InjectionID string
+	Reason      string
+}
+
 type mockAuditStore struct {
 	mu         sync.Mutex
 	delivered  []string // injection IDs that were marked delivered
+	failed     []failedRecord
 	deliverErr error
+	failErr    error
 }
 
 func (m *mockAuditStore) UpdateInjectionDelivered(_ context.Context, injectionID string, _ time.Time) error {
@@ -33,6 +40,16 @@ func (m *mockAuditStore) UpdateInjectionDelivered(_ context.Context, injectionID
 	return nil
 }
 
+func (m *mockAuditStore) UpdateInjectionFailed(_ context.Context, injectionID string, reason string) error {
+	if m.failErr != nil {
+		return m.failErr
+	}
+	m.mu.Lock()
+	m.failed = append(m.failed, failedRecord{InjectionID: injectionID, Reason: reason})
+	m.mu.Unlock()
+	return nil
+}
+
 func (m *mockAuditStore) getDelivered() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -41,16 +58,37 @@ func (m *mockAuditStore) getDelivered() []string {
 	return result
 }
 
+func (m *mockAuditStore) getFailed() []failedRecord {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]failedRecord, len(m.failed))
+	copy(result, m.failed)
+	return result
+}
+
 type mockSessionStore struct {
+	mu       sync.Mutex
 	sessions map[string]*store.Session
 }
 
 func (m *mockSessionStore) GetSession(id string) (*store.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	sess, ok := m.sessions[id]
 	if !ok {
 		return nil, fmt.Errorf("session %s: not found", id)
 	}
-	return sess, nil
+	// Return a copy to avoid data races on the Status field.
+	sessCopy := *sess
+	return &sessCopy, nil
+}
+
+func (m *mockSessionStore) setStatus(id, status string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if sess, ok := m.sessions[id]; ok {
+		sess.Status = status
+	}
 }
 
 type mockSubscriber struct {
@@ -235,7 +273,6 @@ func TestInjectionQueue_EnqueueToNonRunningSession(t *testing.T) {
 func TestInjectionQueue_EnqueueQueueFull(t *testing.T) {
 	// Use a SendCommand that blocks forever so items stay in the channel.
 	blockCh := make(chan struct{})
-	defer close(blockCh)
 
 	cm := connmgr.NewConnectionManager(&noopMachineStore{}, slog.Default())
 	agent := &connmgr.ConnectedAgent{
@@ -255,7 +292,9 @@ func TestInjectionQueue_EnqueueQueueFull(t *testing.T) {
 	sub := &mockSubscriber{}
 
 	q := NewInjectionQueue(cm, audit, sessions, sub, slog.Default())
+	// Close blockCh first (LIFO) so the drainer unblocks before Close() waits.
 	defer q.Close()
+	defer close(blockCh)
 
 	// The drainer will pick up the first item and block on SendCommand.
 	// We fill the channel capacity, then wait for the drainer to consume one
@@ -427,6 +466,58 @@ func TestInjectionQueue_AuditRecordUpdated(t *testing.T) {
 	}
 }
 
+func TestProcessItem_TerminalSession(t *testing.T) {
+	// Use a blocking SendCommand so we can verify it is never called.
+	blockCh := make(chan struct{})
+	defer close(blockCh)
+
+	cm := connmgr.NewConnectionManager(&noopMachineStore{}, slog.Default())
+	agent := &connmgr.ConnectedAgent{
+		MachineID:    "machine-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  10,
+		Cancel:       func() {},
+		SendCommand: func(_ *pb.ServerCommand) error {
+			<-blockCh
+			return nil
+		},
+	}
+	_ = cm.Register("machine-1", agent)
+
+	audit := &mockAuditStore{}
+	sessions := newRunningSessionStore("sess-toctou", "machine-1")
+	sub := &mockSubscriber{}
+
+	q := NewInjectionQueue(cm, audit, sessions, sub, slog.Default())
+	defer q.Close()
+
+	// Enqueue an item while the session is still running.
+	err := q.Enqueue(context.Background(), "sess-toctou", "machine-1", []byte("data\n"), 0, "inj-toctou")
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	// Simulate the TOCTOU window: session transitions to terminal status
+	// before processItem runs the re-check.
+	sessions.setStatus("sess-toctou", store.StatusTerminated)
+
+	// Wait for processItem to call UpdateInjectionFailed("session terminated").
+	waitFor(t, 2*time.Second, func() bool {
+		failed := audit.getFailed()
+		for _, f := range failed {
+			if f.InjectionID == "inj-toctou" && f.Reason == "session terminated" {
+				return true
+			}
+		}
+		return false
+	})
+
+	// Confirm no gRPC delivery was attempted.
+	if len(audit.getDelivered()) != 0 {
+		t.Error("expected no delivery when session is in terminal status")
+	}
+}
+
 func TestInjectionQueue_SendCommandError(t *testing.T) {
 	captured := &capturedCommand{err: errors.New("send failed")}
 	cm := newTestConnMgr(t, "machine-1", captured)
@@ -448,5 +539,118 @@ func TestInjectionQueue_SendCommandError(t *testing.T) {
 	// No delivery should be recorded on send failure.
 	if len(audit.getDelivered()) != 0 {
 		t.Error("expected no delivery record when SendCommand fails")
+	}
+}
+
+func TestInjectionQueue_CloseBlocksUntilDrainersExit(t *testing.T) {
+	// Use a SendCommand that blocks until we release it, so the drainer
+	// is busy when Close() is called.
+	blockCh := make(chan struct{})
+
+	cm := connmgr.NewConnectionManager(&noopMachineStore{}, slog.Default())
+	agent := &connmgr.ConnectedAgent{
+		MachineID:    "machine-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  10,
+		Cancel:       func() {},
+		SendCommand: func(_ *pb.ServerCommand) error {
+			<-blockCh
+			return nil
+		},
+	}
+	_ = cm.Register("machine-1", agent)
+
+	audit := &mockAuditStore{}
+	sessions := newRunningSessionStore("sess-1", "machine-1")
+	sub := &mockSubscriber{}
+
+	q := NewInjectionQueue(cm, audit, sessions, sub, slog.Default())
+
+	err := q.Enqueue(context.Background(), "sess-1", "machine-1", []byte("block\n"), 0, "inj-block")
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	// Give the drainer time to pick up the item and block on SendCommand.
+	time.Sleep(50 * time.Millisecond)
+
+	closeDone := make(chan struct{})
+	go func() {
+		q.Close()
+		close(closeDone)
+	}()
+
+	// Close should be blocked because the drainer is stuck on SendCommand.
+	select {
+	case <-closeDone:
+		t.Fatal("Close() returned before drainer exited")
+	case <-time.After(100 * time.Millisecond):
+		// expected: Close is still waiting
+	}
+
+	// Unblock the drainer.
+	close(blockCh)
+
+	select {
+	case <-closeDone:
+		// success: Close returned after drainer finished
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close() did not return after drainer was unblocked")
+	}
+}
+
+func TestInjectionQueue_BufferedItemsMarkedFailedOnShutdown(t *testing.T) {
+	// Use a SendCommand that blocks forever so items stay buffered.
+	blockCh := make(chan struct{})
+
+	cm := connmgr.NewConnectionManager(&noopMachineStore{}, slog.Default())
+	agent := &connmgr.ConnectedAgent{
+		MachineID:    "machine-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  10,
+		Cancel:       func() {},
+		SendCommand: func(_ *pb.ServerCommand) error {
+			<-blockCh
+			return nil
+		},
+	}
+	_ = cm.Register("machine-1", agent)
+
+	audit := &mockAuditStore{}
+	sessions := newRunningSessionStore("sess-1", "machine-1")
+	sub := &mockSubscriber{}
+
+	q := NewInjectionQueue(cm, audit, sessions, sub, slog.Default())
+
+	// Enqueue several items. The first will be picked up by the drainer
+	// and block on SendCommand. The rest stay buffered in the channel.
+	for i := 0; i < 5; i++ {
+		err := q.Enqueue(context.Background(), "sess-1", "machine-1",
+			[]byte(fmt.Sprintf("item-%d\n", i)), 0, fmt.Sprintf("inj-shut-%d", i))
+		if err != nil {
+			t.Fatalf("Enqueue %d: %v", i, err)
+		}
+	}
+
+	// Give the drainer time to pick up the first item and block.
+	time.Sleep(50 * time.Millisecond)
+
+	// Unblock the drainer's current SendCommand so it can proceed to the
+	// shutdown drain loop. The done channel closing will cause it to drain
+	// remaining items. There's a race between the drainer processing items
+	// normally and the shutdown signal, so we check for at least 1 failed.
+	close(blockCh)
+
+	q.Close()
+
+	failed := audit.getFailed()
+	if len(failed) < 1 {
+		t.Fatalf("expected at least 1 buffered item marked failed, got %d", len(failed))
+	}
+
+	for _, f := range failed {
+		if f.Reason != "queue shutdown" {
+			t.Errorf("expected reason %q, got %q", "queue shutdown", f.Reason)
+		}
 	}
 }
