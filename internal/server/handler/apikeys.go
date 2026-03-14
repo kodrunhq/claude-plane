@@ -78,7 +78,7 @@ func (h *APIKeyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		userID = c.UserID
 	}
 
-	plaintextKey, keyID, err := h.store.CreateAPIKey(r.Context(), userID, req.Name, req.Scopes, h.signingKey)
+	plaintextKey, keyID, err := h.store.CreateAPIKey(r.Context(), userID, req.Name, req.Scopes, req.ExpiresAt, h.signingKey)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return

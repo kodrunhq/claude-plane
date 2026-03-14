@@ -4,13 +4,20 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/kodrunhq/claude-plane/internal/bridge"
 	"github.com/kodrunhq/claude-plane/internal/bridge/client"
 	"github.com/kodrunhq/claude-plane/internal/bridge/config"
+	"github.com/kodrunhq/claude-plane/internal/bridge/connector/telegram"
 	"github.com/kodrunhq/claude-plane/internal/bridge/state"
 )
 
@@ -46,19 +53,51 @@ func newServeCmd() *cobra.Command {
 				"health_address", cfg.Health.Address,
 			)
 
-			// Initialise REST client.
-			_ = client.New(cfg.ClaudePlane.APIURL, cfg.ClaudePlane.APIKey)
+			apiClient := client.New(cfg.ClaudePlane.APIURL, cfg.ClaudePlane.APIKey)
 
-			// Initialise state store and load persisted state from disk.
 			stateStore := state.New(cfg.State.Path)
 			if err := stateStore.Load(); err != nil {
 				slog.Warn("Could not load bridge state", "path", cfg.State.Path, "error", err)
 			}
 
-			// Bridge lifecycle (Task 9) and connector instantiation will be wired here.
-			slog.Info("Bridge initialised — lifecycle not yet implemented (Task 9)")
+			b := bridge.New(apiClient, stateStore, cfg.Health.Address, slog.Default())
 
-			return nil
+			connConfigs, err := apiClient.GetConnectorConfigs(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("fetch connector configs: %w", err)
+			}
+
+			for _, cc := range connConfigs {
+				if !cc.Enabled {
+					continue
+				}
+				switch cc.ConnectorType {
+				case "telegram":
+					var tCfg telegram.Config
+					if err := json.Unmarshal([]byte(cc.Config), &tCfg); err != nil {
+						slog.Error("parse telegram config", "connector_id", cc.ConnectorID, "error", err)
+						continue
+					}
+					if cc.ConfigSecret != "" {
+						var secretCfg struct {
+							BotToken string `json:"bot_token"`
+						}
+						if err := json.Unmarshal([]byte(cc.ConfigSecret), &secretCfg); err == nil {
+							tCfg.BotToken = secretCfg.BotToken
+						}
+					}
+					conn := telegram.New(cc.ConnectorID, tCfg, apiClient, stateStore, slog.Default())
+					b.AddConnector(conn)
+					slog.Info("Registered connector", "type", "telegram", "name", cc.Name, "id", cc.ConnectorID)
+				default:
+					slog.Warn("Unknown connector type", "type", cc.ConnectorType, "id", cc.ConnectorID)
+				}
+			}
+
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+
+			return b.Run(ctx)
 		},
 	}
 

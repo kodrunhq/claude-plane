@@ -63,12 +63,25 @@ func isAPIKeyAuth(r *http.Request) bool {
 }
 
 // connectorRequest is the JSON body for create and update connector endpoints.
+// Enabled and ConfigSecret use pointer types so that callers can distinguish
+// between "omitted" and "explicitly set to the zero value".
 type connectorRequest struct {
-	ConnectorType string `json:"connector_type"`
-	Name          string `json:"name"`
-	Config        string `json:"config"`
-	ConfigSecret  string `json:"config_secret"`
-	Enabled       bool   `json:"enabled"`
+	ConnectorType string  `json:"connector_type"`
+	Name          string  `json:"name"`
+	Config        string  `json:"config"`
+	ConfigSecret  *string `json:"config_secret,omitempty"`
+	Enabled       *bool   `json:"enabled,omitempty"`
+}
+
+// authorizeAdmin checks that the request was made by an admin user.
+// Returns false and writes a 403 response when the caller is not an admin.
+func (h *BridgeHandler) authorizeAdmin(w http.ResponseWriter, r *http.Request) bool {
+	c := h.getClaims(r)
+	if c == nil || c.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return false
+	}
+	return true
 }
 
 // connectorResponse is a safe view of a BridgeConnector without encrypted fields.
@@ -104,11 +117,10 @@ func toConnectorResponse(c *store.BridgeConnector, secretJSON []byte) connectorR
 
 // CreateConnector handles POST /api/v1/bridge/connectors.
 func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
-	c := h.getClaims(r)
-	if c == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+	if !h.authorizeAdmin(w, r) {
 		return
 	}
+	c := h.getClaims(r)
 
 	var req connectorRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -128,15 +140,20 @@ func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
 	var secretJSON []byte
-	if req.ConfigSecret != "" {
-		secretJSON = []byte(req.ConfigSecret)
+	if req.ConfigSecret != nil && *req.ConfigSecret != "" {
+		secretJSON = []byte(*req.ConfigSecret)
 	}
 
 	connector := &store.BridgeConnector{
 		ConnectorType: req.ConnectorType,
 		Name:          req.Name,
-		Enabled:       req.Enabled,
+		Enabled:       enabled,
 		Config:        req.Config,
 		CreatedBy:     c.UserID,
 	}
@@ -153,6 +170,10 @@ func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) 
 // ListConnectors handles GET /api/v1/bridge/connectors.
 // API key auth (cpk_ prefix) receives decrypted secrets; JWT auth does not.
 func (h *BridgeHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeAdmin(w, r) {
+		return
+	}
+
 	connectors, err := h.store.ListConnectors(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -182,6 +203,10 @@ func (h *BridgeHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 // GetConnector handles GET /api/v1/bridge/connectors/{connectorID}.
 // API key auth receives decrypted secrets; JWT auth does not.
 func (h *BridgeHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeAdmin(w, r) {
+		return
+	}
+
 	connectorID := chi.URLParam(r, "connectorID")
 
 	if isAPIKeyAuth(r) {
@@ -213,6 +238,10 @@ func (h *BridgeHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 
 // UpdateConnector handles PUT /api/v1/bridge/connectors/{connectorID}.
 func (h *BridgeHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeAdmin(w, r) {
+		return
+	}
+
 	connectorID := chi.URLParam(r, "connectorID")
 
 	var req connectorRequest
@@ -233,15 +262,38 @@ func (h *BridgeHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Fetch existing connector to preserve fields that were not sent.
+	existing, err := h.store.GetConnector(r.Context(), connectorID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "connector not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	enabled := existing.Enabled
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+
+	// When ConfigSecret is nil (omitted), secretJSON stays nil and the store
+	// preserves the existing secret. An empty string explicitly clears it.
 	var secretJSON []byte
-	if req.ConfigSecret != "" {
-		secretJSON = []byte(req.ConfigSecret)
+	if req.ConfigSecret != nil {
+		if *req.ConfigSecret != "" {
+			secretJSON = []byte(*req.ConfigSecret)
+		} else {
+			// Explicitly clear the secret (empty byte slice signals "set to NULL").
+			secretJSON = []byte{}
+		}
 	}
 
 	connector := &store.BridgeConnector{
 		ConnectorType: req.ConnectorType,
 		Name:          req.Name,
-		Enabled:       req.Enabled,
+		Enabled:       enabled,
 		Config:        req.Config,
 	}
 
@@ -260,6 +312,10 @@ func (h *BridgeHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) 
 
 // DeleteConnector handles DELETE /api/v1/bridge/connectors/{connectorID}.
 func (h *BridgeHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeAdmin(w, r) {
+		return
+	}
+
 	connectorID := chi.URLParam(r, "connectorID")
 
 	if err := h.store.DeleteConnector(r.Context(), connectorID); err != nil {
@@ -277,6 +333,10 @@ func (h *BridgeHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) 
 // Restart handles POST /api/v1/bridge/restart.
 // Sets a control signal requesting the bridge binary to restart.
 func (h *BridgeHandler) Restart(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeAdmin(w, r) {
+		return
+	}
+
 	val := time.Now().UTC().Format(time.RFC3339)
 	if err := h.store.SetBridgeControl(r.Context(), bridgeRestartKey, val); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")

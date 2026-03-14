@@ -19,7 +19,6 @@ import (
 const (
 	eventPollInterval = 5 * time.Second
 	telegramAPIBase   = "https://api.telegram.org/bot"
-	connectorID       = "telegram"
 )
 
 // Config holds all configuration for the Telegram connector.
@@ -57,31 +56,34 @@ type Message struct {
 // Telegram is a bridge connector that forwards events to a Telegram group topic
 // and processes slash commands from another topic.
 type Telegram struct {
-	config     Config
-	apiClient  *client.Client
-	stateStore *state.Store
-	logger     *slog.Logger
-	httpClient *http.Client
-	healthy    atomic.Bool
+	connectorID string
+	config      Config
+	apiClient   *client.Client
+	stateStore  *state.Store
+	logger      *slog.Logger
+	httpClient  *http.Client
+	healthy     atomic.Bool
 }
 
-// New creates a new Telegram connector.
-func New(cfg Config, apiClient *client.Client, stateStore *state.Store, logger *slog.Logger) *Telegram {
+// New creates a new Telegram connector. The connectorID is used to namespace
+// state (cursors, processed events) and is returned by Name().
+func New(connectorID string, cfg Config, apiClient *client.Client, stateStore *state.Store, logger *slog.Logger) *Telegram {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	t := &Telegram{
-		config:     cfg,
-		apiClient:  apiClient,
-		stateStore: stateStore,
-		logger:     logger,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		connectorID: connectorID,
+		config:      cfg,
+		apiClient:   apiClient,
+		stateStore:  stateStore,
+		logger:      logger,
+		httpClient:  &http.Client{Timeout: 60 * time.Second},
 	}
 	return t
 }
 
 // Name implements connector.Connector.
-func (t *Telegram) Name() string { return connectorID }
+func (t *Telegram) Name() string { return t.connectorID }
 
 // Healthy implements connector.Connector.
 func (t *Telegram) Healthy() bool { return t.healthy.Load() }
@@ -142,7 +144,7 @@ func (t *Telegram) runEventsPoller(ctx context.Context) error {
 
 // pollAndForwardEvents fetches new events from the server and sends relevant ones to Telegram.
 func (t *Telegram) pollAndForwardEvents(ctx context.Context) error {
-	cursor := t.stateStore.GetCursor(connectorID)
+	cursor := t.stateStore.GetCursor(t.connectorID)
 
 	events, nextCursor, err := t.apiClient.PollEvents(ctx, cursor)
 	if err != nil {
@@ -175,7 +177,7 @@ func (t *Telegram) pollAndForwardEvents(ctx context.Context) error {
 	}
 
 	if nextCursor != "" && nextCursor != cursor {
-		if err := t.stateStore.SetCursor(connectorID, nextCursor); err != nil {
+		if err := t.stateStore.SetCursor(t.connectorID, nextCursor); err != nil {
 			t.logger.Warn("failed to persist cursor", "cursor", nextCursor, "error", err)
 		}
 	}

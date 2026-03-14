@@ -37,6 +37,11 @@ export function ConnectorsPage() {
   function handleFormClose() {
     setShowTelegramForm(false);
     setEditingConnector(null);
+  }
+
+  function handleFormSaved() {
+    setShowTelegramForm(false);
+    setEditingConnector(null);
     setConfigChanged(true);
   }
 
@@ -143,7 +148,7 @@ export function ConnectorsPage() {
 
       {/* Telegram create/edit form */}
       {showTelegramForm && (
-        <TelegramForm connector={editingConnector ?? undefined} onClose={handleFormClose} />
+        <TelegramForm connector={editingConnector ?? undefined} onClose={handleFormClose} onSaved={handleFormSaved} />
       )}
 
       {/* Delete confirmation */}
