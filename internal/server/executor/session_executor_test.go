@@ -458,8 +458,16 @@ func TestExecuteStep_SendsCreateSessionWithCorrectFields(t *testing.T) {
 	if cs.WorkingDir != "/tmp/work" {
 		t.Errorf("working_dir = %q, want %q", cs.WorkingDir, "/tmp/work")
 	}
-	if len(cs.Args) != 2 || cs.Args[0] != "--model" || cs.Args[1] != "opus" {
-		t.Errorf("args = %v, want [--model opus]", cs.Args)
+	// Executor prepends --dangerously-skip-permissions by default (nil SkipPermissionsSnapshot).
+	wantArgs := []string{"--dangerously-skip-permissions", "--model", "opus"}
+	if len(cs.Args) != len(wantArgs) {
+		t.Errorf("args = %v, want %v", cs.Args, wantArgs)
+	} else {
+		for i, a := range wantArgs {
+			if cs.Args[i] != a {
+				t.Errorf("args[%d] = %q, want %q", i, cs.Args[i], a)
+			}
+		}
 	}
 	if cs.TerminalSize == nil {
 		t.Fatal("terminal_size is nil")
