@@ -107,7 +107,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType))
 	}
 
-	runner := NewDAGRunner(run.RunID, detail.RunSteps, deps, o.executor, o.store, onComplete)
+	runner := NewDAGRunner(run.RunID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete)
 
 	o.mu.Lock()
 	o.activeRuns[run.RunID] = runner
@@ -210,7 +210,7 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, retryJobID, status, "manual"))
 	}
 
-	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, onComplete)
+	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete)
 
 	// Pre-process completed steps: count them and pre-decrement in-degrees
 	// of their dependents so pending steps with completed upstream deps can launch.

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -65,6 +66,7 @@ type DAGRunner struct {
 	inDegree      map[string]int             // step_id -> remaining dependency count
 	executor      StepExecutor
 	store         store.JobStoreIface
+	publisher     event.Publisher
 	onRunComplete func(runID string, status string)
 	completed     int
 	total         int
@@ -72,7 +74,7 @@ type DAGRunner struct {
 }
 
 // NewDAGRunner creates a DAGRunner for a specific run.
-func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDependency, executor StepExecutor, jobStore store.JobStoreIface, onComplete func(string, string)) *DAGRunner {
+func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDependency, executor StepExecutor, jobStore store.JobStoreIface, publisher event.Publisher, onComplete func(string, string)) *DAGRunner {
 	steps := make(map[string]*store.RunStep, len(runSteps))
 	dependents := make(map[string][]string)
 	inDegree := make(map[string]int)
@@ -95,6 +97,7 @@ func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDepen
 		inDegree:      inDegree,
 		executor:      executor,
 		store:         jobStore,
+		publisher:     publisher,
 		onRunComplete: onComplete,
 		total:         len(runSteps),
 	}
@@ -140,6 +143,10 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	var toLaunch []store.RunStep
 	var runComplete func()
 
+	// Capture for post-lock publishing.
+	capturedRunStepID := rs.RunStepID
+	capturedStepID := stepID
+
 	if exitCode != 0 {
 		rs.Status = store.StatusFailed
 		ec := exitCode
@@ -156,12 +163,14 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 				}
 			}
 			d.cancel()
+			ctx := d.ctx
 			if d.onRunComplete != nil {
 				cb := d.onRunComplete
 				runID := d.runID
 				runComplete = func() { cb(runID, store.StatusFailed) }
 			}
 			d.mu.Unlock()
+			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
 			if runComplete != nil {
 				runComplete()
 			}
@@ -197,12 +206,23 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 			runComplete = func() { cb(runID, s) }
 		}
 		d.mu.Unlock()
+		if stepFailed {
+			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
+		} else {
+			d.publishStepEvent(ctx, event.TypeJobRunStepCompleted, capturedRunStepID, capturedStepID, store.StatusCompleted)
+		}
 		if runComplete != nil {
 			runComplete()
 		}
 		return
 	}
 	d.mu.Unlock()
+
+	if stepFailed {
+		d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
+	} else {
+		d.publishStepEvent(ctx, event.TypeJobRunStepCompleted, capturedRunStepID, capturedStepID, store.StatusCompleted)
+	}
 
 	// Launch outside the lock to prevent deadlocks
 	for _, step := range toLaunch {
@@ -262,5 +282,16 @@ func (d *DAGRunner) updateRunStepInDB(runStepID, status, sessionID string, exitC
 	}
 	if err := d.store.UpdateRunStepStatus(d.ctx, runStepID, status, sessionID, exitCode); err != nil {
 		slog.Warn("failed to update run step status", "error", err, "run_step_id", runStepID, "status", status)
+	}
+}
+
+// publishStepEvent publishes a step lifecycle event. No-op if publisher is nil.
+// Must be called outside the mutex to avoid blocking.
+func (d *DAGRunner) publishStepEvent(ctx context.Context, eventType, runStepID, stepID, status string) {
+	if d.publisher == nil {
+		return
+	}
+	if err := d.publisher.Publish(ctx, event.NewRunStepEvent(eventType, d.runID, runStepID, stepID, status)); err != nil {
+		slog.Warn("failed to publish step event", "event_type", eventType, "run_step_id", runStepID, "error", err)
 	}
 }
