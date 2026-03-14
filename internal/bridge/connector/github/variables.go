@@ -9,16 +9,18 @@ const maxCheckOutputLen = 4096
 
 // PRData represents relevant fields from a GitHub Pull Request.
 type PRData struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	HTMLURL string `json:"html_url"`
-	DiffURL string `json:"diff_url"`
-	User    struct {
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	HTMLURL   string `json:"html_url"`
+	DiffURL   string `json:"diff_url"`
+	UpdatedAt string `json:"updated_at"`
+	User      struct {
 		Login string `json:"login"`
 	} `json:"user"`
 	Head struct {
 		Ref string `json:"ref"`
+		SHA string `json:"sha"`
 	} `json:"head"`
 	Base struct {
 		Ref string `json:"ref"`
@@ -30,6 +32,7 @@ type PRData struct {
 
 // CheckRunData represents relevant fields from a GitHub Check Run.
 type CheckRunData struct {
+	ID         int64  `json:"id"`
 	Name       string `json:"name"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
@@ -45,12 +48,15 @@ type CheckRunData struct {
 }
 
 // IssueData represents relevant fields from a GitHub Issue.
+// PullRequest is non-nil when the issue is actually a pull request (GitHub
+// returns PRs on the issues list endpoint). Consumers should skip such entries.
 type IssueData struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	HTMLURL string `json:"html_url"`
-	User    struct {
+	Number      int         `json:"number"`
+	Title       string      `json:"title"`
+	Body        string      `json:"body"`
+	HTMLURL     string      `json:"html_url"`
+	PullRequest interface{} `json:"pull_request"`
+	User        struct {
 		Login string `json:"login"`
 	} `json:"user"`
 	Labels []struct {
