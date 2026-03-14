@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useCreateSession } from '../../hooks/useSessions.ts';
 import { useMachines } from '../../hooks/useMachines.ts';
+import { extractTemplateVariables } from '../../lib/templateVars.ts';
 import { TemplatePicker } from '../templates/TemplatePicker.tsx';
 import type { SessionTemplate } from '../../types/template.ts';
 
@@ -33,15 +34,10 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   const [variables, setVariables] = useState<Record<string, string>>({});
 
   const templatePrompt = selectedTemplate?.initial_prompt ?? '';
-  const variableNames = useMemo(() => {
-    if (!templatePrompt) return [];
-    const matches = templatePrompt.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g);
-    const unique = new Set<string>();
-    for (const match of matches) {
-      unique.add(match[1]);
-    }
-    return [...unique];
-  }, [templatePrompt]);
+  const variableNames = useMemo(
+    () => (templatePrompt ? extractTemplateVariables(templatePrompt) : []),
+    [templatePrompt],
+  );
 
   useEffect(() => {
     if (preselectedMachineId) {

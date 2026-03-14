@@ -4,21 +4,13 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useCreateSession } from '../../hooks/useSessions.ts';
 import { useMachines } from '../../hooks/useMachines.ts';
+import { extractTemplateVariables } from '../../lib/templateVars.ts';
 import type { SessionTemplate } from '../../types/template.ts';
 
 interface LaunchTemplateModalProps {
   open: boolean;
   onClose: () => void;
   template: SessionTemplate | null;
-}
-
-function extractVariables(prompt: string): string[] {
-  const matches = prompt.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g);
-  const unique = new Set<string>();
-  for (const match of matches) {
-    unique.add(match[1]);
-  }
-  return [...unique];
 }
 
 export function LaunchTemplateModal({ open, onClose, template }: LaunchTemplateModalProps) {
@@ -31,7 +23,7 @@ export function LaunchTemplateModal({ open, onClose, template }: LaunchTemplateM
 
   const templatePrompt = template?.initial_prompt ?? '';
   const variableNames = useMemo(
-    () => (templatePrompt ? extractVariables(templatePrompt) : []),
+    () => (templatePrompt ? extractTemplateVariables(templatePrompt) : []),
     [templatePrompt],
   );
 
