@@ -18,29 +18,9 @@ import (
 // --- Mocks ---
 
 type mockAuditStore struct {
-	mu          sync.Mutex
-	injections  []*store.Injection
-	delivered   []string // injection IDs that were marked delivered
-	createErr   error
-	deliverErr  error
-}
-
-func (m *mockAuditStore) CreateInjection(_ context.Context, inj *store.Injection) (*store.Injection, error) {
-	if m.createErr != nil {
-		return nil, m.createErr
-	}
-	result := &store.Injection{
-		InjectionID: inj.InjectionID,
-		SessionID:   inj.SessionID,
-		UserID:      inj.UserID,
-		TextLength:  inj.TextLength,
-		Source:      inj.Source,
-		CreatedAt:   time.Now().UTC(),
-	}
-	m.mu.Lock()
-	m.injections = append(m.injections, result)
-	m.mu.Unlock()
-	return result, nil
+	mu         sync.Mutex
+	delivered  []string // injection IDs that were marked delivered
+	deliverErr error
 }
 
 func (m *mockAuditStore) UpdateInjectionDelivered(_ context.Context, injectionID string, _ time.Time) error {

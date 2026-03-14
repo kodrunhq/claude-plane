@@ -16,10 +16,18 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
+
+// noopSubscriber is a minimal event.Subscriber for handler tests.
+type noopSubscriber struct{}
+
+func (n *noopSubscriber) Subscribe(_ string, _ event.HandlerFunc, _ event.SubscriberOptions) func() {
+	return func() {}
+}
 
 // mockMachineStore implements connmgr.MachineStore for tests.
 type mockMachineStore struct{}
@@ -862,6 +870,11 @@ func setupInjectTestEnv(t *testing.T) (chi.Router, *store.Store, string) {
 		return &session.UserClaims{UserID: "inject-user", Role: "user"}
 	}
 	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+
+	// Wire up the injection queue so InjectSession doesn't return 503.
+	injQueue := session.NewInjectionQueue(cm, st, st, &noopSubscriber{}, slog.Default())
+	t.Cleanup(func() { injQueue.Close() })
+	handler.SetInjectionQueue(injQueue)
 
 	// Create a running session directly in the DB.
 	sessionID := "sess-inject-test"

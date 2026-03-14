@@ -28,7 +28,6 @@ var ErrSessionNotRunning = errors.New("session not running")
 
 // InjectionAuditStore is the narrow interface for injection audit operations.
 type InjectionAuditStore interface {
-	CreateInjection(ctx context.Context, inj *store.Injection) (*store.Injection, error)
 	UpdateInjectionDelivered(ctx context.Context, injectionID string, deliveredAt time.Time) error
 }
 
@@ -165,7 +164,7 @@ func (q *InjectionQueue) drainSession(sessionID string, sq *sessionQueue) {
 			}
 			idleTimer.Reset(q.idleTimeout)
 
-			q.processItem(sessionID, sq.machineID, item)
+			q.processItem(sessionID, sq.machineID, item, sq)
 
 		case <-sq.done:
 			return
@@ -179,7 +178,7 @@ func (q *InjectionQueue) drainSession(sessionID string, sq *sessionQueue) {
 
 // processItem handles a single queue item: checks staleness, applies delay,
 // sends the InputDataCmd, and updates the audit record.
-func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem) {
+func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem, sq *sessionQueue) {
 	// Drop stale items silently.
 	if time.Since(item.QueuedAt) > defaultStaleThreshold {
 		q.logger.Debug("dropping stale injection", "session_id", sessionID, "injection_id", item.InjectionID)
@@ -187,7 +186,14 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 	}
 
 	if item.DelayMs > 0 {
-		time.Sleep(time.Duration(item.DelayMs) * time.Millisecond)
+		timer := time.NewTimer(time.Duration(item.DelayMs) * time.Millisecond)
+		select {
+		case <-timer.C:
+			// delay elapsed, proceed
+		case <-sq.done:
+			timer.Stop()
+			return // session terminated during delay
+		}
 	}
 
 	agent := q.connMgr.GetAgent(machineID)
