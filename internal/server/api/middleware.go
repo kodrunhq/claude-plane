@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -91,6 +92,7 @@ func JWTAuthMiddleware(authSvc *auth.Service, apiKeyAuth ...*APIKeyAuth) func(ht
 					return
 				}
 				ctx := context.WithValue(r.Context(), userClaimsKey, claims)
+				ctx = httputil.SetAPIKeyAuth(ctx)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -153,3 +155,4 @@ func GetClaims(r *http.Request) *auth.Claims {
 	claims, _ := r.Context().Value(userClaimsKey).(*auth.Claims)
 	return claims
 }
+

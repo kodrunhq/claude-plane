@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
+	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -167,6 +168,13 @@ func TestBridgeHandler_ListConnectors_APIKeyAuth_IncludesSecrets(t *testing.T) {
 	seedUser(t, s, userID, "admin")
 	h := handler.NewBridgeHandler(s, claimsMiddleware(userID, "admin"), testEncKey)
 	r := chi.NewRouter()
+	// Simulate API key auth by setting the context flag the middleware would set.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := httputil.SetAPIKeyAuth(r.Context())
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 	handler.RegisterBridgeRoutes(r, h)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
@@ -184,10 +192,7 @@ func TestBridgeHandler_ListConnectors_APIKeyAuth_IncludesSecrets(t *testing.T) {
 		t.Fatalf("CreateConnector: %v", err)
 	}
 
-	// Request with API key prefix in Authorization header
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/bridge/connectors", nil)
-	req.Header.Set("Authorization", "Bearer cpk_test-api-key")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.Get(srv.URL + "/api/v1/bridge/connectors")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
