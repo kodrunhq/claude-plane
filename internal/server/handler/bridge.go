@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -52,14 +53,6 @@ func RegisterBridgeRoutes(r chi.Router, h *BridgeHandler) {
 	r.Delete("/api/v1/bridge/connectors/{connectorID}", h.DeleteConnector)
 	r.Post("/api/v1/bridge/restart", h.Restart)
 	r.Get("/api/v1/bridge/status", h.Status)
-}
-
-// isAPIKeyAuth returns true when the request carries an API key (cpk_ prefix)
-// rather than a JWT session token.
-func isAPIKeyAuth(r *http.Request) bool {
-	header := r.Header.Get("Authorization")
-	parts := strings.SplitN(header, " ", 2)
-	return len(parts) == 2 && strings.HasPrefix(parts[1], "cpk_")
 }
 
 // connectorRequest is the JSON body for create and update connector endpoints.
@@ -180,7 +173,7 @@ func (h *BridgeHandler) ListConnectors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	withSecrets := isAPIKeyAuth(r)
+	withSecrets := httputil.IsAPIKeyAuth(r)
 
 	resp := make([]connectorResponse, 0, len(connectors))
 	for i := range connectors {
@@ -209,7 +202,7 @@ func (h *BridgeHandler) GetConnector(w http.ResponseWriter, r *http.Request) {
 
 	connectorID := chi.URLParam(r, "connectorID")
 
-	if isAPIKeyAuth(r) {
+	if httputil.IsAPIKeyAuth(r) {
 		c, secretJSON, err := h.store.GetConnectorWithSecret(r.Context(), connectorID, h.encKey)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
