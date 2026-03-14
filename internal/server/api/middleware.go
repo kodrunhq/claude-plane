@@ -139,6 +139,7 @@ func validateAPIKeyToken(w http.ResponseWriter, r *http.Request, token string, a
 		UserID: user.UserID,
 		Email:  user.Email,
 		Role:   user.Role,
+		Scopes: apiKey.Scopes,
 	}
 }
 
