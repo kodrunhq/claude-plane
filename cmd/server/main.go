@@ -147,9 +147,9 @@ func newServeCmd() *cobra.Command {
 			eventBus := event.NewBus(slog.Default())
 			defer eventBus.Close()
 
-			// Persist every event to SQLite.
+			// Persist every event to SQLite (synchronous, before fan-out).
 			persistSub := event.NewPersistSubscriber(s, slog.Default())
-			persistSub.Subscribe(eventBus)
+			eventBus.SetPersistHandler(persistSub.Handler())
 
 			// Periodic event retention cleanup.
 			retentionCleaner := event.NewRetentionCleaner(s, slog.Default())

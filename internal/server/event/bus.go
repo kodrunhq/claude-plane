@@ -62,10 +62,11 @@ type subscriber struct {
 // Each subscriber has an independent goroutine pool draining its channel,
 // so slow handlers never stall the publisher.
 type Bus struct {
-	mu          sync.RWMutex
-	subscribers []*subscriber
-	logger      *slog.Logger
-	closed      bool
+	mu             sync.RWMutex
+	subscribers    []*subscriber
+	logger         *slog.Logger
+	closed         bool
+	persistHandler func(context.Context, Event) error
 }
 
 // NewBus constructs a Bus. If logger is nil, slog.Default() is used.
@@ -76,11 +77,32 @@ func NewBus(logger *slog.Logger) *Bus {
 	return &Bus{logger: logger}
 }
 
+// SetPersistHandler registers a synchronous handler that is called for every
+// published event before fan-out to async subscribers. This ensures persistence
+// cannot be dropped due to buffer pressure.
+func (b *Bus) SetPersistHandler(fn func(context.Context, Event) error) {
+	b.persistHandler = fn
+}
+
 // Publish delivers event to every subscriber whose pattern matches event.Type.
+// If a persist handler is set, it is called synchronously outside the lock
+// before fan-out, so that persistence is guaranteed even under buffer pressure.
 // Fan-out is non-blocking: if a subscriber's buffer is full the event is dropped
 // and a Warn-level message is emitted. If the bus is already closed, Publish
 // silently discards the event and returns nil.
 func (b *Bus) Publish(ctx context.Context, event Event) error {
+	// Synchronous persist — called outside the lock to avoid blocking
+	// concurrent publishers on SQLite writes.
+	if b.persistHandler != nil {
+		if err := b.persistHandler(ctx, event); err != nil {
+			b.logger.Error("persist handler failed",
+				"event_id", event.EventID,
+				"event_type", event.Type,
+				"error", err,
+			)
+		}
+	}
+
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
