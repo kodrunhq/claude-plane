@@ -1,4 +1,12 @@
-// Machine type -- matches Go store.Machine struct
+export interface MachineHealth {
+  cpu_cores: number;
+  memory_total_mb: number;
+  memory_used_mb: number;
+  active_sessions: number;
+  max_sessions: number;
+}
+
+// Machine type -- matches Go machineResponse struct
 export interface Machine {
   machine_id: string;
   display_name: string;
@@ -8,6 +16,7 @@ export interface Machine {
   last_seen_at: string;
   cert_expires: string;
   created_at: string;
+  health?: MachineHealth;
 }
 
 // WebSocket event message types

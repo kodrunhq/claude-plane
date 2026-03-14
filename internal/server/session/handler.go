@@ -167,8 +167,20 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListSessions handles GET /api/v1/sessions.
+// Supports optional query params: ?status=running&machine_id=xyz
 func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
-	sessions, err := h.store.ListSessions()
+	q := r.URL.Query()
+	statusFilter := q.Get("status")
+	machineFilter := q.Get("machine_id")
+
+	var sessions []store.Session
+	var err error
+
+	if machineFilter != "" {
+		sessions, err = h.store.ListSessionsByMachine(machineFilter)
+	} else {
+		sessions, err = h.store.ListSessions()
+	}
 	if err != nil {
 		h.logger.Error("failed to list sessions", "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to list sessions")
@@ -192,6 +204,17 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 			}
 			sessions = filtered
 		}
+	}
+
+	// Apply status filter after authorization.
+	if statusFilter != "" {
+		filtered := make([]store.Session, 0, len(sessions))
+		for _, s := range sessions {
+			if s.Status == statusFilter {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, sessions)

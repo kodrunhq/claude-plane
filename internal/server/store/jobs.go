@@ -53,7 +53,17 @@ type ListRunsOptions struct {
 // RunWithJobName embeds Run and adds the human-readable job name.
 type RunWithJobName struct {
 	Run
-	JobName string `json:"job_name"`
+	JobName   string `json:"job_name"`
+	MachineID string `json:"machine_id,omitempty"`
+}
+
+// JobWithStats extends Job with computed stats for list views.
+type JobWithStats struct {
+	Job
+	StepCount     int    `json:"step_count"`
+	LastRunStatus string `json:"last_run_status,omitempty"`
+	TriggerType   string `json:"trigger_type"`
+	MachineIDs    string `json:"machine_ids,omitempty"`
 }
 
 // JobStoreIface defines the interface for job-related database operations.
@@ -63,6 +73,7 @@ type JobStoreIface interface {
 	GetJob(ctx context.Context, jobID string) (*JobDetail, error)
 	ListJobs(ctx context.Context) ([]Job, error)
 	ListJobsByUser(ctx context.Context, userID string) ([]Job, error)
+	ListJobsWithStats(ctx context.Context, userID string) ([]JobWithStats, error)
 	DeleteJob(ctx context.Context, jobID string) error
 	UpdateJob(ctx context.Context, jobID, name, description string) (*Job, error)
 	CreateStep(ctx context.Context, p CreateStepParams) (*Step, error)
@@ -682,7 +693,11 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 		limit = defaultLimit
 	}
 
-	query := `SELECT r.run_id, r.job_id, r.status, r.trigger_type, COALESCE(r.trigger_detail, ''), r.started_at, r.ended_at, r.created_at, j.name
+	query := `SELECT r.run_id, r.job_id, r.status, r.trigger_type, COALESCE(r.trigger_detail, ''), r.started_at, r.ended_at, r.created_at, j.name,
+	                 COALESCE(
+	                   (SELECT GROUP_CONCAT(DISTINCT rs.machine_id) FROM run_steps rs WHERE rs.run_id = r.run_id AND rs.machine_id IS NOT NULL AND rs.machine_id != ''),
+	                   ''
+	                 ) AS machine_id
 	           FROM runs r
 	           JOIN jobs j ON r.job_id = j.job_id
 	           WHERE 1=1`
@@ -715,10 +730,10 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 	for rows.Next() {
 		var rj RunWithJobName
 		var startedAt, endedAt sql.NullTime
-		var triggerDetail sql.NullString
+		var triggerDetail, machineID sql.NullString
 		if err := rows.Scan(
 			&rj.RunID, &rj.JobID, &rj.Status, &rj.TriggerType, &triggerDetail,
-			&startedAt, &endedAt, &rj.CreatedAt, &rj.JobName,
+			&startedAt, &endedAt, &rj.CreatedAt, &rj.JobName, &machineID,
 		); err != nil {
 			return nil, fmt.Errorf("scan run with job name: %w", err)
 		}
@@ -731,9 +746,79 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 		if endedAt.Valid {
 			rj.CompletedAt = &endedAt.Time
 		}
+		if machineID.Valid {
+			rj.MachineID = machineID.String
+		}
 		results = append(results, rj)
 	}
 	return results, rows.Err()
+}
+
+// ListJobsWithStats returns jobs with step_count and last_run_status.
+// If userID is empty, returns all jobs (admin view).
+func (s *Store) ListJobsWithStats(ctx context.Context, userID string) ([]JobWithStats, error) {
+	query := `SELECT j.job_id, j.name, COALESCE(j.description, ''), COALESCE(j.user_id, ''),
+	                 j.created_at, j.updated_at,
+	                 (SELECT COUNT(*) FROM steps s WHERE s.job_id = j.job_id) AS step_count,
+	                 COALESCE(
+	                   (SELECT r.status FROM runs r WHERE r.job_id = j.job_id ORDER BY r.created_at DESC LIMIT 1),
+	                   ''
+	                 ) AS last_run_status,
+	                 CASE
+	                   WHEN EXISTS (SELECT 1 FROM cron_schedules cs WHERE cs.job_id = j.job_id)
+	                     AND EXISTS (SELECT 1 FROM job_triggers jt WHERE jt.job_id = j.job_id)
+	                   THEN 'mixed'
+	                   WHEN EXISTS (SELECT 1 FROM cron_schedules cs WHERE cs.job_id = j.job_id)
+	                   THEN 'cron'
+	                   WHEN EXISTS (SELECT 1 FROM job_triggers jt WHERE jt.job_id = j.job_id)
+	                   THEN 'event'
+	                   ELSE 'manual'
+	                 END AS trigger_type,
+	                 COALESCE(
+	                   (SELECT GROUP_CONCAT(DISTINCT s.machine_id) FROM steps s WHERE s.job_id = j.job_id AND s.machine_id IS NOT NULL AND s.machine_id != ''),
+	                   ''
+	                 ) AS machine_ids
+	          FROM jobs j`
+
+	var args []interface{}
+	if userID != "" {
+		query += ` WHERE j.user_id = ?`
+		args = append(args, userID)
+	}
+	query += ` ORDER BY j.created_at DESC`
+
+	rows, err := s.reader.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list jobs with stats: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []JobWithStats
+	for rows.Next() {
+		var j JobWithStats
+		var desc, uid, lastStatus, triggerType, machineIDs sql.NullString
+		if err := rows.Scan(&j.JobID, &j.Name, &desc, &uid,
+			&j.CreatedAt, &j.UpdatedAt, &j.StepCount, &lastStatus, &triggerType, &machineIDs); err != nil {
+			return nil, fmt.Errorf("scan job with stats: %w", err)
+		}
+		if desc.Valid {
+			j.Description = desc.String
+		}
+		if uid.Valid {
+			j.UserID = uid.String
+		}
+		if lastStatus.Valid {
+			j.LastRunStatus = lastStatus.String
+		}
+		if triggerType.Valid {
+			j.TriggerType = triggerType.String
+		}
+		if machineIDs.Valid {
+			j.MachineIDs = machineIDs.String
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, rows.Err()
 }
 
 // nullIfEmpty returns nil for empty strings to satisfy SQL NULL constraints.

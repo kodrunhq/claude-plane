@@ -192,6 +192,9 @@ func (m *mockJobStoreForSchedules) ListRuns(_ context.Context, jobID string) ([]
 func (m *mockJobStoreForSchedules) ListAllRuns(_ context.Context, opts store.ListRunsOptions) ([]store.RunWithJobName, error) {
 	panic("not implemented")
 }
+func (m *mockJobStoreForSchedules) ListJobsWithStats(_ context.Context, userID string) ([]store.JobWithStats, error) {
+	panic("not implemented")
+}
 
 // mockScheduleReloader records calls.
 type mockScheduleReloader struct {

@@ -1197,6 +1197,9 @@ type HealthEvent struct {
 	DiskFreeBytes   int64                  `protobuf:"varint,3,opt,name=disk_free_bytes,json=diskFreeBytes,proto3" json:"disk_free_bytes,omitempty"`
 	ActiveSessions  int32                  `protobuf:"varint,4,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
 	MaxSessions     int32                  `protobuf:"varint,5,opt,name=max_sessions,json=maxSessions,proto3" json:"max_sessions,omitempty"`
+	CpuCores        int32                  `protobuf:"varint,6,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
+	MemoryTotalMb   int64                  `protobuf:"varint,7,opt,name=memory_total_mb,json=memoryTotalMb,proto3" json:"memory_total_mb,omitempty"`
+	MemoryUsedMb    int64                  `protobuf:"varint,8,opt,name=memory_used_mb,json=memoryUsedMb,proto3" json:"memory_used_mb,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1262,6 +1265,27 @@ func (x *HealthEvent) GetActiveSessions() int32 {
 func (x *HealthEvent) GetMaxSessions() int32 {
 	if x != nil {
 		return x.MaxSessions
+	}
+	return 0
+}
+
+func (x *HealthEvent) GetCpuCores() int32 {
+	if x != nil {
+		return x.CpuCores
+	}
+	return 0
+}
+
+func (x *HealthEvent) GetMemoryTotalMb() int64 {
+	if x != nil {
+		return x.MemoryTotalMb
+	}
+	return 0
+}
+
+func (x *HealthEvent) GetMemoryUsedMb() int64 {
+	if x != nil {
+		return x.MemoryUsedMb
 	}
 	return 0
 }

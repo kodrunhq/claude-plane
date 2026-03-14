@@ -84,7 +84,7 @@ func TestJobHandler_ListJobs(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var result []store.Job
+	var result []store.JobWithStats
 	json.NewDecoder(resp.Body).Decode(&result)
 	if len(result) != 2 {
 		t.Errorf("expected 2 jobs, got %d", len(result))
