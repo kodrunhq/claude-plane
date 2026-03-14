@@ -87,7 +87,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-bg-secondary border border-gray-700 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+      <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
         <h2 className="text-lg font-semibold text-text-primary mb-4">New Session</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

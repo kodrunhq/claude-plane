@@ -115,7 +115,7 @@ export function EventsPage() {
               <button
                 onClick={handlePrev}
                 disabled={!hasPrevPage}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-bg-secondary border border-gray-700 text-text-secondary hover:text-text-primary hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-bg-secondary border border-border-primary text-text-secondary hover:text-text-primary hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft size={14} />
                 Prev
@@ -123,7 +123,7 @@ export function EventsPage() {
               <button
                 onClick={handleNext}
                 disabled={!hasNextPage}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-bg-secondary border border-gray-700 text-text-secondary hover:text-text-primary hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-bg-secondary border border-border-primary text-text-secondary hover:text-text-primary hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next
                 <ChevronRight size={14} />

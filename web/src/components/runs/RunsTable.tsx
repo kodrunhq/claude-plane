@@ -21,7 +21,7 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="text-left text-xs text-text-secondary border-b border-gray-700">
+        <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
           <th className="px-4 py-2">Status</th>
           {showJobName && !compact && <th className="px-4 py-2">Job Name</th>}
           <th className="px-4 py-2">Trigger</th>
@@ -42,7 +42,7 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
             }}
             tabIndex={0}
             role="button"
-            className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-gray-700/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
+            className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-border-primary/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
           >
             <td className="px-4 py-2">
               <RunStatusBadge status={run.status} size={badgeSize} />

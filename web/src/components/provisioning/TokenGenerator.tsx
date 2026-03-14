@@ -47,8 +47,8 @@ export function TokenGenerator() {
   }
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-bg-secondary overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-700">
+    <div className="rounded-lg border border-border-primary bg-bg-secondary overflow-hidden">
+      <div className="px-5 py-4 border-b border-border-primary">
         <h2 className="text-sm font-semibold text-text-primary">Generate Provisioning Token</h2>
         <p className="text-xs text-text-secondary mt-0.5">
           Creates a one-time install token valid for 1 hour
@@ -69,7 +69,7 @@ export function TokenGenerator() {
               required
               pattern="[a-zA-Z0-9][a-zA-Z0-9\-]{0,57}"
               title="Alphanumeric and hyphens, 1–58 characters"
-              className="w-full px-3 py-2 text-sm rounded-md border border-gray-700 bg-bg-primary text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary transition-colors"
+              className="w-full px-3 py-2 text-sm rounded-md border border-border-primary bg-bg-primary text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary transition-colors"
             />
           </div>
 
@@ -78,7 +78,7 @@ export function TokenGenerator() {
             <select
               value={params.os}
               onChange={(e) => handleChange('os', e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-md border border-gray-700 bg-bg-primary text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+              className="w-full px-3 py-2 text-sm rounded-md border border-border-primary bg-bg-primary text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
             >
               {OS_OPTIONS.map((os) => (
                 <option key={os} value={os}>
@@ -95,7 +95,7 @@ export function TokenGenerator() {
             <select
               value={params.arch}
               onChange={(e) => handleChange('arch', e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-md border border-gray-700 bg-bg-primary text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+              className="w-full px-3 py-2 text-sm rounded-md border border-border-primary bg-bg-primary text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
             >
               {ARCH_OPTIONS.map((arch) => (
                 <option key={arch} value={arch}>
@@ -126,7 +126,7 @@ export function TokenGenerator() {
                 <p className="text-xs font-medium text-status-success mb-1">
                   Token generated — run on the target machine:
                 </p>
-                <code className="block text-xs font-mono text-text-primary bg-bg-primary rounded px-3 py-2 border border-gray-700 break-all">
+                <code className="block text-xs font-mono text-text-primary bg-bg-primary rounded px-3 py-2 border border-border-primary break-all">
                   {result.curl_command}
                 </code>
               </div>

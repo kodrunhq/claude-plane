@@ -21,8 +21,8 @@ export function CreateCredentialModal({ onSubmit, onCancel, submitting }: Create
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
-      <div className="relative bg-bg-secondary border border-gray-700 rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
           <h2 className="text-lg font-semibold text-text-primary">New Credential</h2>
           <button
             onClick={onCancel}
