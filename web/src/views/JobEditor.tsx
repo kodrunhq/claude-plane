@@ -211,7 +211,7 @@ export function JobEditor() {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-gray-700">
+      <div className="flex items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
         <button
           onClick={() => navigate('/jobs')}
           className="text-text-secondary hover:text-text-primary transition-colors"
@@ -284,11 +284,11 @@ export function JobEditor() {
           </div>
 
           {/* Right panel */}
-          <div className="w-80 border-l border-gray-700 bg-bg-secondary shrink-0 flex flex-col">
+          <div className="w-80 border-l border-border-primary bg-bg-secondary shrink-0 flex flex-col">
             {effectiveJobId ? (
               <>
                 {/* Tab bar */}
-                <div className="flex border-b border-gray-700 shrink-0">
+                <div className="flex border-b border-border-primary shrink-0">
                   <button
                     onClick={() => setRightTab('steps')}
                     className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
@@ -345,7 +345,7 @@ export function JobEditor() {
 
         {/* Run History (collapsible, only for existing jobs) */}
         {effectiveJobId && (
-          <div className="border-t border-gray-700 shrink-0">
+          <div className="border-t border-border-primary shrink-0">
             <button
               onClick={() => setShowRunHistory((prev) => !prev)}
               className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-secondary hover:bg-bg-tertiary transition-colors"

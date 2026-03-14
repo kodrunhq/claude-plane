@@ -36,7 +36,7 @@ export function EventFilters({ filters, onChange }: EventFiltersProps) {
           placeholder="Filter by event type (e.g. run.*)"
           value={filters.typePattern}
           onChange={handleTypeChange}
-          className="w-full pl-8 pr-3 py-2 text-sm bg-bg-secondary border border-gray-700 rounded-md text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary transition-colors"
+          className="w-full pl-8 pr-3 py-2 text-sm bg-bg-secondary border border-border-primary rounded-md text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary transition-colors"
         />
       </div>
 
@@ -46,7 +46,7 @@ export function EventFilters({ filters, onChange }: EventFiltersProps) {
           type="datetime-local"
           value={filters.since}
           onChange={handleSinceChange}
-          className="px-3 py-2 text-sm bg-bg-secondary border border-gray-700 rounded-md text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+          className="px-3 py-2 text-sm bg-bg-secondary border border-border-primary rounded-md text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
         />
       </div>
 
@@ -55,7 +55,7 @@ export function EventFilters({ filters, onChange }: EventFiltersProps) {
         <select
           value={filters.limit}
           onChange={handleLimitChange}
-          className="px-3 py-2 text-sm bg-bg-secondary border border-gray-700 rounded-md text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
+          className="px-3 py-2 text-sm bg-bg-secondary border border-border-primary rounded-md text-text-primary focus:outline-none focus:border-accent-primary transition-colors"
         >
           {LIMIT_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>

@@ -111,7 +111,7 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="My webhook"
-          className="w-full px-3 py-2 bg-bg-tertiary border border-gray-700 rounded-md text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full px-3 py-2 bg-bg-tertiary border border-border-primary rounded-md text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         {errors.name && <p className="text-xs text-status-error">{errors.name}</p>}
       </div>
@@ -123,7 +123,7 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://example.com/webhook"
-          className="w-full px-3 py-2 bg-bg-tertiary border border-gray-700 rounded-md text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full px-3 py-2 bg-bg-tertiary border border-border-primary rounded-md text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         {errors.url && <p className="text-xs text-status-error">{errors.url}</p>}
       </div>
@@ -140,7 +140,7 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
           placeholder={isEditing ? '••••••••' : 'HMAC signing secret'}
-          className="w-full px-3 py-2 bg-bg-tertiary border border-gray-700 rounded-md text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full px-3 py-2 bg-bg-tertiary border border-border-primary rounded-md text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
       </div>
 
@@ -156,7 +156,7 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
           </button>
         </div>
 
-        <div className="border border-gray-700 rounded-md divide-y divide-gray-700">
+        <div className="border border-border-primary rounded-md divide-y divide-gray-700">
           {EVENT_GROUPS.map((group) => {
             const groupAllSelected = group.events.every((e) => selectedEvents.has(e));
             return (

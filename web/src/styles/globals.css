@@ -1,18 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #0d1117;
-  --color-bg-secondary: #161b22;
-  --color-bg-tertiary: #21262d;
-  --color-text-primary: #c9d1d9;
-  --color-text-secondary: #8b949e;
-  --color-status-running: #58a6ff;
-  --color-status-success: #7ee787;
-  --color-status-error: #ff7b72;
-  --color-status-warning: #d29922;
-  --color-status-pending: #6e7681;
-  --color-accent-primary: #58a6ff;
-  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* ─── Backgrounds ──────────────────────────────────────────────────────────── */
+  --color-bg-primary: #0a0e14;
+  --color-bg-secondary: #11161d;
+  --color-bg-tertiary: #1a2029;
+  --color-bg-elevated: #1e2530;
+
+  /* ─── Borders ──────────────────────────────────────────────────────────────── */
+  --color-border-primary: #1e2a3a;
+  --color-border-subtle: #151d28;
+
+  /* ─── Text ─────────────────────────────────────────────────────────────────── */
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #7c8da4;
+
+  /* ─── Status colors ────────────────────────────────────────────────────────── */
+  --color-status-running: #3b82f6;
+  --color-status-success: #22c55e;
+  --color-status-error: #ef4444;
+  --color-status-warning: #eab308;
+  --color-status-pending: #64748b;
+
+  /* ─── Accent palette ───────────────────────────────────────────────────────── */
+  --color-accent-primary: #3b82f6;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-green: #22c55e;
+  --color-accent-purple: #a855f7;
+  --color-accent-amber: #f59e0b;
+
+  /* ─── Typography ───────────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
 
@@ -24,53 +42,43 @@ body {
 
 /* ─── Card ─────────────────────────────────────────────────────────────────── */
 
-/* Usage: <div class="card"> */
 .card {
   background-color: var(--color-bg-secondary);
-  border: 1px solid #30363d;
+  border: 1px solid var(--color-border-primary);
   border-radius: 0.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  transition: box-shadow 150ms ease;
+  transition: box-shadow 200ms ease, border-color 200ms ease;
 }
 
 .card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.05);
 }
 
 /* ─── Gradient header ───────────────────────────────────────────────────────── */
 
-/* Usage: <div class="gradient-header"> */
 .gradient-header {
   background: linear-gradient(
     135deg,
     var(--color-bg-secondary) 0%,
     var(--color-bg-tertiary) 100%
   );
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid var(--color-border-primary);
 }
 
 /* ─── Table alternating rows ────────────────────────────────────────────────── */
 
-/*
- * Apply to <tbody> rows via Tailwind's even: modifier in JSX:
- *   className="even:bg-[#1a1f27] odd:bg-transparent"
- * Or apply .table-striped to <tbody> and rely on these rules:
- */
 .table-striped tr:nth-child(even) {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .table-striped tr:hover {
-  background-color: rgba(88, 166, 255, 0.06);
+  background-color: rgba(59, 130, 246, 0.06);
   transition: background-color 100ms ease;
 }
 
 /* ─── Button variants ───────────────────────────────────────────────────────── */
 
-/*
- * Base reset shared by all button variants. Add a variant class alongside:
- *   <button class="btn btn-primary">Save</button>
- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -82,7 +90,7 @@ body {
   line-height: 1.5;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  transition: all 200ms ease;
   user-select: none;
 }
 
@@ -92,25 +100,25 @@ body {
 }
 
 .btn-primary {
-  background-color: #1f6feb;
-  border-color: #388bfd;
+  background-color: #2563eb;
+  border-color: #3b82f6;
   color: #ffffff;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: #388bfd;
-  box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
+  background-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2), 0 0 20px rgba(59, 130, 246, 0.15);
 }
 
 .btn-secondary {
-  background-color: #21262d;
-  border-color: #30363d;
+  background-color: var(--color-bg-tertiary);
+  border-color: var(--color-border-primary);
   color: var(--color-text-primary);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background-color: #30363d;
-  border-color: #484f58;
+  background-color: var(--color-bg-elevated);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 .btn-danger {
@@ -121,5 +129,71 @@ body {
 
 .btn-danger:hover:not(:disabled) {
   background-color: #dc2626;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2), 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+/* ─── Glow utilities ────────────────────────────────────────────────────────── */
+
+.glow-blue {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.15), 0 0 40px rgba(59, 130, 246, 0.05);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.15), 0 0 40px rgba(6, 182, 212, 0.05);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.15), 0 0 40px rgba(34, 197, 94, 0.05);
+}
+
+.glow-purple {
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.15), 0 0 40px rgba(168, 85, 247, 0.05);
+}
+
+.glow-amber {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.15), 0 0 40px rgba(245, 158, 11, 0.05);
+}
+
+/* ─── Gradient border card ──────────────────────────────────────────────────── */
+
+.gradient-border-card {
+  position: relative;
+  background: var(--color-bg-secondary);
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border-primary);
+  transition: all 250ms ease;
+}
+
+.gradient-border-card:hover {
+  border-color: transparent;
+  background: linear-gradient(var(--color-bg-secondary), var(--color-bg-secondary)) padding-box,
+    linear-gradient(135deg, var(--glow-color, #3b82f6) 0%, transparent 60%) border-box;
+}
+
+/* ─── Stat card accent stripe ───────────────────────────────────────────────── */
+
+.stat-card {
+  position: relative;
+  background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
+  border: 1px solid var(--color-border-primary);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  transition: all 250ms ease;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--stat-accent, #3b82f6);
+  border-radius: 3px 0 0 3px;
+}
+
+.stat-card:hover {
+  border-color: rgba(var(--stat-accent-rgb, 59 130 246) / 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 30px rgba(var(--stat-accent-rgb, 59 130 246) / 0.08);
+  transform: translateY(-1px);
 }

@@ -156,8 +156,8 @@ export function WebhooksPage() {
       {(drawerMode === 'create' || drawerMode === 'edit') && (
         <div className="fixed inset-0 z-40 flex">
           <div className="absolute inset-0 bg-black/50" onClick={closeDrawer} />
-          <div className="relative ml-auto h-full w-full max-w-lg bg-bg-secondary border-l border-gray-700 overflow-y-auto flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+          <div className="relative ml-auto h-full w-full max-w-lg bg-bg-secondary border-l border-border-primary overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
               <h2 className="text-lg font-semibold text-text-primary">
                 {drawerMode === 'create' ? 'New Webhook' : 'Edit Webhook'}
               </h2>

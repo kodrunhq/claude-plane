@@ -87,7 +87,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           type="text"
           defaultValue={step.name}
           key={step.step_id + '-name'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
         />
       </div>
 
@@ -99,7 +99,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           rows={4}
           defaultValue={step.prompt}
           key={step.step_id + '-prompt'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
           placeholder="Enter the prompt for Claude..."
         />
       </div>
@@ -111,7 +111,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           name="machine_id"
           defaultValue={step.machine_id}
           key={step.step_id + '-machine'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
         >
           <option value="">Select machine...</option>
           {machines.map((m) => (
@@ -130,7 +130,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           type="text"
           defaultValue={step.working_dir}
           key={step.step_id + '-workdir'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
           placeholder="/home/user/project"
         />
       </div>
@@ -143,7 +143,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           type="text"
           defaultValue={step.command || 'claude'}
           key={step.step_id + '-command'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
         />
       </div>
 
@@ -155,7 +155,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           rows={2}
           defaultValue={step.args ?? ''}
           key={step.step_id + '-args'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
         />
       </div>
 

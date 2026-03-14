@@ -72,15 +72,22 @@ function NavItemLink({
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+        `group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
           isActive
-            ? 'bg-bg-tertiary text-accent-primary'
-            : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/50'
+            ? 'bg-accent-primary/10 text-accent-primary'
+            : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60'
         }`
       }
     >
-      <Icon size={20} className="shrink-0" />
-      {!collapsed && <span>{label}</span>}
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-accent-primary" />
+          )}
+          <Icon size={18} className="shrink-0" />
+          {!collapsed && <span className="font-medium">{label}</span>}
+        </>
+      )}
     </NavLink>
   );
 }
@@ -94,19 +101,19 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex flex-col bg-bg-secondary border-r border-gray-700 transition-all duration-200"
+      className="flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200"
       style={{ width: collapsed ? 64 : 240 }}
     >
-      <nav className="flex-1 flex flex-col p-2 mt-2 gap-4">
+      <nav className="flex-1 flex flex-col p-2 mt-2 gap-5">
         {navSections.map((section) => {
           if (section.adminOnly && !isAdmin) {
             return null;
           }
 
           return (
-            <div key={section.title} className="flex flex-col gap-1">
+            <div key={section.title} className="flex flex-col gap-0.5">
               {!collapsed && (
-                <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wider text-text-secondary select-none">
+                <span className="px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-text-secondary/60 select-none">
                   {section.title}
                 </span>
               )}
@@ -118,14 +125,14 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-2 border-t border-gray-700">
+      <div className="p-2 border-t border-border-primary">
         <button
           onClick={() => logout()}
-          className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-status-error hover:bg-bg-tertiary/50 w-full transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-status-error hover:bg-status-error/10 w-full transition-all duration-200"
           aria-label="Sign out"
         >
-          <LogOut size={20} className="shrink-0" />
-          {!collapsed && <span>Sign out</span>}
+          <LogOut size={18} className="shrink-0" />
+          {!collapsed && <span className="font-medium">Sign out</span>}
         </button>
       </div>
     </aside>

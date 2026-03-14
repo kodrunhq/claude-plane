@@ -162,7 +162,7 @@ export function RunDetail() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-gray-700">
+      <div className="flex items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
         <button
           onClick={() => navigate('/runs')}
           className="text-text-secondary hover:text-text-primary transition-colors"
@@ -208,7 +208,7 @@ export function RunDetail() {
       </div>
 
       {/* DAG View */}
-      <div className="h-64 shrink-0 border-b border-gray-700">
+      <div className="h-64 shrink-0 border-b border-border-primary">
         <RunDAGView
           steps={steps}
           dependencies={dependencies}
@@ -222,7 +222,7 @@ export function RunDetail() {
       <div className="flex-1 min-h-0">
         {selectedRunStep?.session_id ? (
           <div className="h-full flex flex-col">
-            <div className="px-3 py-1.5 bg-bg-secondary border-b border-gray-700 text-xs text-text-secondary flex items-center justify-between">
+            <div className="px-3 py-1.5 bg-bg-secondary border-b border-border-primary text-xs text-text-secondary flex items-center justify-between">
               <span>
                 {selectedStepName ?? 'Step'} - {selectedRunStep.status}
               </span>

@@ -35,7 +35,7 @@ function TriggerRow({ trigger, onDelete, isDeleting }: TriggerRowProps) {
   }
 
   return (
-    <div className="border border-gray-700 rounded-md p-3 space-y-2 bg-bg-tertiary">
+    <div className="border border-border-primary rounded-md p-3 space-y-2 bg-bg-tertiary">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-mono text-text-primary truncate">{trigger.event_type}</p>
@@ -122,7 +122,7 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-primary">
         <span className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
           <Zap size={13} />
           Triggers
