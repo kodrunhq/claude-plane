@@ -269,7 +269,7 @@ func (t *Telegram) runCommandsPoller(ctx context.Context) error {
 func (t *Telegram) handleCommand(ctx context.Context, text string) string {
 	cmd, err := ParseCommand(text)
 	if err != nil {
-		return fmt.Sprintf("❌ %s", err.Error())
+		return fmt.Sprintf("❌ %s", escapeMarkdownV2(err.Error()))
 	}
 
 	switch cmd.Name {
@@ -295,22 +295,25 @@ func (t *Telegram) handleCommand(ctx context.Context, text string) string {
 		return t.handleStart(ctx, cmd)
 
 	default:
-		return fmt.Sprintf("❌ Unknown command: %s", cmd.Name)
+		return fmt.Sprintf("❌ Unknown command: %s", escapeMarkdownV2(cmd.Name))
 	}
 }
 
 func (t *Telegram) handleList(ctx context.Context) string {
 	sessions, err := t.apiClient.ListSessions(ctx)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to list sessions: %s", err.Error())
+		return fmt.Sprintf("❌ Failed to list sessions: %s", escapeMarkdownV2(err.Error()))
 	}
 	if len(sessions) == 0 {
-		return "No active sessions."
+		return "No active sessions\\."
 	}
 	var sb strings.Builder
 	sb.WriteString("*Active sessions:*\n")
 	for _, s := range sessions {
-		sb.WriteString(fmt.Sprintf("• `%s` — %s (%s)\n", s.SessionID, s.MachineID, s.Status))
+		sb.WriteString(fmt.Sprintf("• `%s` — %s \\(%s\\)\n",
+			s.SessionID,
+			escapeMarkdownV2(s.MachineID),
+			escapeMarkdownV2(s.Status)))
 	}
 	return sb.String()
 }
@@ -318,10 +321,10 @@ func (t *Telegram) handleList(ctx context.Context) string {
 func (t *Telegram) handleMachines(ctx context.Context) string {
 	machines, err := t.apiClient.ListMachines(ctx)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to list machines: %s", err.Error())
+		return fmt.Sprintf("❌ Failed to list machines: %s", escapeMarkdownV2(err.Error()))
 	}
 	if len(machines) == 0 {
-		return "No machines connected."
+		return "No machines connected\\."
 	}
 	var sb strings.Builder
 	sb.WriteString("*Connected machines:*\n")
@@ -330,25 +333,28 @@ func (t *Telegram) handleMachines(ctx context.Context) string {
 		if name == "" {
 			name = m.MachineID
 		}
-		sb.WriteString(fmt.Sprintf("• `%s` — %s (%s)\n", m.MachineID, name, m.Status))
+		sb.WriteString(fmt.Sprintf("• `%s` — %s \\(%s\\)\n",
+			m.MachineID,
+			escapeMarkdownV2(name),
+			escapeMarkdownV2(m.Status)))
 	}
 	return sb.String()
 }
 
 func (t *Telegram) handleKill(ctx context.Context, cmd *Command) string {
 	if len(cmd.Args) < 1 {
-		return "❌ Usage: /kill <session_id>"
+		return "❌ Usage: /kill <session\\_id>"
 	}
 	sessionID := cmd.Args[0]
 	if err := t.apiClient.KillSession(ctx, sessionID); err != nil {
-		return fmt.Sprintf("❌ Failed to kill session %s: %s", sessionID, err.Error())
+		return fmt.Sprintf("❌ Failed to kill session %s: %s", escapeMarkdownV2(sessionID), escapeMarkdownV2(err.Error()))
 	}
-	return fmt.Sprintf("✅ Session `%s` killed.", sessionID)
+	return fmt.Sprintf("✅ Session `%s` killed\\.", sessionID)
 }
 
 func (t *Telegram) handleInject(ctx context.Context, cmd *Command) string {
 	if len(cmd.Args) < 2 {
-		return "❌ Usage: /inject <session_id> <text>"
+		return "❌ Usage: /inject <session\\_id> <text>"
 	}
 	sessionID := cmd.Args[0]
 	text := strings.Join(cmd.Args[1:], " ")
@@ -357,14 +363,14 @@ func (t *Telegram) handleInject(ctx context.Context, cmd *Command) string {
 		Source: "telegram",
 	}
 	if err := t.apiClient.InjectSession(ctx, sessionID, req); err != nil {
-		return fmt.Sprintf("❌ Failed to inject into session %s: %s", sessionID, err.Error())
+		return fmt.Sprintf("❌ Failed to inject into session %s: %s", escapeMarkdownV2(sessionID), escapeMarkdownV2(err.Error()))
 	}
-	return fmt.Sprintf("✅ Text injected into session `%s`.", sessionID)
+	return fmt.Sprintf("✅ Text injected into session `%s`\\.", sessionID)
 }
 
 func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
 	if len(cmd.Args) < 1 {
-		return "❌ Usage: /start <template_name> [machine_id] [| VAR=val …]"
+		return "❌ Usage: /start <template\\_name> \\[machine\\_id\\] \\[\\| VAR\\=val …\\]"
 	}
 	templateName := cmd.Args[0]
 
@@ -377,7 +383,7 @@ func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
 	// Resolve template name to ID.
 	matched, err := t.apiClient.GetTemplateByName(ctx, templateName)
 	if err != nil {
-		return fmt.Sprintf("❌ Template %q not found.", templateName)
+		return fmt.Sprintf("❌ Template %q not found\\.", escapeMarkdownV2(templateName))
 	}
 
 	// Fall back to template's default machine.
@@ -385,7 +391,7 @@ func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
 		machineID = matched.MachineID
 	}
 	if machineID == "" {
-		return "❌ Template has no default machine. Usage: /start <template> <machine>"
+		return "❌ Template has no default machine\\. Usage: /start <template> <machine>"
 	}
 
 	req := client.CreateSessionRequest{
@@ -395,12 +401,12 @@ func (t *Telegram) handleStart(ctx context.Context, cmd *Command) string {
 	}
 	session, err := t.apiClient.CreateSession(ctx, req)
 	if err != nil {
-		return fmt.Sprintf("❌ Failed to create session: %s", err.Error())
+		return fmt.Sprintf("❌ Failed to create session: %s", escapeMarkdownV2(err.Error()))
 	}
 	return fmt.Sprintf("✅ Session started\nID: `%s`\nMachine: `%s`", session.SessionID, session.MachineID)
 }
 
-// sendMessage sends a Markdown-formatted message to the given Telegram topic.
+// sendMessage sends a MarkdownV2-formatted message to the given Telegram topic.
 func (t *Telegram) sendMessage(ctx context.Context, text string, topicID int) error {
 	apiURL := fmt.Sprintf("%s%s/sendMessage", telegramAPIBase, t.config.BotToken)
 
@@ -408,7 +414,7 @@ func (t *Telegram) sendMessage(ctx context.Context, text string, topicID int) er
 		"chat_id":                  t.config.GroupID,
 		"message_thread_id":        topicID,
 		"text":                     text,
-		"parse_mode":               "Markdown",
+		"parse_mode":               "MarkdownV2",
 		"disable_web_page_preview": true,
 	}
 
@@ -502,13 +508,13 @@ func (t *Telegram) postJSON(ctx context.Context, url string, body map[string]int
 
 // helpText returns the static help message shown by /help.
 func helpText() string {
-	return `*claude-plane bot commands*
+	return `*claude\-plane bot commands*
 
-/start <template> [machine] [| VAR=val …] — Start a session from a template
+/start <template> \[machine\] \[| VAR\=val …\] — Start a session from a template
 /list — List active sessions
 /machines — List connected machines
 /status — Bridge status
-/kill <session_id> — Kill a session
-/inject <session_id> <text> — Inject text into a session
+/kill <session\_id> — Kill a session
+/inject <session\_id> <text> — Inject text into a session
 /help — Show this message`
 }

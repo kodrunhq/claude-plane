@@ -9,7 +9,32 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/bridge/client"
 )
 
-// FormatEvent converts a claude-plane event into a Telegram Markdown message string.
+var mdv2Replacer = strings.NewReplacer(
+	"_", "\\_",
+	"*", "\\*",
+	"[", "\\[",
+	"]", "\\]",
+	"(", "\\(",
+	")", "\\)",
+	"~", "\\~",
+	"`", "\\`",
+	">", "\\>",
+	"#", "\\#",
+	"+", "\\+",
+	"-", "\\-",
+	"=", "\\=",
+	"|", "\\|",
+	"{", "\\{",
+	"}", "\\}",
+	".", "\\.",
+	"!", "\\!",
+)
+
+func escapeMarkdownV2(s string) string {
+	return mdv2Replacer.Replace(s)
+}
+
+// FormatEvent converts a claude-plane event into a Telegram MarkdownV2 message string.
 func FormatEvent(e client.Event) string {
 	str := func(key string) string {
 		v, _ := e.Payload[key]
@@ -38,7 +63,7 @@ func FormatEvent(e client.Event) string {
 	case "run.created":
 		return fmt.Sprintf(
 			"📋 *Run created*\nJob: `%s`\nRun: `%s`\nTrigger: %s",
-			str("job_id"), str("run_id"), str("trigger_type"),
+			str("job_id"), str("run_id"), escapeMarkdownV2(str("trigger_type")),
 		)
 	case "run.completed":
 		return fmt.Sprintf(
@@ -62,7 +87,7 @@ func FormatEvent(e client.Event) string {
 		)
 	default:
 		payload, _ := json.Marshal(e.Payload)
-		return fmt.Sprintf("📢 *%s*\n%s", e.Type, string(payload))
+		return fmt.Sprintf("📢 *%s*\n%s", escapeMarkdownV2(e.Type), escapeMarkdownV2(string(payload)))
 	}
 }
 
