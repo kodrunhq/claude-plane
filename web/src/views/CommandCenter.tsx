@@ -111,7 +111,7 @@ export function CommandCenter() {
         <h1 className="text-xl font-semibold text-text-primary">Command Center</h1>
         <button
           onClick={() => { setPreselectedMachine(undefined); setModalOpen(true); }}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium bg-accent-primary hover:bg-accent-primary/90 text-white transition-all hover:shadow-[0_0_20px_rgba(59,130,246,0.3)]"
         >
           <Plus size={16} />
           New Session
@@ -124,16 +124,19 @@ export function CommandCenter() {
           icon={<Activity size={24} />}
           label="Active Sessions"
           value={isLoading ? '--' : String(activeSessions.length)}
+          accent="cyan"
         />
         <StatCard
           icon={<Server size={24} />}
           label="Online Machines"
           value={isLoading ? '--' : String(onlineMachines.length)}
+          accent="green"
         />
         <StatCard
           icon={<Terminal size={24} />}
           label="Total Sessions"
           value={isLoading ? '--' : String(sessions?.length ?? 0)}
+          accent="purple"
         />
       </div>
 
@@ -144,23 +147,27 @@ export function CommandCenter() {
           label="Total Jobs"
           value={isJobsRunsLoading ? '--' : String(jobs?.length ?? 0)}
           href="/jobs"
+          accent="blue"
         />
         <StatCard
           icon={<Play size={24} />}
           label="Recent Runs"
           value={isJobsRunsLoading ? '--' : String(runs?.length ?? 0)}
           href="/runs"
+          accent="amber"
         />
         <StatCard
           icon={<Activity size={24} />}
           label="Completion Rate"
           value={isJobsRunsLoading ? '--' : completionRate !== null ? `${completionRate}%` : 'N/A'}
+          accent="green"
         />
         <StatCard
           icon={<Clock size={24} />}
           label="Jobs Run"
           value={isJobsRunsLoading ? '--' : String(countJobsWithRuns(jobs ?? []))}
           href="/jobs"
+          accent="cyan"
         />
       </div>
 
@@ -192,7 +199,7 @@ export function CommandCenter() {
               </Link>
             </div>
           ) : (
-            <div className="bg-bg-secondary rounded-lg divide-y divide-border-primary">
+            <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
               {recentJobs.map((job) => (
                 <RecentJobRow key={job.job_id} job={job} />
               ))}
@@ -220,7 +227,7 @@ export function CommandCenter() {
               <p className="text-sm text-text-secondary">No runs yet.</p>
             </div>
           ) : (
-            <div className="bg-bg-secondary rounded-lg divide-y divide-border-primary">
+            <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
               {recentRuns.map((run) => (
                 <RecentRunRow key={run.run_id} run={run} />
               ))}
@@ -309,22 +316,39 @@ function countJobsWithRuns(jobs: Job[]): number {
   return jobs.filter((j) => j.last_run_status !== undefined && j.last_run_status !== null).length;
 }
 
+const STAT_ACCENTS = {
+  blue:   { color: '#3b82f6', rgb: '59 130 246', iconClass: 'text-accent-primary' },
+  cyan:   { color: '#06b6d4', rgb: '6 182 212',  iconClass: 'text-accent-cyan' },
+  green:  { color: '#22c55e', rgb: '34 197 94',   iconClass: 'text-accent-green' },
+  purple: { color: '#a855f7', rgb: '168 85 247',  iconClass: 'text-accent-purple' },
+  amber:  { color: '#f59e0b', rgb: '245 158 11',  iconClass: 'text-accent-amber' },
+} as const;
+
 function StatCard({
   icon,
   label,
   value,
   href,
+  accent = 'blue',
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   href?: string;
+  accent?: keyof typeof STAT_ACCENTS;
 }) {
+  const a = STAT_ACCENTS[accent];
   const content = (
-    <div className="bg-bg-secondary rounded-lg p-4 flex items-center gap-4">
-      <div className="text-accent-primary shrink-0">{icon}</div>
+    <div
+      className="stat-card p-4 flex items-center gap-4"
+      style={{
+        '--stat-accent': a.color,
+        '--stat-accent-rgb': a.rgb,
+      } as React.CSSProperties}
+    >
+      <div className={`${a.iconClass} shrink-0`}>{icon}</div>
       <div>
-        <p className="text-2xl font-bold text-text-primary">{value}</p>
+        <p className="text-2xl font-bold text-text-primary font-mono tabular-nums">{value}</p>
         <p className="text-xs text-text-secondary">{label}</p>
       </div>
     </div>
@@ -332,7 +356,7 @@ function StatCard({
 
   if (href) {
     return (
-      <Link to={href} className="block hover:opacity-80 transition-opacity">
+      <Link to={href} className="block">
         {content}
       </Link>
     );
@@ -344,7 +368,7 @@ function RecentJobRow({ job }: { job: Job }) {
   return (
     <Link
       to={`/jobs/${job.job_id}`}
-      className="flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary transition-colors first:rounded-t-lg last:rounded-b-lg"
+      className="flex items-center justify-between px-4 py-3 hover:bg-accent-primary/5 transition-all first:rounded-t-lg last:rounded-b-lg"
     >
       <div className="flex-1 min-w-0 mr-3">
         <p className="text-sm font-medium text-text-primary truncate">{job.name}</p>
@@ -366,7 +390,7 @@ function RecentRunRow({ run }: { run: Run }) {
   return (
     <Link
       to={`/runs/${run.run_id}`}
-      className="flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary transition-colors first:rounded-t-lg last:rounded-b-lg"
+      className="flex items-center justify-between px-4 py-3 hover:bg-accent-primary/5 transition-all first:rounded-t-lg last:rounded-b-lg"
     >
       <div className="flex-1 min-w-0 mr-3">
         <p className="text-sm font-medium text-text-primary truncate">
@@ -389,7 +413,7 @@ function RecentRunRow({ run }: { run: Run }) {
 
 function SkeletonList({ count }: { count: number }) {
   return (
-    <div className="bg-bg-secondary rounded-lg divide-y divide-border-primary">
+    <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className="px-4 py-3 flex items-center gap-3 animate-pulse">
           <div className="flex-1">

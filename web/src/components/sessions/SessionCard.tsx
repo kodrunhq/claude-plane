@@ -13,12 +13,13 @@ export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps
 
   return (
     <div
-      className="bg-bg-tertiary rounded-lg p-4 hover:ring-1 ring-accent-primary transition cursor-pointer"
+      className="gradient-border-card p-4 cursor-pointer"
+      style={{ '--glow-color': '#06b6d4' } as React.CSSProperties}
       onClick={() => onAttach(session.session_id)}
     >
       <div className="flex items-center justify-between mb-3">
         <StatusBadge status={session.status} size="sm" />
-        <span className="text-xs text-text-secondary font-mono" title={session.session_id}>
+        <span className="text-xs text-text-secondary font-mono opacity-60" title={session.session_id}>
           {session.session_id.slice(0, 8)}
         </span>
       </div>
@@ -35,16 +36,16 @@ export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps
       </div>
 
       <div className="flex items-center justify-between text-xs text-text-secondary">
-        <span className="font-mono truncate max-w-[120px]" title={session.machine_id}>
+        <span className="font-mono truncate max-w-[120px] opacity-60" title={session.machine_id}>
           {session.machine_id.slice(0, 8)}
         </span>
         <TimeAgo date={session.updated_at} className="text-text-secondary" />
       </div>
 
       {isActive && (
-        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-700">
+        <div className="flex gap-2 mt-3 pt-3 border-t border-border-primary">
           <button
-            className="flex-1 px-3 py-1.5 text-xs rounded-md bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20 transition-colors"
+            className="flex-1 px-3 py-1.5 text-xs rounded-md font-medium bg-accent-cyan/10 text-accent-cyan hover:bg-accent-cyan/20 transition-all hover:shadow-[0_0_12px_rgba(6,182,212,0.15)]"
             onClick={(e) => {
               e.stopPropagation();
               onAttach(session.session_id);
@@ -53,7 +54,7 @@ export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps
             Attach
           </button>
           <button
-            className="flex-1 px-3 py-1.5 text-xs rounded-md bg-status-error/10 text-status-error hover:bg-status-error/20 transition-colors"
+            className="flex-1 px-3 py-1.5 text-xs rounded-md font-medium bg-status-error/10 text-status-error hover:bg-status-error/20 transition-all hover:shadow-[0_0_12px_rgba(239,68,68,0.15)]"
             onClick={(e) => {
               e.stopPropagation();
               onTerminate(session.session_id);

@@ -94,14 +94,14 @@ function ScheduleForm({ initial, onSave, onCancel, isSaving }: ScheduleFormProps
   }
 
   return (
-    <div className="border border-gray-700 rounded-md p-3 space-y-3 bg-bg-tertiary">
+    <div className="border border-border-primary rounded-md p-3 space-y-3 bg-bg-tertiary">
       <div className="space-y-1">
         <label className="text-xs text-text-secondary">Cron Expression</label>
         <input
           type="text"
           value={form.cron_expr}
           onChange={(e) => setForm((prev) => ({ ...prev, cron_expr: e.target.value }))}
-          className="w-full bg-bg-secondary border border-gray-700 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+          className="w-full bg-bg-secondary border border-border-primary rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary font-mono"
           placeholder="0 9 * * MON"
         />
         <p className={`text-xs ${isValid ? 'text-text-secondary' : 'text-red-400'}`}>
@@ -114,7 +114,7 @@ function ScheduleForm({ initial, onSave, onCancel, isSaving }: ScheduleFormProps
         <select
           value={form.timezone}
           onChange={(e) => setForm((prev) => ({ ...prev, timezone: e.target.value }))}
-          className="w-full bg-bg-secondary border border-gray-700 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary"
+          className="w-full bg-bg-secondary border border-border-primary rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary"
         >
           {COMMON_TIMEZONES.map((tz) => (
             <option key={tz} value={tz}>
@@ -177,7 +177,7 @@ function ScheduleRow({ schedule, onPause, onResume, onDelete, onEdit, isToggling
   );
 
   return (
-    <div className="border border-gray-700 rounded-md p-3 space-y-1 bg-bg-tertiary">
+    <div className="border border-border-primary rounded-md p-3 space-y-1 bg-bg-tertiary">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-mono text-text-primary truncate">{schedule.cron_expr}</p>
@@ -303,7 +303,7 @@ export function SchedulePanel({ jobId }: SchedulePanelProps) {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-primary">
         <span className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
           <Clock size={13} />
           Schedules

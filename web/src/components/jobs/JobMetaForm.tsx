@@ -16,7 +16,7 @@ export function JobMetaForm({ name, description, onChange }: JobMetaFormProps) {
           type="text"
           value={name}
           onChange={(e) => onChange('name', e.target.value)}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
           placeholder="My Job"
         />
       </div>
@@ -29,7 +29,7 @@ export function JobMetaForm({ name, description, onChange }: JobMetaFormProps) {
           value={description}
           onChange={(e) => onChange('description', e.target.value)}
           rows={2}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-gray-700 text-text-primary focus:outline-none focus:border-accent-primary resize-none"
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none"
           placeholder="Optional description..."
         />
       </div>

@@ -93,7 +93,7 @@ export function UsersList({ users, onEdit }: UsersListProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-gray-700">
+      <div className="overflow-hidden rounded-lg border border-border-primary">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-bg-secondary">

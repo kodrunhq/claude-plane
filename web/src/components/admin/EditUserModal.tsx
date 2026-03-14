@@ -16,8 +16,8 @@ export function EditUserModal({ open, user, onClose, onSubmit, submitting }: Edi
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-bg-secondary border border-gray-700 rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+      <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
           <h2 className="text-lg font-semibold text-text-primary">Edit User</h2>
           <button
             onClick={onClose}
@@ -61,7 +61,7 @@ function EditUserForm({
           type="text"
           value={user.email}
           disabled
-          className="w-full px-3 py-2 text-sm bg-bg-tertiary/50 border border-gray-700 rounded-md text-text-secondary cursor-not-allowed"
+          className="w-full px-3 py-2 text-sm bg-bg-tertiary/50 border border-border-primary rounded-md text-text-secondary cursor-not-allowed"
         />
       </div>
 
@@ -74,7 +74,7 @@ function EditUserForm({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Optional"
-          className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-gray-700 rounded-md text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary"
+          className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-border-primary rounded-md text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-primary"
         />
       </div>
 
@@ -85,7 +85,7 @@ function EditUserForm({
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as 'user' | 'admin')}
-          className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-gray-700 rounded-md text-text-primary focus:outline-none focus:border-accent-primary"
+          className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-border-primary rounded-md text-text-primary focus:outline-none focus:border-accent-primary"
         >
           <option value="user">user</option>
           <option value="admin">admin</option>

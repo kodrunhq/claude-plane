@@ -34,7 +34,7 @@ function ExpandedPayload({ payload }: ExpandedRowProps) {
   return (
     <tr className="bg-bg-primary/60">
       <td colSpan={5} className="px-6 py-4">
-        <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap break-all bg-bg-secondary border border-gray-700 rounded-md p-4 max-h-64 overflow-auto">
+        <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap break-all bg-bg-secondary border border-border-primary rounded-md p-4 max-h-64 overflow-auto">
           {JSON.stringify(payload, null, 2)}
         </pre>
       </td>
@@ -54,7 +54,7 @@ function EventRow({ event, expanded, onToggle }: EventRowProps) {
   return (
     <>
       <tr
-        className="border-t border-gray-700 hover:bg-bg-tertiary/30 transition-colors"
+        className="border-t border-border-primary hover:bg-bg-tertiary/30 transition-colors"
         onClick={hasPayload ? onToggle : undefined}
         style={{ cursor: hasPayload ? 'pointer' : 'default' }}
       >
@@ -107,7 +107,7 @@ export function EventsTable({ events }: EventsTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-700">
+    <div className="overflow-hidden rounded-lg border border-border-primary">
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-bg-secondary">

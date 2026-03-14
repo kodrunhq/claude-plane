@@ -55,13 +55,13 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
   }
 
   return (
-    <div className="border border-gray-700 rounded-md p-3 space-y-3 bg-bg-tertiary">
+    <div className="border border-border-primary rounded-md p-3 space-y-3 bg-bg-tertiary">
       <div className="space-y-1">
         <label className="text-xs text-text-secondary">Event Type</label>
         <select
           value={form.event_type}
           onChange={(e) => handleEventTypeChange(e.target.value)}
-          className="w-full bg-bg-secondary border border-gray-700 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary"
+          className="w-full bg-bg-secondary border border-border-primary rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent-primary"
         >
           {KNOWN_EVENT_TYPES.map((et) => (
             <option key={et} value={et}>
@@ -75,7 +75,7 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
             type="text"
             value={form.custom_event_type}
             placeholder="e.g. run.completed"
-            className="w-full bg-bg-secondary border border-gray-700 rounded-md px-2 py-1.5 text-sm text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+            className="w-full bg-bg-secondary border border-border-primary rounded-md px-2 py-1.5 text-sm text-text-primary font-mono focus:outline-none focus:border-accent-primary"
             onChange={(e) => setForm((prev) => ({ ...prev, custom_event_type: e.target.value }))}
           />
         )}
@@ -89,7 +89,7 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
           rows={3}
           placeholder='e.g. {"status": "completed"}'
           className={`w-full bg-bg-secondary border rounded-md px-2 py-1.5 text-sm text-text-primary font-mono focus:outline-none resize-none ${
-            filterValid ? 'border-gray-700 focus:border-accent-primary' : 'border-red-500'
+            filterValid ? 'border-border-primary focus:border-accent-primary' : 'border-red-500'
           }`}
         />
         {!filterValid && (
