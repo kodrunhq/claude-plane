@@ -17,6 +17,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/bridge"
 	"github.com/kodrunhq/claude-plane/internal/bridge/client"
 	"github.com/kodrunhq/claude-plane/internal/bridge/config"
+	"github.com/kodrunhq/claude-plane/internal/bridge/connector/github"
 	"github.com/kodrunhq/claude-plane/internal/bridge/connector/telegram"
 	"github.com/kodrunhq/claude-plane/internal/bridge/state"
 )
@@ -89,6 +90,23 @@ func newServeCmd() *cobra.Command {
 					conn := telegram.New(cc.ConnectorID, tCfg, apiClient, stateStore, slog.Default())
 					b.AddConnector(conn)
 					slog.Info("Registered connector", "type", "telegram", "name", cc.Name, "id", cc.ConnectorID)
+				case "github":
+					var gCfg github.Config
+					if err := json.Unmarshal([]byte(cc.Config), &gCfg); err != nil {
+						slog.Error("parse github config", "connector_id", cc.ConnectorID, "error", err)
+						continue
+					}
+					if cc.ConfigSecret != "" {
+						var secretCfg struct {
+							Token string `json:"token"`
+						}
+						if err := json.Unmarshal([]byte(cc.ConfigSecret), &secretCfg); err == nil {
+							gCfg.Token = secretCfg.Token
+						}
+					}
+					conn := github.New(cc.ConnectorID, gCfg, apiClient, stateStore, slog.Default())
+					b.AddConnector(conn)
+					slog.Info("Registered connector", "type", "github", "name", cc.Name, "id", cc.ConnectorID)
 				default:
 					slog.Warn("Unknown connector type", "type", cc.ConnectorType, "id", cc.ConnectorID)
 				}
