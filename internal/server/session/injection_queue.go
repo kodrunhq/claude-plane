@@ -170,6 +170,17 @@ func (q *InjectionQueue) drainSession(sessionID string, sq *sessionQueue) {
 			return
 
 		case <-idleTimer.C:
+			// Re-check: an item may have raced with the timer.
+			select {
+			case item, ok := <-sq.items:
+				if ok {
+					q.processItem(sessionID, sq.machineID, item, sq)
+					idleTimer.Reset(q.idleTimeout)
+					continue // back to main select
+				}
+			default:
+				// truly idle
+			}
 			q.logger.Info("injection drainer idle timeout", "session_id", sessionID)
 			return
 		}

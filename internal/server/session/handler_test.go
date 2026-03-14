@@ -95,11 +95,13 @@ func TestCreateSession(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	body := `{"machine_id":"machine-a","command":"claude","working_dir":"/tmp"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
@@ -150,11 +152,13 @@ func TestListSessions(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create 2 sessions
 	for i := range 2 {
@@ -192,11 +196,13 @@ func TestTerminateSession(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session
 	body := `{"machine_id":"machine-a"}`
@@ -276,11 +282,13 @@ func TestGetSession_AuthorizationNonOwner(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session as user-owner
 	ownerClaims := func(r *http.Request) *session.UserClaims {
@@ -337,11 +345,13 @@ func TestGetSession_AdminCanAccessAny(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session as user-owner
 	ownerClaims := func(r *http.Request) *session.UserClaims {
@@ -389,11 +399,13 @@ func TestListSessions_FiltersByOwnership(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create session as user-a
 	claimsA := func(r *http.Request) *session.UserClaims {
@@ -480,11 +492,13 @@ func setupTemplateTestEnv(t *testing.T, userID string) (
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	getClaims := func(r *http.Request) *session.UserClaims {
 		return &session.UserClaims{UserID: userID, Role: "user"}
@@ -797,11 +811,13 @@ func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a session directly in the DB
 	if err := st.CreateSession(&store.Session{
@@ -860,11 +876,13 @@ func setupInjectTestEnv(t *testing.T) (chi.Router, *store.Store, string) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	getClaims := func(r *http.Request) *session.UserClaims {
 		return &session.UserClaims{UserID: "inject-user", Role: "user"}
@@ -1029,11 +1047,13 @@ func TestInjectSession_NonOwnerReturns404(t *testing.T) {
 	if err := st.UpsertMachine("machine-a", 5); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
-	cm.Register("machine-a", &connmgr.ConnectedAgent{
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
 		MachineID:   "machine-a",
 		MaxSessions: 5,
 		SendCommand: recorder.send,
-	})
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
 
 	// Create a running session owned by owner-user.
 	sessionID := "sess-inject-auth"
