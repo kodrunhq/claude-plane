@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -14,10 +15,16 @@ import (
 )
 
 const (
-	defaultQueueCapacity = 32
-	defaultIdleTimeout   = 5 * time.Minute
+	defaultQueueCapacity  = 32
+	defaultIdleTimeout    = 5 * time.Minute
 	defaultStaleThreshold = 5 * time.Minute
 )
+
+// ErrQueueFull is returned when the injection queue for a session is at capacity.
+var ErrQueueFull = errors.New("injection queue full")
+
+// ErrSessionNotRunning is returned when the target session is in a terminal status.
+var ErrSessionNotRunning = errors.New("session not running")
 
 // InjectionAuditStore is the narrow interface for injection audit operations.
 type InjectionAuditStore interface {
@@ -48,6 +55,7 @@ type InjectionQueue struct {
 type sessionQueue struct {
 	items     chan queueItem
 	done      chan struct{}
+	closeOnce sync.Once
 	machineID string
 }
 
@@ -93,7 +101,7 @@ func (q *InjectionQueue) Enqueue(ctx context.Context, sessionID, machineID strin
 		return fmt.Errorf("check session status: %w", err)
 	}
 	if isTerminalStatus(sess.Status) {
-		return fmt.Errorf("session %s is in terminal status %q", sessionID, sess.Status)
+		return fmt.Errorf("session %s is in terminal status %q: %w", sessionID, sess.Status, ErrSessionNotRunning)
 	}
 
 	sq := q.getOrCreateQueue(sessionID, machineID)
@@ -109,7 +117,7 @@ func (q *InjectionQueue) Enqueue(ctx context.Context, sessionID, machineID strin
 	case sq.items <- item:
 		return nil
 	default:
-		return fmt.Errorf("injection queue full for session %s (capacity %d)", sessionID, defaultQueueCapacity)
+		return fmt.Errorf("injection queue full for session %s (capacity %d): %w", sessionID, defaultQueueCapacity, ErrQueueFull)
 	}
 }
 
@@ -214,7 +222,7 @@ func (q *InjectionQueue) processItem(sessionID, machineID string, item queueItem
 // handleSessionEvent reacts to session lifecycle events. When a session exits
 // or is terminated, the corresponding drainer is shut down.
 func (q *InjectionQueue) handleSessionEvent(_ context.Context, evt event.Event) error {
-	if evt.Type != event.TypeSessionExited {
+	if evt.Type != event.TypeSessionExited && evt.Type != event.TypeSessionTerminated {
 		return nil
 	}
 
@@ -228,15 +236,7 @@ func (q *InjectionQueue) handleSessionEvent(_ context.Context, evt event.Event) 
 	q.mu.Unlock()
 
 	if exists {
-		// Signal the drainer to exit. Close is idempotent-safe because we only
-		// close from this single code path (guarded by the exists check + removal
-		// in removeQueue).
-		select {
-		case <-sq.done:
-			// Already closed.
-		default:
-			close(sq.done)
-		}
+		sq.closeOnce.Do(func() { close(sq.done) })
 	}
 	return nil
 }
@@ -262,11 +262,7 @@ func (q *InjectionQueue) Close() {
 	q.mu.Unlock()
 
 	for _, sq := range queues {
-		select {
-		case <-sq.done:
-		default:
-			close(sq.done)
-		}
+		sq.closeOnce.Do(func() { close(sq.done) })
 	}
 }
 

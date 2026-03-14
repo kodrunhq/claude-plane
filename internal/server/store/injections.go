@@ -23,7 +23,10 @@ type Injection struct {
 
 // CreateInjection inserts a new injection record and returns the hydrated struct.
 func (s *Store) CreateInjection(ctx context.Context, inj *Injection) (*Injection, error) {
-	id := uuid.New().String()
+	id := inj.InjectionID
+	if id == "" {
+		id = uuid.New().String()
+	}
 	now := time.Now().UTC()
 
 	_, err := s.writer.ExecContext(ctx,
