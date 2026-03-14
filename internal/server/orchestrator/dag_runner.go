@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
@@ -124,7 +125,26 @@ func (d *DAGRunner) Start(parentCtx context.Context) {
 	d.mu.Unlock()
 
 	for _, step := range toLaunch {
-		d.executor.ExecuteStep(ctx, step, d.OnStepCompleted)
+		d.launchStep(ctx, step)
+	}
+}
+
+// launchStep starts a step, applying any configured delay before execution.
+// If DelaySecondsSnapshot > 0, the step waits in a goroutine before calling
+// ExecuteStep, respecting context cancellation during the wait.
+func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
+	delay := time.Duration(rs.DelaySecondsSnapshot) * time.Second
+	if delay > 0 {
+		go func() {
+			select {
+			case <-time.After(delay):
+				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
+			case <-ctx.Done():
+				return
+			}
+		}()
+	} else {
+		d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 	}
 }
 
@@ -151,10 +171,10 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		rs.Status = store.StatusFailed
 		ec := exitCode
 		rs.ExitCode = &ec
+		d.failed = true
 		d.updateRunStepInDB(rs.RunStepID, store.StatusFailed, "", exitCode)
 
 		if rs.OnFailure == "fail_run" {
-			d.failed = true
 			// Mark remaining pending steps as skipped
 			for _, s := range d.steps {
 				if s.Status == store.StatusPending {
@@ -226,7 +246,7 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 
 	// Launch outside the lock to prevent deadlocks
 	for _, step := range toLaunch {
-		d.executor.ExecuteStep(ctx, step, d.OnStepCompleted)
+		d.launchStep(ctx, step)
 	}
 }
 

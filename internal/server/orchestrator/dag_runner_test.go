@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
@@ -292,4 +293,166 @@ func TestDAGRunner_CancelBeforeStart(t *testing.T) {
 		}
 	}()
 	runner.Cancel()
+}
+
+func TestDAGRunner_StepDelay(t *testing.T) {
+	// A single step with delay_seconds_snapshot=1 should wait ~1s before executing.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-delay",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", delaySeconds: 1},
+		},
+		nil,
+		mock,
+	)
+
+	startTime := time.Now()
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	elapsed := time.Since(startTime)
+
+	if elapsed < 900*time.Millisecond {
+		t.Errorf("step started after %v, expected at least ~1s delay", elapsed)
+	}
+
+	mock.completeStep("a", 0)
+	runner.waitForDone()
+
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_DiamondDependency(t *testing.T) {
+	// A -> B, A -> C, B+C -> D: all succeed, D runs after both B and C.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-diamond-dep",
+		[]testStep{
+			{id: "a", onFailure: "fail_run"},
+			{id: "b", onFailure: "fail_run"},
+			{id: "c", onFailure: "fail_run"},
+			{id: "d", onFailure: "fail_run"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+			{StepID: "c", DependsOn: "a"},
+			{StepID: "d", DependsOn: "b"},
+			{StepID: "d", DependsOn: "c"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 0)
+
+	// B and C should both be launched
+	mock.waitForStep("b")
+	mock.waitForStep("c")
+
+	// D must not start yet
+	if mock.isExecuting("d") {
+		t.Error("D should not execute until both B and C complete")
+	}
+
+	// Complete B first — D should still wait for C
+	mock.completeStep("b", 0)
+	time.Sleep(50 * time.Millisecond)
+	if mock.isExecuting("d") {
+		t.Error("D should not execute until C completes")
+	}
+
+	mock.completeStep("c", 0)
+	mock.waitForStep("d")
+	mock.completeStep("d", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_FailurePropagation_Continue(t *testing.T) {
+	// A fails with on_failure=continue, dependent B is skipped, independent C still runs.
+	// Topology: A -> B, C (independent root)
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-continue",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue"},
+			{id: "c", onFailure: "continue"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	// A and C are roots; both should start
+	mock.waitForStep("a")
+	mock.waitForStep("c")
+
+	// Fail A — B should be skipped, C should keep running
+	mock.completeStep("a", 1)
+	time.Sleep(100 * time.Millisecond)
+
+	// B should be skipped (never started)
+	if mock.isExecuting("b") {
+		t.Error("B should be skipped, not executing")
+	}
+
+	// Complete C
+	mock.completeStep("c", 0)
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// Check B status after run completes (no concurrent writers)
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusSkipped {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusSkipped)
+	}
+}
+
+func TestDAGRunner_SkipCascade(t *testing.T) {
+	// A -> B -> C, A fails (continue), B skipped, C also skipped.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-skip-cascade",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue"},
+			{id: "c", onFailure: "continue"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// Both B and C should be skipped
+	for _, stepID := range []string{"b", "c"} {
+		rs := runner.dag.steps[stepID]
+		if rs.Status != store.StatusSkipped {
+			t.Errorf("step %s status = %q, want %q", stepID, rs.Status, store.StatusSkipped)
+		}
+	}
 }

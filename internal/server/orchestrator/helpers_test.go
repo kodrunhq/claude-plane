@@ -87,8 +87,9 @@ func (m *mockExecutor) isExecuting(stepID string) bool {
 
 // testStep defines a step for test setup.
 type testStep struct {
-	id        string
-	onFailure string
+	id           string
+	onFailure    string
+	delaySeconds int
 }
 
 // testRunner wraps a DAGRunner for testing with completion tracking.
@@ -104,11 +105,12 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 	runSteps := make([]store.RunStep, len(steps))
 	for i, s := range steps {
 		runSteps[i] = store.RunStep{
-			RunStepID: "rs-" + s.id,
-			RunID:     runID,
-			StepID:    s.id,
-			Status:    "pending",
-			OnFailure: s.onFailure,
+			RunStepID:            "rs-" + s.id,
+			RunID:                runID,
+			StepID:               s.id,
+			Status:               "pending",
+			OnFailure:            s.onFailure,
+			DelaySecondsSnapshot: s.delaySeconds,
 		}
 	}
 
