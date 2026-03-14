@@ -382,3 +382,42 @@ registration_mode = "bogus"
 		t.Errorf("error should mention registration_mode, got: %v", err)
 	}
 }
+
+func TestEventsConfig_GetRetentionDays_Default(t *testing.T) {
+	cfg := &EventsConfig{}
+	if days := cfg.GetRetentionDays(); days != 7 {
+		t.Errorf("GetRetentionDays() = %d, want 7 for zero value", days)
+	}
+}
+
+func TestEventsConfig_GetRetentionDays_Negative(t *testing.T) {
+	cfg := &EventsConfig{RetentionDays: -5}
+	if days := cfg.GetRetentionDays(); days != 7 {
+		t.Errorf("GetRetentionDays() = %d, want 7 for negative value", days)
+	}
+}
+
+func TestEventsConfig_GetRetentionDays_Custom(t *testing.T) {
+	cfg := &EventsConfig{RetentionDays: 30}
+	if days := cfg.GetRetentionDays(); days != 30 {
+		t.Errorf("GetRetentionDays() = %d, want 30", days)
+	}
+}
+
+func TestLoadServerConfig_EventsRetentionDays(t *testing.T) {
+	tomlContent := baseConfigTOML() + `
+[auth]
+jwt_secret = "test-secret-key-32-bytes-long!!!!"
+
+[events]
+retention_days = 14
+`
+	path := writeTOML(t, tomlContent)
+	cfg, err := LoadServerConfig(path)
+	if err != nil {
+		t.Fatalf("LoadServerConfig failed: %v", err)
+	}
+	if days := cfg.Events.GetRetentionDays(); days != 14 {
+		t.Errorf("Events.GetRetentionDays() = %d, want 14", days)
+	}
+}

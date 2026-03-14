@@ -23,6 +23,21 @@ type ServerConfig struct {
 	Provision ProvisionConfig `toml:"provision"`
 	CA        CAConfig        `toml:"ca"`
 	Secrets   SecretsConfig   `toml:"secrets"`
+	Events    EventsConfig    `toml:"events"`
+}
+
+// EventsConfig configures event storage and retention behavior.
+type EventsConfig struct {
+	RetentionDays int `toml:"retention_days"`
+}
+
+// GetRetentionDays returns the configured retention period in days.
+// Defaults to 7 days when retention_days is zero or negative.
+func (e *EventsConfig) GetRetentionDays() int {
+	if e.RetentionDays <= 0 {
+		return 7
+	}
+	return e.RetentionDays
 }
 
 // WebhooksConfig groups all webhook-related configuration.

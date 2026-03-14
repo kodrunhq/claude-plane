@@ -152,7 +152,9 @@ func newServeCmd() *cobra.Command {
 			eventBus.SetPersistHandler(persistSub.Handler())
 
 			// Periodic event retention cleanup.
-			retentionCleaner := event.NewRetentionCleaner(s, slog.Default())
+			retentionDays := cfg.Events.GetRetentionDays()
+			maxAge := time.Duration(retentionDays) * 24 * time.Hour
+			retentionCleaner := event.NewRetentionCleaner(s, maxAge, slog.Default())
 			retentionCleaner.Start(ctx)
 
 			// WebSocket fan-out for the /ws/events endpoint.
