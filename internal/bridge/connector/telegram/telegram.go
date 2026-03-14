@@ -37,6 +37,38 @@ type telegramResponse struct {
 	Result json.RawMessage `json:"result"`
 }
 
+// telegramRateLimitResponse is returned by the Telegram API on HTTP 429.
+type telegramRateLimitResponse struct {
+	OK         bool `json:"ok"`
+	Parameters struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
+}
+
+// CheckRateLimit inspects the HTTP response for a 429 status and, if found,
+// waits for the retry_after duration (or 5 s by default) before returning an
+// error. For all other non-2xx statuses it returns an error immediately.
+// It returns nil for 2xx responses.
+func CheckRateLimit(ctx context.Context, resp *http.Response, rawBody []byte) error {
+	if resp.StatusCode == http.StatusTooManyRequests {
+		var rl telegramRateLimitResponse
+		retryAfter := 5 // default 5 seconds
+		if json.Unmarshal(rawBody, &rl) == nil && rl.Parameters.RetryAfter > 0 {
+			retryAfter = rl.Parameters.RetryAfter
+		}
+		select {
+		case <-time.After(time.Duration(retryAfter) * time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return fmt.Errorf("telegram rate limited, waited %ds", retryAfter)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("telegram API error: HTTP %d: %s", resp.StatusCode, string(rawBody))
+	}
+	return nil
+}
+
 // Update represents a single Telegram update.
 type Update struct {
 	UpdateID int64    `json:"update_id"`
@@ -391,6 +423,10 @@ func (t *Telegram) sendMessage(ctx context.Context, text string, topicID int) er
 		return fmt.Errorf("read sendMessage body: %w", err)
 	}
 
+	if err := CheckRateLimit(ctx, resp, raw); err != nil {
+		return fmt.Errorf("sendMessage: %w", err)
+	}
+
 	var tgResp telegramResponse
 	if err := json.Unmarshal(raw, &tgResp); err != nil {
 		return fmt.Errorf("decode sendMessage response: %w", err)
@@ -421,6 +457,10 @@ func (t *Telegram) getUpdates(ctx context.Context, offset int64) ([]Update, erro
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read getUpdates body: %w", err)
+	}
+
+	if err := CheckRateLimit(ctx, resp, raw); err != nil {
+		return nil, fmt.Errorf("getUpdates: %w", err)
 	}
 
 	var tgResp telegramResponse
