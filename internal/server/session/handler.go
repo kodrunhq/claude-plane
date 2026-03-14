@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -431,11 +432,30 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 
 	injectionID := uuid.New().String()
 
-	// Enqueue first — only create the audit record on success.
 	if h.injectionQueue == nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "injection service not available")
 		return
 	}
+
+	// Create audit record BEFORE enqueue to avoid a delivery race: the drainer
+	// can deliver and call UpdateInjectionDelivered before CreateInjection runs.
+	inj := &store.Injection{
+		InjectionID: injectionID,
+		SessionID:   sessionID,
+		UserID:      userID,
+		TextLength:  utf8.RuneCountInString(req.Text),
+		Metadata:    metadataJSON,
+		Source:      "api",
+	}
+	created, err := h.store.CreateInjection(r.Context(), inj)
+	if err != nil {
+		h.logger.Error("failed to create injection audit record", "error", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to create injection record")
+		return
+	}
+
+	// Enqueue — if this fails the audit record stays with delivered_at = NULL,
+	// which correctly represents "attempted but not delivered".
 	if err := h.injectionQueue.Enqueue(r.Context(), sessionID, sess.MachineID, data, req.DelayMs, injectionID); err != nil {
 		if errors.Is(err, ErrQueueFull) {
 			httputil.WriteError(w, http.StatusTooManyRequests, "injection queue full")
@@ -446,25 +466,6 @@ func (h *SessionHandler) InjectSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to enqueue injection")
-		return
-	}
-
-	inj := &store.Injection{
-		InjectionID: injectionID,
-		SessionID:   sessionID,
-		UserID:      userID,
-		TextLength:  len(req.Text),
-		Metadata:    metadataJSON,
-		Source:      "api",
-	}
-	created, err := h.store.CreateInjection(r.Context(), inj)
-	if err != nil {
-		h.logger.Error("failed to create injection audit record", "error", err)
-		// Enqueue succeeded but audit failed — log and continue with the generated ID.
-		httputil.WriteJSON(w, http.StatusAccepted, map[string]any{
-			"injection_id": injectionID,
-			"queued_at":    time.Now().UTC(),
-		})
 		return
 	}
 
