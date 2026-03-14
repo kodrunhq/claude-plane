@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/auth"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
@@ -123,8 +124,11 @@ func validateAPIKeyToken(w http.ResponseWriter, r *http.Request, token string, a
 	}
 
 	// Fire-and-forget last-used timestamp update — never blocks the request.
+	// Bounded context prevents goroutine leaks if the DB is slow/unavailable.
 	go func(keyID string) {
-		if err := aka.Store.UpdateAPIKeyLastUsed(context.Background(), keyID); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := aka.Store.UpdateAPIKeyLastUsed(ctx, keyID); err != nil {
 			slog.Error("update api key last_used_at", "key_id", keyID, "error", err)
 		}
 	}(apiKey.KeyID)

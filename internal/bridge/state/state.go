@@ -15,9 +15,10 @@ const defaultMaxAge = 7 * 24 * time.Hour
 
 // Store is a thread-safe, JSON-backed state store.
 type Store struct {
-	path string
-	mu   sync.RWMutex
-	data stateData
+	path   string
+	mu     sync.RWMutex // protects data reads/writes
+	saveMu sync.Mutex   // serializes Save() file operations
+	data   stateData
 }
 
 // stateData is the JSON-serialisable payload written to disk.
@@ -92,6 +93,7 @@ func (s *Store) Prune(maxAge time.Duration) error {
 
 // Save writes the current state to the configured path atomically.
 // It first writes to a temp file then renames to avoid partial writes.
+// saveMu serializes concurrent Save calls so they don't race on the temp file.
 func (s *Store) Save() error {
 	s.mu.RLock()
 	data, err := json.Marshal(s.data)
@@ -99,6 +101,9 @@ func (s *Store) Save() error {
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
 	}
+
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 
 	tmp := s.path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {

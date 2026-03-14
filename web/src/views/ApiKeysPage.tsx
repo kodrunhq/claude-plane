@@ -7,8 +7,8 @@ import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { TimeAgo } from '../components/shared/TimeAgo.tsx';
 import type { APIKey } from '../types/apikey.ts';
 
-function keyPrefix(key: APIKey): string {
-  // Show only the key_id for display; the actual key prefix is cpk_...
+function truncateKeyID(key: APIKey): string {
+  // Truncate the key_id UUID for compact table display.
   const id = key.key_id;
   return id.length > 16 ? `${id.slice(0, 16)}…` : id;
 }
@@ -111,7 +111,7 @@ export function ApiKeysPage() {
                   <td className="px-4 py-3 text-text-primary font-medium">{key.name}</td>
                   <td className="px-4 py-3">
                     <code className="text-xs font-mono text-text-secondary bg-bg-tertiary rounded px-1.5 py-0.5">
-                      {keyPrefix(key)}
+                      {truncateKeyID(key)}
                     </code>
                   </td>
                   <td className="px-4 py-3 text-text-secondary text-xs">
