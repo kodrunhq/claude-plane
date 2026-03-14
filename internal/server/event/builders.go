@@ -54,3 +54,11 @@ func NewMachineEvent(eventType, machineID string) Event {
 func NewTriggerEvent(eventType, source string, payload map[string]any) Event {
 	return newEvent(eventType, source, payload)
 }
+
+// NewTemplateEvent constructs an event for template lifecycle changes.
+func NewTemplateEvent(eventType, templateID, userID string) Event {
+	return newEvent(eventType, "template", map[string]any{
+		"template_id": templateID,
+		"user_id":     userID,
+	})
+}

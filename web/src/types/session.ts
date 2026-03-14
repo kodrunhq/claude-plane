@@ -20,6 +20,9 @@ export interface CreateSessionRequest {
   args?: string[];
   working_dir?: string;
   terminal_size?: TerminalSize;
+  template_id?: string;
+  template_name?: string;
+  variables?: Record<string, string>;
 }
 
 export type TerminalStatus = 'connecting' | 'replaying' | 'live' | 'disconnected';

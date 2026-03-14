@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useCreateSession } from '../../hooks/useSessions.ts';
 import { useMachines } from '../../hooks/useMachines.ts';
+import { extractTemplateVariables } from '../../lib/templateVars.ts';
+import { TemplatePicker } from '../templates/TemplatePicker.tsx';
+import type { SessionTemplate } from '../../types/template.ts';
 
 // Estimated terminal font metrics and layout offsets.
 // These must match the configuration used by the xterm.js Terminal
@@ -27,6 +30,14 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   const [machineId, setMachineId] = useState(preselectedMachineId ?? '');
   const [workingDir, setWorkingDir] = useState('');
   const [command, setCommand] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<SessionTemplate | null>(null);
+  const [variables, setVariables] = useState<Record<string, string>>({});
+
+  const templatePrompt = selectedTemplate?.initial_prompt ?? '';
+  const variableNames = useMemo(
+    () => (templatePrompt ? extractTemplateVariables(templatePrompt) : []),
+    [templatePrompt],
+  );
 
   useEffect(() => {
     if (preselectedMachineId) {
@@ -41,6 +52,8 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
       if (!preselectedMachineId) setMachineId('');
       setWorkingDir('');
       setCommand('');
+      setSelectedTemplate(null);
+      setVariables({});
     }
   }, [open, preselectedMachineId]);
 
@@ -72,6 +85,8 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
         terminal_size: { cols, rows },
         ...(command ? { command } : {}),
         ...(workingDir ? { working_dir: workingDir } : {}),
+        ...(selectedTemplate ? { template_id: selectedTemplate.template_id } : {}),
+        ...(variableNames.length > 0 ? { variables } : {}),
       });
       toast.success('Session created');
       onClose();
@@ -91,6 +106,23 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
         <h2 className="text-lg font-semibold text-text-primary mb-4">New Session</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">Template</label>
+            <TemplatePicker
+              onSelect={(template) => {
+                setSelectedTemplate(template);
+                setVariables({});
+                if (template.command) setCommand(template.command);
+                if (template.working_dir) setWorkingDir(template.working_dir);
+              }}
+            />
+            {selectedTemplate && (
+              <p className="text-xs text-accent-primary mt-1">
+                Using template: {selectedTemplate.name}
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm text-text-secondary mb-1">Machine</label>
             <select
@@ -136,6 +168,19 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
               className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
             />
           </div>
+
+          {variableNames.length > 0 && variableNames.map((varName) => (
+            <div key={varName}>
+              <label className="block text-sm text-text-secondary mb-1">{varName}</label>
+              <input
+                type="text"
+                value={variables[varName] ?? ''}
+                onChange={(e) => setVariables((prev) => ({ ...prev, [varName]: e.target.value }))}
+                placeholder={`Enter value for ${varName}`}
+                className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
+              />
+            </div>
+          ))}
 
           <div className="flex justify-end gap-3 mt-2">
             <button
