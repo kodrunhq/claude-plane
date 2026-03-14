@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -148,6 +149,10 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.store.CreateTemplate(r.Context(), tmpl)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			writeError(w, http.StatusConflict, "template name already exists")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -235,6 +240,10 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
 	if req.TerminalRows <= 0 {
 		req.TerminalRows = 24
 	}
@@ -263,6 +272,10 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "template not found")
+			return
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			writeError(w, http.StatusConflict, "template name already exists")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal error")
