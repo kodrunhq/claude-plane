@@ -18,6 +18,18 @@ type Publisher interface {
 	Publish(ctx context.Context, event Event) error
 }
 
+// Subscriber is a narrow read-only interface for subscribing to events.
+// Complements the write-only Publisher interface.
+type Subscriber interface {
+	Subscribe(pattern string, handler HandlerFunc, opts SubscriberOptions) (unsubscribe func())
+}
+
+// Compile-time checks that Bus satisfies both narrow interfaces.
+var (
+	_ Publisher  = (*Bus)(nil)
+	_ Subscriber = (*Bus)(nil)
+)
+
 // HandlerFunc is the callback invoked for each matched event.
 // Returning a non-nil error causes a Warn-level log entry; the bus does not retry.
 //
