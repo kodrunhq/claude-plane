@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"sync"
 	"time"
@@ -56,17 +57,21 @@ const (
 	retryPollInterval   = 10 * time.Second
 )
 
-// retryBackoff returns the backoff duration for the given attempt number (1-indexed).
-// Attempt 1 → 1s, attempt 2 → 5s, attempt 3 → 30s.
+// retryBackoff returns the backoff duration for the given attempt number (1-indexed)
+// with up to base/2 of random jitter to prevent thundering herd retries.
+// Attempt 1 → [1s, 1.5s), attempt 2 → [5s, 7.5s), attempt 3+ → [30s, 45s).
 func retryBackoff(attempt int) time.Duration {
+	var base time.Duration
 	switch attempt {
 	case 1:
-		return 1 * time.Second
+		base = 1 * time.Second
 	case 2:
-		return 5 * time.Second
+		base = 5 * time.Second
 	default:
-		return 30 * time.Second
+		base = 30 * time.Second
 	}
+	jitter := time.Duration(rand.Int64N(int64(base / 2)))
+	return base + jitter
 }
 
 // WebhookDeliverer subscribes to the event bus and delivers events to matching

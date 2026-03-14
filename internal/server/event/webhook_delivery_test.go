@@ -323,24 +323,43 @@ func TestComputeHMACEmptySecretReturnsEmpty(t *testing.T) {
 	}
 }
 
-// TestRetryBackoffValues confirms the three documented backoff tiers.
+// TestRetryBackoffValues confirms the three documented backoff tiers fall within
+// the expected range [base, base + base/2).
 func TestRetryBackoffValues(t *testing.T) {
 	cases := []struct {
 		attempt int
-		want    time.Duration
+		min     time.Duration
+		max     time.Duration
 	}{
-		{1, 1 * time.Second},
-		{2, 5 * time.Second},
-		{3, 30 * time.Second},
-		{4, 30 * time.Second}, // beyond known attempts → default
-		{10, 30 * time.Second},
+		{1, 1 * time.Second, 1500 * time.Millisecond},
+		{2, 5 * time.Second, 7500 * time.Millisecond},
+		{3, 30 * time.Second, 45 * time.Second},
+		{4, 30 * time.Second, 45 * time.Second}, // beyond known attempts → default
+		{10, 30 * time.Second, 45 * time.Second},
 	}
 
 	for _, tc := range cases {
 		got := retryBackoff(tc.attempt)
-		if got != tc.want {
-			t.Errorf("retryBackoff(%d) = %v, want %v", tc.attempt, got, tc.want)
+		if got < tc.min || got >= tc.max {
+			t.Errorf("retryBackoff(%d) = %v, want in [%v, %v)", tc.attempt, got, tc.min, tc.max)
 		}
+	}
+}
+
+// TestRetryBackoff_HasJitter verifies that retryBackoff produces varying
+// durations across calls (i.e. jitter is applied), and that all values fall
+// within the expected [base, base + base/2) range for attempt 1.
+func TestRetryBackoff_HasJitter(t *testing.T) {
+	seen := make(map[time.Duration]bool)
+	for i := 0; i < 20; i++ {
+		d := retryBackoff(1)
+		seen[d] = true
+		if d < 1*time.Second || d > 1500*time.Millisecond {
+			t.Fatalf("attempt 1 backoff %v out of range [1s, 1.5s]", d)
+		}
+	}
+	if len(seen) < 2 {
+		t.Fatal("expected jitter to produce varying durations")
 	}
 }
 
