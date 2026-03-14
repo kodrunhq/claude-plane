@@ -36,6 +36,15 @@ func NewCredentialHandler(s CredentialStore, getClaims ClaimsGetter, encryptionK
 	}
 }
 
+// NewDisabledCredentialHandler creates a handler that returns 503 for all operations.
+// Used when the encryption key is not configured.
+func NewDisabledCredentialHandler(getClaims ClaimsGetter) *CredentialHandler {
+	return &CredentialHandler{
+		store:     nil,
+		getClaims: getClaims,
+	}
+}
+
 // RegisterCredentialRoutes mounts all credential routes on the given router.
 func RegisterCredentialRoutes(r chi.Router, h *CredentialHandler) {
 	r.Get("/api/v1/credentials", h.ListCredentials)
@@ -71,6 +80,10 @@ func toCredentialResponse(c store.Credential) credentialResponse {
 // ListCredentials handles GET /api/v1/credentials.
 // Returns only the current user's credentials (from JWT claims).
 func (h *CredentialHandler) ListCredentials(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "credentials vault is disabled: encryption key not configured on server")
+		return
+	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -92,6 +105,10 @@ func (h *CredentialHandler) ListCredentials(w http.ResponseWriter, r *http.Reque
 
 // CreateCredential handles POST /api/v1/credentials.
 func (h *CredentialHandler) CreateCredential(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "credentials vault is disabled: encryption key not configured on server")
+		return
+	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -128,6 +145,10 @@ func (h *CredentialHandler) CreateCredential(w http.ResponseWriter, r *http.Requ
 // DeleteCredential handles DELETE /api/v1/credentials/{credentialID}.
 // Only the owning user may delete their own credentials.
 func (h *CredentialHandler) DeleteCredential(w http.ResponseWriter, r *http.Request) {
+	if h.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "credentials vault is disabled: encryption key not configured on server")
+		return
+	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")

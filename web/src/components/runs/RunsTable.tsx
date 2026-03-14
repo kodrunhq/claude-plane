@@ -2,7 +2,7 @@ import type { Run } from '../../types/job.ts';
 import { RunStatusBadge } from './RunStatusBadge.tsx';
 import { DurationDisplay } from './DurationDisplay.tsx';
 import { EmptyState } from '../shared/EmptyState.tsx';
-import { formatTimeAgo } from '../../lib/format.ts';
+import { formatTimeAgo, truncateId } from '../../lib/format.ts';
 
 interface RunsTableProps {
   runs: Run[];
@@ -22,8 +22,10 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
     <table className="w-full text-sm">
       <thead>
         <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
+          {!compact && <th className="px-4 py-2">Run ID</th>}
           <th className="px-4 py-2">Status</th>
           {showJobName && !compact && <th className="px-4 py-2">Job Name</th>}
+          {!compact && <th className="px-4 py-2">Machine</th>}
           <th className="px-4 py-2">Trigger</th>
           <th className="px-4 py-2">Started</th>
           <th className="px-4 py-2">Duration</th>
@@ -44,11 +46,24 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
             role="button"
             className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-border-primary/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
           >
+            {!compact && (
+              <td className="px-4 py-2 font-mono text-xs text-text-secondary/60" title={run.run_id}>
+                {truncateId(run.run_id)}
+              </td>
+            )}
             <td className="px-4 py-2">
               <RunStatusBadge status={run.status} size={badgeSize} />
             </td>
             {showJobName && !compact && (
               <td className="px-4 py-2 text-text-primary">{run.job_name ?? run.job_id.slice(0, 8)}</td>
+            )}
+            {!compact && (
+              <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={run.machine_id ?? ''}>
+                {run.machine_id ? (run.machine_id.includes(',')
+                  ? `${run.machine_id.split(',')[0].slice(0, 12)} +${run.machine_id.split(',').length - 1}`
+                  : run.machine_id.slice(0, 12))
+                : '—'}
+              </td>
             )}
             <td className="px-4 py-2 text-text-secondary">{run.trigger_type ?? 'manual'}</td>
             <td className="px-4 py-2 text-text-secondary">

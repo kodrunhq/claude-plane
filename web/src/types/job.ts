@@ -8,6 +8,8 @@ export interface Job {
   updated_at: string;
   step_count?: number;
   last_run_status?: string;
+  trigger_type?: string;    // 'manual' | 'cron' | 'event' | 'mixed'
+  machine_ids?: string;     // comma-separated machine IDs from steps
 }
 
 export interface Step {
@@ -45,6 +47,7 @@ export interface Run {
   started_at?: string;
   completed_at?: string;
   created_at: string;
+  machine_id?: string;      // comma-separated machine IDs from run steps
 }
 
 export interface ListRunsParams {
