@@ -21,6 +21,15 @@ type MachineStore interface {
 	UpdateMachineStatus(machineID, status string, lastSeenAt time.Time) error
 }
 
+// HealthInfo holds the latest health metrics reported by an agent.
+type HealthInfo struct {
+	CPUCores       int32 `json:"cpu_cores"`
+	MemoryTotalMB  int64 `json:"memory_total_mb"`
+	MemoryUsedMB   int64 `json:"memory_used_mb"`
+	ActiveSessions int32 `json:"active_sessions"`
+	MaxSessions    int32 `json:"max_sessions"`
+}
+
 // ConnectedAgent holds metadata about a connected agent.
 type ConnectedAgent struct {
 	MachineID    string
@@ -34,6 +43,27 @@ type ConnectedAgent struct {
 	// Set by the gRPC service when registering the agent. Callers (e.g.,
 	// session handlers) use this to dispatch commands without knowing gRPC internals.
 	SendCommand func(cmd *pb.ServerCommand) error
+	// health holds the latest health metrics from the agent.
+	healthMu sync.RWMutex
+	health   *HealthInfo
+}
+
+// UpdateHealth stores the latest health metrics for the agent.
+func (ca *ConnectedAgent) UpdateHealth(h *HealthInfo) {
+	ca.healthMu.Lock()
+	ca.health = h
+	ca.healthMu.Unlock()
+}
+
+// GetHealth returns a copy of the latest health metrics, or nil.
+func (ca *ConnectedAgent) GetHealth() *HealthInfo {
+	ca.healthMu.RLock()
+	defer ca.healthMu.RUnlock()
+	if ca.health == nil {
+		return nil
+	}
+	h := *ca.health
+	return &h
 }
 
 // AgentInfo is a public DTO for REST API responses.

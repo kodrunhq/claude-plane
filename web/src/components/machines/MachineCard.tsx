@@ -1,3 +1,4 @@
+import { Cpu, MemoryStick, Terminal } from 'lucide-react';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { TimeAgo } from '../shared/TimeAgo.tsx';
 import type { Machine } from '../../lib/types.ts';
@@ -7,8 +8,19 @@ interface MachineCardProps {
   onCreateSession: (machineId: string) => void;
 }
 
+function formatMemory(totalMB: number, usedMB: number): string {
+  const fmt = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+  return `${fmt(usedMB)} / ${fmt(totalMB)}`;
+}
+
+function memoryPercent(totalMB: number, usedMB: number): number {
+  if (totalMB <= 0) return 0;
+  return Math.round((usedMB / totalMB) * 100);
+}
+
 export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
   const isConnected = machine.status === 'connected';
+  const health = machine.health;
 
   return (
     <div
@@ -17,23 +29,40 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
     >
       <div className="flex items-center justify-between mb-3">
         <StatusBadge status={machine.status} size="sm" />
-        <span className="text-xs text-text-secondary">
-          max {machine.max_sessions} session{machine.max_sessions !== 1 ? 's' : ''}
-        </span>
+        <TimeAgo date={machine.last_seen_at} className="text-xs text-text-secondary" />
       </div>
 
-      <div className="mb-2">
+      <div className="mb-3">
         <p className="text-sm text-text-primary font-medium truncate">
           {machine.display_name || machine.machine_id}
         </p>
-      </div>
-
-      <div className="flex items-center justify-between text-xs text-text-secondary mb-3">
-        <span className="font-mono truncate max-w-[140px] opacity-60" title={machine.machine_id}>
+        <span className="font-mono text-xs truncate max-w-[140px] opacity-60 text-text-secondary" title={machine.machine_id}>
           {machine.machine_id.slice(0, 12)}
         </span>
-        <TimeAgo date={machine.last_seen_at} className="text-text-secondary" />
       </div>
+
+      {/* Resource Metrics */}
+      {health ? (
+        <div className="space-y-2 mb-3">
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            <Terminal size={13} className="text-accent-primary shrink-0" />
+            <span>{health.active_sessions} active session{health.active_sessions !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            <Cpu size={13} className="text-accent-primary shrink-0" />
+            <span>{health.cpu_cores} cores</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            <MemoryStick size={13} className="text-accent-primary shrink-0" />
+            <span>{formatMemory(health.memory_total_mb, health.memory_used_mb)}</span>
+            <span className="text-text-secondary/60">({memoryPercent(health.memory_total_mb, health.memory_used_mb)}%)</span>
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-text-secondary mb-3 opacity-60">
+          {isConnected ? 'Awaiting health data...' : 'Offline'}
+        </div>
+      )}
 
       <button
         disabled={!isConnected}
