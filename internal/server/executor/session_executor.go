@@ -107,6 +107,17 @@ func (e *SessionStepExecutor) ExecuteStep(
 		command = defaultCommand
 	}
 	args := parseArgs(runStep.ArgsSnapshot)
+
+	// Inject --dangerously-skip-permissions if snapshot says so (nil defaults to true for jobs).
+	if runStep.SkipPermissionsSnapshot == nil || *runStep.SkipPermissionsSnapshot != 0 {
+		args = append([]string{"--dangerously-skip-permissions"}, args...)
+	}
+
+	// Inject --model if set in snapshot.
+	if runStep.ModelSnapshot != "" {
+		args = append(args, "--model", runStep.ModelSnapshot)
+	}
+
 	workingDir := runStep.WorkingDirSnapshot
 
 	sess := &store.Session{
