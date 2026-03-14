@@ -81,7 +81,7 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
 
   async function handleSave() {
     if (!canSave) return;
-    await onSave({ event_type: resolvedEventType, filter: form.filter });
+    await onSave({ event_type: resolvedEventType, filter: form.filter.trim() || '' });
   }
 
   return (

@@ -142,7 +142,9 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 			case <-timer.C:
 				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 			case <-ctx.Done():
-				return
+				// Step was marked running before delay started; signal completion
+				// so the DAG runner can transition it to cancelled/failed.
+				d.OnStepCompleted(rs.StepID, 1)
 			}
 		}()
 	} else {
