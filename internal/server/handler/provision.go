@@ -165,6 +165,62 @@ func (h *ProvisionHandler) ServeScript(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(script))
 }
 
+type joinRequest struct {
+	Code string `json:"code"`
+}
+
+type joinResponse struct {
+	MachineID    string `json:"machine_id"`
+	GRPCAddress  string `json:"grpc_address"`
+	CACertPEM    string `json:"ca_cert_pem"`
+	AgentCertPEM string `json:"agent_cert_pem"`
+	AgentKeyPEM  string `json:"agent_key_pem"`
+}
+
+// JoinByCode handles POST /api/v1/provision/join (public, no JWT).
+// Redeems a provisioning token by its 6-character short code.
+func (h *ProvisionHandler) JoinByCode(w http.ResponseWriter, r *http.Request) {
+	var req joinRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if !provision.ValidateShortCode(req.Code) {
+		writeError(w, http.StatusBadRequest, "invalid code format")
+		return
+	}
+
+	token, err := h.store.GetProvisioningTokenByCode(r.Context(), req.Code)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) &&
+			!errors.Is(err, store.ErrTokenExpired) &&
+			!errors.Is(err, store.ErrTokenAlreadyRedeemed) {
+			slog.Error("join by code lookup failed", "error", err)
+		}
+		writeError(w, http.StatusNotFound, "invalid or expired code")
+		return
+	}
+
+	if err := h.store.RedeemProvisioningToken(r.Context(), token.Token); err != nil {
+		if !errors.Is(err, store.ErrNotFound) &&
+			!errors.Is(err, store.ErrTokenExpired) &&
+			!errors.Is(err, store.ErrTokenAlreadyRedeemed) {
+			slog.Error("join by code redeem failed", "error", err)
+		}
+		writeError(w, http.StatusNotFound, "invalid or expired code")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, joinResponse{
+		MachineID:    token.MachineID,
+		GRPCAddress:  token.GRPCAddress,
+		CACertPEM:    token.CACertPEM,
+		AgentCertPEM: token.AgentCertPEM,
+		AgentKeyPEM:  token.AgentKeyPEM,
+	})
+}
+
 // RegisterProvisionRoutes registers the JWT-protected provisioning routes.
 func RegisterProvisionRoutes(r chi.Router, h *ProvisionHandler) {
 	r.Post("/api/v1/provision/agent", h.CreateProvision)
@@ -175,4 +231,5 @@ func RegisterProvisionRoutes(r chi.Router, h *ProvisionHandler) {
 // RegisterProvisionPublicRoutes registers the public (token-authenticated) provisioning routes.
 func RegisterProvisionPublicRoutes(r chi.Router, h *ProvisionHandler) {
 	r.Get("/api/v1/provision/{token}/script", h.ServeScript)
+	r.Post("/api/v1/provision/join", h.JoinByCode)
 }

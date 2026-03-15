@@ -484,6 +484,14 @@ CREATE TABLE IF NOT EXISTS pending_cleanups (
 CREATE INDEX IF NOT EXISTS idx_pending_cleanups_machine ON pending_cleanups(machine_id);
 `,
 	},
+	{
+		Version:     13,
+		Description: "short_code column for provisioning tokens",
+		SQL: `
+ALTER TABLE provisioning_tokens ADD COLUMN short_code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_tokens_short_code ON provisioning_tokens(short_code);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

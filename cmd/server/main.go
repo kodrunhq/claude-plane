@@ -424,8 +424,11 @@ func newServeCmd() *cobra.Command {
 				r.Use(api.JWTAuthMiddleware(authSvc))
 				handler.RegisterProvisionRoutes(r, provisionHandler)
 			})
-			// Provisioning: public route for fetching the install script (token-authenticated).
-			handler.RegisterProvisionPublicRoutes(router, provisionHandler)
+			// Provisioning: public routes (token-authenticated and short-code join).
+			router.Group(func(r chi.Router) {
+				r.Use(api.RateLimitMiddleware(10.0/60.0, 10)) // 10 req/min per IP
+				handler.RegisterProvisionPublicRoutes(r, provisionHandler)
+			})
 
 			// Mount SPA frontend as catch-all
 			router.Handle("/*", frontend.NewSPAHandler())
