@@ -24,7 +24,7 @@ export function RunDAGView({
       dependencies={dependencies}
       runSteps={runTasks}
       editable={false}
-      selectedStepId={selectedTaskId}
+      selectedTaskId={selectedTaskId}
       onNodeClick={onTaskSelect}
       className={className}
     />

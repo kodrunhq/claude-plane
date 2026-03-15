@@ -28,8 +28,8 @@ interface DAGCanvasProps {
   dependencies: TaskDependency[];
   runSteps?: RunTask[];
   editable?: boolean;
-  selectedStepId?: string | null;
-  onNodeClick?: (stepId: string) => void;
+  selectedTaskId?: string | null;
+  onNodeClick?: (taskId: string) => void;
   onConnect?: (sourceStepId: string, targetStepId: string) => void;
   className?: string;
 }
@@ -75,7 +75,7 @@ export function DAGCanvas({
   dependencies,
   runSteps,
   editable = false,
-  selectedStepId,
+  selectedTaskId,
   onNodeClick,
   onConnect: onConnectProp,
   className = '',
@@ -130,10 +130,10 @@ export function DAGCanvas({
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
-        data: { ...node.data, selected: node.id === selectedStepId },
+        data: { ...node.data, selected: node.id === selectedTaskId },
       })),
     );
-  }, [selectedStepId, setNodes]);
+  }, [selectedTaskId, setNodes]);
 
   const handleConnect = useCallback(
     (connection: Connection) => {

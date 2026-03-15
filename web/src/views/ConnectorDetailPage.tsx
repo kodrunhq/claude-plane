@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Github, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -108,16 +108,15 @@ export function ConnectorDetailPage() {
     }
   }, [connector?.config]);
 
-  const lastServerConfig = useRef(connector?.config);
   const [localWatches, setLocalWatches] = useState<WatchData[] | null>(null);
   const [dirtyState, setDirtyState] = useState(false);
 
   // When server data changes, clear local overrides
-  if (connector?.config !== lastServerConfig.current) {
-    lastServerConfig.current = connector?.config;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting local form state when server config changes
     setLocalWatches(null);
     setDirtyState(false);
-  }
+  }, [connector?.config]);
 
   const watches = localWatches ?? serverWatches;
   const dirty = dirtyState;
@@ -233,13 +232,15 @@ export function ConnectorDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowEditForm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-text-primary bg-bg-tertiary hover:bg-bg-tertiary/80 transition-colors"
-          >
-            <Pencil size={14} />
-            Edit
-          </button>
+          {connector.connector_type === 'github' && (
+            <button
+              onClick={() => setShowEditForm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-text-primary bg-bg-tertiary hover:bg-bg-tertiary/80 transition-colors"
+            >
+              <Pencil size={14} />
+              Edit
+            </button>
+          )}
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-status-error bg-bg-tertiary hover:bg-status-error/10 transition-colors"
@@ -280,56 +281,58 @@ export function ConnectorDetailPage() {
         </div>
       )}
 
-      {/* Watches section */}
-      <div className="bg-bg-secondary border border-border-primary rounded-lg">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
-          <h2 className="text-sm font-semibold text-text-primary">Watches</h2>
-          <button
-            type="button"
-            onClick={addWatch}
-            className="flex items-center gap-1 text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-          >
-            <Plus size={13} />
-            Add Watch
-          </button>
-        </div>
+      {/* Watches section -- GitHub only */}
+      {connector.connector_type === 'github' && (
+        <div className="bg-bg-secondary border border-border-primary rounded-lg">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+            <h2 className="text-sm font-semibold text-text-primary">Watches</h2>
+            <button
+              type="button"
+              onClick={addWatch}
+              className="flex items-center gap-1 text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              <Plus size={13} />
+              Add Watch
+            </button>
+          </div>
 
-        <div className="p-4">
-          {watches.length === 0 ? (
-            <p className="text-xs text-text-secondary/50 italic text-center py-4">
-              No watches configured. Add a watch to monitor a repository.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {watches.map((watch, i) => (
-                <WatchEditor
-                  key={watch.id}
-                  index={i}
-                  watch={watch}
-                  onChange={(updated) => updateWatch(i, updated)}
-                  onRemove={() => removeWatch(i)}
-                />
-              ))}
+          <div className="p-4">
+            {watches.length === 0 ? (
+              <p className="text-xs text-text-secondary/50 italic text-center py-4">
+                No watches configured. Add a watch to monitor a repository.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {watches.map((watch, i) => (
+                  <WatchEditor
+                    key={watch.id}
+                    index={i}
+                    watch={watch}
+                    onChange={(updated) => updateWatch(i, updated)}
+                    onRemove={() => removeWatch(i)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Save watches button */}
+          {dirty && (
+            <div className="flex justify-end px-4 py-3 border-t border-border-primary">
+              <button
+                onClick={handleSaveWatches}
+                disabled={updateConnector.isPending}
+                className="px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updateConnector.isPending ? 'Saving...' : 'Save Watches'}
+              </button>
             </div>
           )}
         </div>
+      )}
 
-        {/* Save watches button */}
-        {dirty && (
-          <div className="flex justify-end px-4 py-3 border-t border-border-primary">
-            <button
-              onClick={handleSaveWatches}
-              disabled={updateConnector.isPending}
-              className="px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {updateConnector.isPending ? 'Saving...' : 'Save Watches'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Edit form modal */}
-      {showEditForm && (
+      {/* Edit form modal -- GitHub only */}
+      {showEditForm && connector.connector_type === 'github' && (
         <GithubForm
           connector={connector}
           onClose={() => setShowEditForm(false)}

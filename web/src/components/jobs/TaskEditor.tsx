@@ -68,7 +68,7 @@ function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateTaskPar
       skip_permissions: undefined,
       session_key: undefined,
       target_job_id: (data.get('target_job_id') as string) || undefined,
-      job_params: collectJobParams(data) as unknown as Record<string, string> | undefined,
+      job_params: collectJobParams(data),
     };
   }
 
@@ -138,7 +138,7 @@ function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean
   if (taskType === 'run_job') {
     return (
       (data.get('target_job_id') as string || '') !== (task.target_job_id ?? '') ||
-      collectJobParams(data) !== (task.job_params ? JSON.stringify(task.job_params) : undefined)
+      collectJobParams(data) !== (task.job_params ?? undefined)
     );
   }
 
@@ -341,14 +341,11 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
   // Existing job_params values from the task (for default values in param inputs).
   const existingJobParams = useMemo(() => {
     if (!task?.job_params) return {};
-    if (typeof task.job_params === 'string') {
-      try {
-        return JSON.parse(task.job_params as string) as Record<string, string>;
-      } catch {
-        return {};
-      }
+    try {
+      return JSON.parse(task.job_params) as Record<string, string>;
+    } catch {
+      return {};
     }
-    return task.job_params;
   }, [task]);
 
   // Sync task type, max retries, and target job when selected task changes.
