@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
@@ -18,6 +19,7 @@ type Cleaner struct {
 	logger      *slog.Logger
 	defaultDays int
 	done        chan struct{}
+	wg          sync.WaitGroup
 }
 
 // NewCleaner creates a new retention cleaner.
@@ -36,15 +38,19 @@ func NewCleaner(st *store.Store, cm *connmgr.ConnectionManager, logger *slog.Log
 
 // Start begins the hourly cleanup sweep in a background goroutine.
 func (c *Cleaner) Start() {
+	c.wg.Add(1)
 	go c.loop()
 }
 
-// Stop halts the cleaner.
+// Stop halts the cleaner and waits for the background goroutine to finish.
 func (c *Cleaner) Stop() {
 	close(c.done)
+	c.wg.Wait()
 }
 
 func (c *Cleaner) loop() {
+	defer c.wg.Done()
+
 	// Run once on startup after a short delay
 	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()

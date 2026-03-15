@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -68,18 +69,35 @@ func (s *Store) UpsertContentMeta(ctx context.Context, sessionID string, lineCou
 	return nil
 }
 
+// sanitizeFTS5Query wraps the user query in double quotes so FTS5 treats it
+// as a phrase query, preventing operator injection. Internal quotes are escaped.
+func sanitizeFTS5Query(q string) string {
+	escaped := strings.ReplaceAll(q, `"`, `""`)
+	return `"` + escaped + `"`
+}
+
 // SearchContent performs a full-text search across session terminal output.
-func (s *Store) SearchContent(ctx context.Context, query string, limit, offset int) ([]ContentSearchResult, error) {
-	rows, err := s.reader.QueryContext(ctx,
-		`SELECT sl.session_id, sl.line_number, sl.content,
+// When userID is non-empty, results are scoped to sessions owned by that user.
+func (s *Store) SearchContent(ctx context.Context, query string, limit, offset int, userID string) ([]ContentSearchResult, error) {
+	safe := sanitizeFTS5Query(query)
+
+	baseQuery := `SELECT sl.session_id, sl.line_number, sl.content,
 		        s.machine_id, s.status, s.started_at
 		 FROM session_content sc
 		 JOIN session_lines sl ON sc.rowid = sl.rowid
 		 JOIN sessions s ON sl.session_id = s.session_id
-		 WHERE sc MATCH ?
-		 ORDER BY sc.rank
-		 LIMIT ? OFFSET ?`,
-		query, limit, offset)
+		 WHERE sc MATCH ?`
+	args := []any{safe}
+
+	if userID != "" {
+		baseQuery += ` AND s.user_id = ?`
+		args = append(args, userID)
+	}
+
+	baseQuery += ` ORDER BY sc.rank LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := s.reader.QueryContext(ctx, baseQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search content: %w", err)
 	}
@@ -195,7 +213,7 @@ func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
 	var value string
 	err := s.reader.QueryRowContext(ctx,
 		"SELECT value FROM server_settings WHERE key = ?", key).Scan(&value)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {

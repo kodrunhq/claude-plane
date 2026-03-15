@@ -259,8 +259,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 		agent := s.agentConnMgr.GetAgent(machineID)
 		if agent != nil {
 			go func() {
-				cleanups, err := s.cleanupStore.ListPendingCleanups(context.Background(), machineID)
-				if err != nil || len(cleanups) == 0 {
+				cleanups, err := s.cleanupStore.ListPendingCleanups(ctx, machineID)
+				if err != nil {
+					s.logger.Warn("failed to list pending cleanups", "error", err, "machine_id", machineID)
+					return
+				}
+				if len(cleanups) == 0 {
 					return
 				}
 				for _, sessionID := range cleanups {
@@ -274,7 +278,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						return
 					}
 				}
-				if err := s.cleanupStore.DeletePendingCleanups(context.Background(), machineID); err != nil {
+				if err := s.cleanupStore.DeletePendingCleanups(ctx, machineID); err != nil {
 					s.logger.Warn("failed to delete pending cleanups", "error", err, "machine_id", machineID)
 				}
 				s.logger.Info("sent pending cleanups to agent", "machine_id", machineID, "count", len(cleanups))
