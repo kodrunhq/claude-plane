@@ -803,7 +803,7 @@ func (p *RepoPoller) processPRReviews(ctx context.Context, prs []PRData, trigger
 				continue
 			}
 
-			variables := ExtractPRReviewVariables(review, p.repo, pr.Number, pr.HTMLURL)
+			variables := ExtractPRReviewVariables(review, p.repo, pr.Number, pr.Title, pr.HTMLURL)
 			results = append(results, MatchedEvent{
 				Template:  p.template,
 				Variables: variables,
@@ -829,7 +829,7 @@ func (p *RepoPoller) processPRReviews(ctx context.Context, prs []PRData, trigger
 // fetchPRReviews fetches reviews for a single PR.
 func (p *RepoPoller) fetchPRReviews(ctx context.Context, prNumber int) ([]PRReviewData, bool, error) {
 	endpoint := fmt.Sprintf(
-		"%s/repos/%s/pulls/%d/reviews",
+		"%s/repos/%s/pulls/%d/reviews?per_page=100",
 		p.apiBase, p.repo, prNumber,
 	)
 	req, err := p.newRequest(ctx, http.MethodGet, endpoint)
