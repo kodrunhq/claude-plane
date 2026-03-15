@@ -411,6 +411,16 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 					d.mu.Unlock()
 					return
 				}
+				// Re-acquire session key if needed before retrying.
+				if rsCopy.SessionKeySnapshot != "" {
+					if !d.canLaunch(&rsCopy) {
+						// Can't acquire key — defer instead of launching.
+						d.deferredSteps = append(d.deferredSteps, rsCopy.StepID)
+						d.mu.Unlock()
+						return
+					}
+					d.claimSessionKey(&rsCopy)
+				}
 				rsCopy.Status = store.StatusRunning
 				d.steps[rsCopy.StepID].Status = store.StatusRunning
 				d.updateRunStepInDB(rsCopy.RunStepID, store.StatusRunning, "", 0)

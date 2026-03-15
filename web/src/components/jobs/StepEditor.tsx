@@ -27,7 +27,7 @@ function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateStepPar
     name: data.get('name') as string,
     machine_id: data.get('machine_id') as string,
     working_dir: data.get('working_dir') as string,
-    task_type: taskType,
+    task_type: taskType === 'claude' ? 'claude_session' : 'shell',
     delay_seconds: Number(data.get('delay_seconds')) || 0,
     run_if: (data.get('run_if') as string) || undefined,
     max_retries: Number(data.get('max_retries')) || 0,
@@ -265,14 +265,17 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
   const { data: templates } = useTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [taskType, setTaskType] = useState<TaskType>('claude');
+  const [maxRetriesState, setMaxRetriesState] = useState(step?.max_retries ?? 0);
 
-  // Sync task type from step
+  // Sync task type and max retries from step
   useEffect(() => {
     if (step) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing task type from step data
       setTaskType(resolveTaskType(step));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing max retries from step data
+      setMaxRetriesState(step.max_retries ?? 0);
     }
-  }, [step?.step_id, step?.task_type]);
+  }, [step?.step_id, step?.task_type, step?.max_retries]);
 
   const checkDirty = useCallback(() => {
     if (!formRef.current || !step || !onDirtyChange) return;
@@ -346,8 +349,6 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
     lastDirty.current = true;
     onDirtyChange?.(true);
   }
-
-  const maxRetries = step.max_retries ?? 0;
 
   return (
     <form
@@ -561,11 +562,9 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           key={step.step_id + '-run-if'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
         >
-          <option value="">Always (default)</option>
+          <option value="">Default (all success)</option>
           <option value="all_success">All dependencies succeeded</option>
-          <option value="at_least_one_success">At least one dependency succeeded</option>
           <option value="all_done">All dependencies completed (any status)</option>
-          <option value="all_failed">All dependencies failed</option>
         </select>
       </div>
 
@@ -578,14 +577,18 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           type="number"
           min={0}
           max={5}
-          defaultValue={maxRetries}
+          defaultValue={step.max_retries ?? 0}
           key={step.step_id + '-max-retries'}
+          onChange={(e) => {
+            setMaxRetriesState(Number(e.target.value) || 0);
+            checkDirty();
+          }}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
         />
       </div>
 
       {/* Retry Delay — shown if max_retries > 0 */}
-      {maxRetries > 0 && (
+      {maxRetriesState > 0 && (
         <div>
           <label htmlFor="step-retry-delay" className="block text-xs text-text-secondary mb-1">Retry Delay (seconds)</label>
           <input
