@@ -168,29 +168,48 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 	// For Claude sessions with an initial prompt, set up an IdleDetector that
 	// watches for Claude CLI's startup prompt (❯) to submit the prompt at
-	// exactly the right time, then watches for the completion prompt to send
-	// /exit and gracefully terminate the session. Shell tasks skip this entirely.
+	// exactly the right time, then watches for the completion prompt to either
+	// send /exit (normal) or emit a StepIdleEvent (keep-alive shared sessions).
+	// Shell tasks skip this entirely.
 	if prompt := cmd.GetInitialPrompt(); taskType != "shell" && prompt != "" {
 		sessionID := cmd.GetSessionId()
+		keepAlive := cmd.GetKeepAlive()
 
-		detector := NewIdleDetector(
-			// onReady: CLI startup prompt detected — submit the initial prompt.
-			func() {
-				input := []byte(prompt + "\r")
-				if err := sess.WriteInput(input); err != nil {
-					sm.logger.Error("failed to write initial prompt",
-						"session_id", sessionID,
-						"error", err,
-					)
-				} else {
-					sm.logger.Info("initial prompt submitted",
-						"session_id", sessionID,
-						"prompt_len", len(prompt),
-					)
-				}
-			},
-			// onIdle: CLI completion prompt detected — send /exit.
-			func() {
+		// onReady: CLI startup prompt detected — submit the initial prompt.
+		onReady := func() {
+			input := []byte(prompt + "\r")
+			if err := sess.WriteInput(input); err != nil {
+				sm.logger.Error("failed to write initial prompt",
+					"session_id", sessionID,
+					"error", err,
+				)
+			} else {
+				sm.logger.Info("initial prompt submitted",
+					"session_id", sessionID,
+					"prompt_len", len(prompt),
+				)
+			}
+		}
+
+		var onIdle func()
+		if keepAlive {
+			// Keep-alive (shared session): signal step completion to the server
+			// without exiting the CLI. The session stays alive for subsequent prompts.
+			onIdle = func() {
+				sm.logger.Info("idle prompt detected, sending StepIdleEvent (keep-alive)",
+					"session_id", sessionID,
+				)
+				sm.sendEvent(&pb.AgentEvent{
+					Event: &pb.AgentEvent_StepIdle{
+						StepIdle: &pb.StepIdleEvent{
+							SessionId: sessionID,
+						},
+					},
+				})
+			}
+		} else {
+			// Normal mode: send /exit to gracefully terminate the session.
+			onIdle = func() {
 				sm.logger.Info("idle prompt detected, sending /exit",
 					"session_id", sessionID,
 				)
@@ -200,9 +219,16 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 						"error", err,
 					)
 				}
-			},
-			sm.idleDetectorOpts...,
-		)
+			}
+		}
+
+		opts := make([]IdleDetectorOption, len(sm.idleDetectorOpts))
+		copy(opts, sm.idleDetectorOpts)
+		if keepAlive {
+			opts = append(opts, WithKeepAlive(true))
+		}
+
+		detector := NewIdleDetector(onReady, onIdle, opts...)
 		detector.Start()
 		sess.SetOutputObserver(detector.Feed)
 	}
