@@ -92,6 +92,7 @@ type testStep struct {
 	onFailure    string
 	delaySeconds int
 	runIf        string
+	sessionKey   string
 }
 
 // testRunner wraps a DAGRunner for testing with completion tracking.
@@ -123,6 +124,7 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 			OnFailure:            s.onFailure,
 			DelaySecondsSnapshot: s.delaySeconds,
 			RunIfSnapshot:        runIf,
+			SessionKeySnapshot:   s.sessionKey,
 		}
 		stepNames[s.id] = name
 	}

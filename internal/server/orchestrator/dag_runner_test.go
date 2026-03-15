@@ -718,3 +718,141 @@ func TestDAGRunner_RunIfAllDone_PropagatesSkipToAllSuccessDownstream(t *testing.
 		t.Errorf("step c status = %q, want %q", rs.Status, store.StatusCompleted)
 	}
 }
+
+func TestDAGRunner_SessionKeySerialization(t *testing.T) {
+	// A → B, both share session key "shared". A must complete before B starts.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-1",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "b", onFailure: "fail_run", sessionKey: "shared"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	// B depends on A and shares the key — should not be executing
+	if mock.isExecuting("b") {
+		t.Error("B should not execute while A holds the session key")
+	}
+
+	mock.completeStep("a", 0)
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_SessionKeyParallel(t *testing.T) {
+	// A(k1) and B(k2) are roots with different keys — should run in parallel.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-parallel",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "k1"},
+			{id: "b", onFailure: "fail_run", sessionKey: "k2"},
+		},
+		nil,
+		mock,
+	)
+
+	runner.Start(t)
+
+	// Both should start since they have different keys
+	mock.waitForStep("a")
+	mock.waitForStep("b")
+
+	mock.completeStep("a", 0)
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_SessionKeyBlocksLaunch(t *testing.T) {
+	// A(shared), B(shared), C(no key): all roots.
+	// A and C should start in parallel. B must wait for A to finish.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-blocks",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "b", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "c", onFailure: "fail_run"},
+		},
+		nil,
+		mock,
+	)
+
+	runner.Start(t)
+
+	// A and C should start (C has no key, A claims "shared")
+	mock.waitForStep("a")
+	mock.waitForStep("c")
+
+	// B should be deferred — same key as A
+	time.Sleep(100 * time.Millisecond)
+	if mock.isExecuting("b") {
+		t.Error("B should be deferred while A holds session key 'shared'")
+	}
+
+	// Complete C first — B still can't launch (A holds the key)
+	mock.completeStep("c", 0)
+	time.Sleep(100 * time.Millisecond)
+	if mock.isExecuting("b") {
+		t.Error("B should still be deferred after C completes")
+	}
+
+	// Complete A — B should now launch
+	mock.completeStep("a", 0)
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_SessionKeyReleasedOnComplete(t *testing.T) {
+	// A(shared) → B, B → C(shared). A completes, B runs, then C should launch
+	// since A released the key.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-release",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "b", onFailure: "fail_run"},
+			{id: "c", onFailure: "fail_run", sessionKey: "shared"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 0) // releases "shared"
+
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	// C should launch — session key was released when A completed
+	mock.waitForStep("c")
+	mock.completeStep("c", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}

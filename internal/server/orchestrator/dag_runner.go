@@ -217,6 +217,55 @@ func (d *DAGRunner) copyStepResults() map[string]StepResult {
 	return cp
 }
 
+// canLaunch checks whether a step can be launched given session key constraints.
+// A step with no session key can always launch. A step with a session key can
+// only launch if no other step is currently using that key.
+// Must be called with d.mu held.
+func (d *DAGRunner) canLaunch(rs *store.RunStep) bool {
+	if rs.SessionKeySnapshot == "" {
+		return true
+	}
+	return !d.activeSessionKeys[rs.SessionKeySnapshot]
+}
+
+// claimSessionKey marks a session key as active for the given step.
+// Must be called with d.mu held.
+func (d *DAGRunner) claimSessionKey(rs *store.RunStep) {
+	if rs.SessionKeySnapshot != "" {
+		d.activeSessionKeys[rs.SessionKeySnapshot] = true
+	}
+}
+
+// releaseSessionKey marks a session key as no longer active.
+// Must be called with d.mu held.
+func (d *DAGRunner) releaseSessionKey(rs *store.RunStep) {
+	if rs.SessionKeySnapshot != "" {
+		delete(d.activeSessionKeys, rs.SessionKeySnapshot)
+	}
+}
+
+// processDeferredSteps re-evaluates deferred steps after a session key is released.
+// Steps that can now launch are started; others remain deferred.
+// Must be called with d.mu held.
+func (d *DAGRunner) processDeferredSteps(toLaunch *[]store.RunStep) {
+	remaining := make([]string, 0, len(d.deferredSteps))
+	for _, stepID := range d.deferredSteps {
+		rs := d.steps[stepID]
+		if rs == nil || rs.Status != store.StatusPending {
+			continue // already launched or skipped by another path
+		}
+		if d.canLaunch(rs) {
+			d.claimSessionKey(rs)
+			rs.Status = store.StatusRunning
+			d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
+			*toLaunch = append(*toLaunch, *rs)
+		} else {
+			remaining = append(remaining, stepID)
+		}
+	}
+	d.deferredSteps = remaining
+}
+
 // closeDone safely closes the done channel (idempotent).
 func (d *DAGRunner) closeDone() {
 	select {
@@ -238,9 +287,14 @@ func (d *DAGRunner) Start(parentCtx context.Context) {
 		if deg == 0 {
 			rs := d.steps[stepID]
 			if rs.Status == store.StatusPending {
-				rs.Status = store.StatusRunning
-				d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
-				toLaunch = append(toLaunch, *rs)
+				if d.canLaunch(rs) {
+					d.claimSessionKey(rs)
+					rs.Status = store.StatusRunning
+					d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
+					toLaunch = append(toLaunch, *rs)
+				} else {
+					d.deferredSteps = append(d.deferredSteps, stepID)
+				}
 			}
 		}
 	}
@@ -317,6 +371,9 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		d.stepResults[stepName] = StepResult{Status: status, ExitCode: exitCode}
 	}
 
+	// Release session key — allows deferred steps using the same key to proceed.
+	d.releaseSessionKey(rs)
+
 	if exitCode != 0 {
 		rs.Status = store.StatusFailed
 		ec := exitCode
@@ -363,6 +420,9 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	// Collect ready dependents; propagate skips transitively.
 	ctx := d.ctx
 	d.processReadyDependents(stepID, stepFailed, &toLaunch)
+
+	// Re-evaluate deferred steps now that a session key may have been released.
+	d.processDeferredSteps(&toLaunch)
 
 	// Check if all steps are done (after processing dependents/skips)
 	if d.completed == d.total {
@@ -460,11 +520,15 @@ func (d *DAGRunner) processReadyDependents(stepID string, stepFailed bool, toLau
 						d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
 						d.completed++
 						queue = append(queue, workItem{stepID: depID, failed: true})
-					} else {
+					} else if d.canLaunch(depRS) {
 						// Either no upstream failed, or run_if=all_done (launch regardless)
+						d.claimSessionKey(depRS)
 						depRS.Status = store.StatusRunning
 						d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
 						*toLaunch = append(*toLaunch, *depRS)
+					} else {
+						// Session key is in use — defer this step
+						d.deferredSteps = append(d.deferredSteps, depID)
 					}
 				}
 			}
