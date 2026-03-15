@@ -203,6 +203,11 @@ func (h *ProvisionHandler) JoinByCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.RedeemProvisioningToken(r.Context(), token.Token); err != nil {
+		if !errors.Is(err, store.ErrNotFound) &&
+			!errors.Is(err, store.ErrTokenExpired) &&
+			!errors.Is(err, store.ErrTokenAlreadyRedeemed) {
+			slog.Error("join by code redeem failed", "error", err)
+		}
 		writeError(w, http.StatusNotFound, "invalid or expired code")
 		return
 	}

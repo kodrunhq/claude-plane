@@ -131,6 +131,8 @@ func TestValidateServerURL(t *testing.T) {
 		{"http insecure", "http://example.com", true, false, ""},
 		{"uppercase HTTP not insecure", "HTTP://example.com", false, true, "HTTPS"},
 		{"invalid url", "://bad", false, true, "invalid"},
+		{"empty scheme", "example.com", false, true, "scheme"},
+		{"ftp scheme", "ftp://example.com", false, true, "scheme"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
