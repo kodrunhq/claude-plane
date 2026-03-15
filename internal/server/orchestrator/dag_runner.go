@@ -16,6 +16,43 @@ type StepExecutor interface {
 	ExecuteStep(ctx context.Context, runStep store.RunStep, onComplete func(stepID string, exitCode int))
 }
 
+// ValidateJobSteps checks step configuration for common errors.
+// Returns a slice of errors (empty if all steps are valid).
+func ValidateJobSteps(steps []store.Step) []error {
+	var errs []error
+	sessionKeyMachines := make(map[string]string)
+	for _, s := range steps {
+		if s.TaskType != "claude_session" && s.TaskType != "shell" {
+			errs = append(errs, fmt.Errorf("step %q: task_type must be 'claude_session' or 'shell'", s.Name))
+		}
+		if s.TaskType == "shell" && s.SessionKey != "" {
+			errs = append(errs, fmt.Errorf("step %q: shell tasks cannot share sessions", s.Name))
+		}
+		if s.TaskType == "shell" && s.Command == "" {
+			errs = append(errs, fmt.Errorf("step %q: shell tasks require a command", s.Name))
+		}
+		if s.SessionKey != "" {
+			if existing, ok := sessionKeyMachines[s.SessionKey]; ok {
+				if existing != s.MachineID {
+					errs = append(errs, fmt.Errorf("steps sharing session key %q must target the same machine", s.SessionKey))
+				}
+			} else {
+				sessionKeyMachines[s.SessionKey] = s.MachineID
+			}
+		}
+		if s.RunIf != "all_success" && s.RunIf != "all_done" {
+			errs = append(errs, fmt.Errorf("step %q: run_if must be 'all_success' or 'all_done'", s.Name))
+		}
+		if s.MaxRetries < 0 || s.MaxRetries > 5 {
+			errs = append(errs, fmt.Errorf("step %q: max_retries must be between 0 and 5", s.Name))
+		}
+		if s.RetryDelaySeconds < 0 || s.RetryDelaySeconds > 3600 {
+			errs = append(errs, fmt.Errorf("step %q: retry_delay_seconds must be between 0 and 3600", s.Name))
+		}
+	}
+	return errs
+}
+
 // ValidateDAG checks for cycles in step dependencies using Kahn's algorithm.
 // Returns an error if a cycle is detected.
 func ValidateDAG(steps []store.Step, deps []store.StepDependency) error {

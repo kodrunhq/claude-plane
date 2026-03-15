@@ -501,3 +501,76 @@ func TestDAGRunner_DelayedStepCancellation(t *testing.T) {
 		t.Error("step A should NOT be marked completed after cancellation")
 	}
 }
+
+func TestValidateJobSteps_ValidJob(t *testing.T) {
+	steps := []store.Step{
+		{Name: "build", TaskType: "claude_session", RunIf: "all_success", MaxRetries: 2, RetryDelaySeconds: 30},
+		{Name: "test", TaskType: "shell", Command: "go test", RunIf: "all_success", MaxRetries: 0, RetryDelaySeconds: 0},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+func TestValidateJobSteps_InvalidTaskType(t *testing.T) {
+	steps := []store.Step{
+		{Name: "bad", TaskType: "unknown", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_ShellWithSessionKey(t *testing.T) {
+	steps := []store.Step{
+		{Name: "sh", TaskType: "shell", Command: "echo hi", SessionKey: "shared", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_ShellEmptyCommand(t *testing.T) {
+	steps := []store.Step{
+		{Name: "sh", TaskType: "shell", Command: "", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_CrossMachineSessionKey(t *testing.T) {
+	steps := []store.Step{
+		{Name: "a", TaskType: "claude_session", SessionKey: "shared", MachineID: "m1", RunIf: "all_success"},
+		{Name: "b", TaskType: "claude_session", SessionKey: "shared", MachineID: "m2", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_InvalidRunIf(t *testing.T) {
+	steps := []store.Step{
+		{Name: "bad", TaskType: "claude_session", RunIf: "never"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_RetryLimits(t *testing.T) {
+	steps := []store.Step{
+		{Name: "too_many", TaskType: "claude_session", RunIf: "all_success", MaxRetries: 10},
+		{Name: "bad_delay", TaskType: "claude_session", RunIf: "all_success", RetryDelaySeconds: 5000},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
+	}
+}
