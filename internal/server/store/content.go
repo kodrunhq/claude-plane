@@ -86,7 +86,7 @@ func (s *Store) SearchContent(ctx context.Context, query string, limit, offset i
 		 FROM session_content sc
 		 JOIN session_lines sl ON sc.rowid = sl.rowid
 		 JOIN sessions s ON sl.session_id = s.session_id
-		 WHERE sc MATCH ?`
+		 WHERE session_content MATCH ?`
 	args := []any{safe}
 
 	if userID != "" {
@@ -94,7 +94,7 @@ func (s *Store) SearchContent(ctx context.Context, query string, limit, offset i
 		args = append(args, userID)
 	}
 
-	baseQuery += ` ORDER BY sc.rank LIMIT ? OFFSET ?`
+	baseQuery += ` ORDER BY rank LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
 	rows, err := s.reader.QueryContext(ctx, baseQuery, args...)

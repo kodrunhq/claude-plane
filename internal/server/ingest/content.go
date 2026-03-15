@@ -89,7 +89,6 @@ func (ci *ContentIngestor) Ingest(sessionID string, data []byte) {
 	buf := val.(*lineBuffer)
 
 	buf.mu.Lock()
-	defer buf.mu.Unlock()
 
 	// Combine partial line with new data
 	combined := make([]byte, len(buf.partial)+len(stripped))
@@ -111,26 +110,27 @@ func (ci *ContentIngestor) Ingest(sessionID string, data []byte) {
 		line := combined[:idx]
 		combined = combined[idx+1:]
 
-		// Strip carriage returns
+		// Strip trailing carriage returns
 		line = bytes.TrimRight(line, "\r")
-
-		// Skip empty lines
-		content := string(bytes.TrimSpace(line))
-		if content == "" {
-			continue
-		}
 
 		buf.lineCount++
 		buf.batch = append(buf.batch, store.ContentLine{
 			SessionID:  sessionID,
 			LineNumber: buf.lineCount,
-			Content:    content,
+			Content:    string(line),
 		})
 	}
 
-	// Flush if batch is large enough
+	// Extract batch under lock if large enough, then write outside lock
+	var toFlush []store.ContentLine
 	if len(buf.batch) >= batchFlushSize {
-		ci.flushBuffer(buf)
+		toFlush = buf.batch
+		buf.batch = nil
+	}
+	buf.mu.Unlock()
+
+	if len(toFlush) > 0 {
+		ci.writeBatch(sessionID, toFlush)
 	}
 }
 
@@ -146,21 +146,24 @@ func (ci *ContentIngestor) FlushSession(sessionID string) {
 
 	// Flush any remaining partial line
 	if len(buf.partial) > 0 {
-		content := string(bytes.TrimSpace(buf.partial))
-		if content != "" {
-			buf.lineCount++
-			buf.batch = append(buf.batch, store.ContentLine{
-				SessionID:  sessionID,
-				LineNumber: buf.lineCount,
-				Content:    content,
-			})
-		}
+		partial := bytes.TrimRight(buf.partial, "\r")
+		buf.lineCount++
+		buf.batch = append(buf.batch, store.ContentLine{
+			SessionID:  sessionID,
+			LineNumber: buf.lineCount,
+			Content:    string(partial),
+		})
 		buf.partial = nil
 	}
 
-	ci.flushBuffer(buf)
+	batch := buf.batch
+	buf.batch = nil
 	lineCount := buf.lineCount
 	buf.mu.Unlock()
+
+	if len(batch) > 0 {
+		ci.writeBatch(sessionID, batch)
+	}
 
 	// Update meta with final line count
 	if lineCount > 0 {
@@ -181,8 +184,13 @@ func (ci *ContentIngestor) Close() {
 	ci.buffers.Range(func(key, val any) bool {
 		buf := val.(*lineBuffer)
 		buf.mu.Lock()
-		ci.flushBuffer(buf)
+		batch := buf.batch
+		buf.batch = nil
+		sessionID := buf.sessionID
 		buf.mu.Unlock()
+		if len(batch) > 0 {
+			ci.writeBatch(sessionID, batch)
+		}
 		return true
 	})
 }
@@ -201,28 +209,25 @@ func (ci *ContentIngestor) flushLoop() {
 			ci.buffers.Range(func(key, val any) bool {
 				buf := val.(*lineBuffer)
 				buf.mu.Lock()
-				if len(buf.batch) > 0 {
-					ci.flushBuffer(buf)
-				}
+				batch := buf.batch
+				buf.batch = nil
+				sessionID := buf.sessionID
 				buf.mu.Unlock()
+				if len(batch) > 0 {
+					ci.writeBatch(sessionID, batch)
+				}
 				return true
 			})
 		}
 	}
 }
 
-// flushBuffer writes the batch to the store. Caller must hold buf.mu.
-func (ci *ContentIngestor) flushBuffer(buf *lineBuffer) {
-	if len(buf.batch) == 0 {
-		return
-	}
-	batch := buf.batch
-	buf.batch = nil
-
+// writeBatch writes a batch of lines to the store. Must be called without holding any mutex.
+func (ci *ContentIngestor) writeBatch(sessionID string, batch []store.ContentLine) {
 	if err := ci.store.InsertContentLines(context.Background(), batch); err != nil {
 		ci.logger.Warn("failed to insert content lines",
 			"error", err,
-			"session_id", buf.sessionID,
+			"session_id", sessionID,
 			"line_count", len(batch),
 		)
 	}

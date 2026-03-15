@@ -113,8 +113,8 @@ func (c *Cleaner) sweep() {
 					"error", err, "machine_id", s.MachineID, "session_id", s.SessionID)
 				// Queue for later
 				if err := c.store.AddPendingCleanup(ctx, s.SessionID, s.MachineID); err != nil {
-				c.logger.Warn("failed to queue pending cleanup", "error", err, "session_id", s.SessionID)
-			}
+					c.logger.Warn("failed to queue pending cleanup", "error", err, "session_id", s.SessionID)
+				}
 			}
 		} else {
 			// Agent offline — queue for reconnect
@@ -129,4 +129,3 @@ func (c *Cleaner) sweep() {
 		c.logger.Warn("retention sweep: FTS optimize failed", "error", err)
 	}
 }
-
