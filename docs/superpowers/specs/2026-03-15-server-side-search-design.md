@@ -158,7 +158,7 @@ type contentLine struct {
 **Endpoint:** `GET /api/v1/search/sessions?q=<query>&limit=50&offset=0`
 
 Parameters:
-- `q` (required) — FTS5 match expression. Supports prefix (`error*`), phrase (`"connection refused"`), and boolean (`error AND database`). Invalid syntax returns 400.
+- `q` (required) — Search query string. The query is wrapped as an FTS5 phrase query for safety (internal quotes are escaped). FTS5 operators like `AND`, `OR`, `NOT`, and prefix wildcards are not supported — the raw query text is matched as a phrase.
 - `limit` (optional, default 50, max 200)
 - `offset` (optional, default 0) — for pagination
 

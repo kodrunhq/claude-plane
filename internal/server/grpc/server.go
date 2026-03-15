@@ -255,7 +255,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	}
 
 	// Dispatch any pending scrollback cleanups queued while the agent was offline.
-	if s.cleanupStore != nil {
+	if s.cleanupStore != nil && s.agentConnMgr != nil {
 		agent := s.agentConnMgr.GetAgent(machineID)
 		if agent != nil {
 			go func() {

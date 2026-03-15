@@ -29,7 +29,7 @@ const RETENTION_OPTIONS = [
 ];
 
 function DataRetentionTab() {
-  const { data: settings, isLoading } = useServerSettings();
+  const { data: settings, isLoading, error, refetch } = useServerSettings();
   const updateSettings = useUpdateServerSettings();
   const currentValue = settings?.retention_days ?? '30';
 
@@ -38,6 +38,26 @@ function DataRetentionTab() {
       <div className="space-y-4">
         <div className="h-8 w-48 bg-bg-tertiary rounded animate-pulse" />
         <div className="h-10 w-64 bg-bg-tertiary rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-status-error/10 border border-status-error/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="text-status-error shrink-0" size={20} />
+          <p className="text-sm text-text-primary flex-1">
+            {error instanceof Error ? error.message : 'Failed to load server settings'}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <RefreshCw size={14} />
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -58,7 +78,7 @@ function DataRetentionTab() {
         <select
           id="retention-days"
           value={currentValue}
-          onChange={(e) => updateSettings.mutateAsync({ retention_days: e.target.value })}
+          onChange={(e) => updateSettings.mutate({ retention_days: e.target.value })}
           disabled={updateSettings.isPending}
           className="block w-64 px-3 py-2 text-sm rounded-md border border-border-primary bg-bg-primary text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 disabled:opacity-50"
         >
@@ -68,6 +88,11 @@ function DataRetentionTab() {
             </option>
           ))}
         </select>
+        {updateSettings.isError && (
+          <p className="text-xs text-status-error mt-1">
+            {updateSettings.error instanceof Error ? updateSettings.error.message : 'Failed to update setting'}
+          </p>
+        )}
         <p className="text-xs text-text-tertiary mt-1">
           Terminal output older than this is deleted from the server and agent machines.
           Running sessions are never affected.
