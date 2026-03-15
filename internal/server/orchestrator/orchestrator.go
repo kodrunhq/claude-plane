@@ -236,19 +236,79 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		}
 	}
 
+	return o.rebuildAndStartRun(ctx, runID)
+}
+
+// RepairRun resets all failed/skipped steps in a terminal run to pending,
+// optionally merges parameter overrides (only existing keys), clears task
+// values for reset steps, and rebuilds the DAG.
+func (o *Orchestrator) RepairRun(ctx context.Context, runID string, paramOverrides map[string]string) error {
+	detail, err := o.store.GetRunWithSteps(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("get run: %w", err)
+	}
+	if detail.Run.Status != store.StatusFailed && detail.Run.Status != store.StatusCancelled {
+		return fmt.Errorf("can only repair failed or cancelled runs")
+	}
+
+	// Merge parameter overrides (only existing keys)
+	if len(paramOverrides) > 0 && detail.Run.Parameters != "" {
+		existingParams := make(map[string]string)
+		if err := json.Unmarshal([]byte(detail.Run.Parameters), &existingParams); err != nil {
+			return fmt.Errorf("parse run parameters: %w", err)
+		}
+		for k, v := range paramOverrides {
+			if _, exists := existingParams[k]; exists {
+				existingParams[k] = v
+			}
+		}
+		paramsJSON, err := json.Marshal(existingParams)
+		if err != nil {
+			return fmt.Errorf("marshal parameters: %w", err)
+		}
+		if err := o.store.UpdateRunParameters(ctx, runID, string(paramsJSON)); err != nil {
+			return fmt.Errorf("update run parameters: %w", err)
+		}
+	}
+
+	// Reset failed/skipped steps to pending, clear their task values
+	for _, rs := range detail.RunSteps {
+		if rs.Status == store.StatusFailed || rs.Status == store.StatusSkipped {
+			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusPending, "", 0); err != nil {
+				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
+			}
+			if err := o.store.DeleteTaskValuesForStep(ctx, rs.RunStepID); err != nil {
+				return fmt.Errorf("clear task values for step %s: %w", rs.StepID, err)
+			}
+		}
+	}
+
+	return o.rebuildAndStartRun(ctx, runID)
+}
+
+// rebuildAndStartRun re-reads the run state, builds a new DAGRunner
+// pre-configured with completed steps, and starts execution. Shared by
+// RetryStep and RepairRun.
+func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) error {
 	// Update run status back to running
 	if err := o.store.UpdateRunStatus(ctx, runID, store.StatusRunning); err != nil {
 		return fmt.Errorf("update run status: %w", err)
 	}
 
 	// Re-read run state
-	detail, err = o.store.GetRunWithSteps(ctx, runID)
+	detail, err := o.store.GetRunWithSteps(ctx, runID)
 	if err != nil {
 		return fmt.Errorf("re-read run: %w", err)
 	}
 
+	// Get the job's dependencies
+	_, deps, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID)
+	if err != nil {
+		return fmt.Errorf("get deps: %w", err)
+	}
+
 	// Build new DAGRunner from current DB state
-	retryJobID := detail.Run.JobID
+	rebuildJobID := detail.Run.JobID
 	onComplete := func(runID string, status string) {
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
@@ -260,21 +320,21 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		if status == store.StatusFailed {
 			evType = event.TypeRunFailed
 		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, retryJobID, status, "manual"))
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, "manual"))
 	}
 
-	// Build step name map for retry
-	retryStepNames := make(map[string]string)
+	// Build step name map
+	stepNames := make(map[string]string)
 	for _, rs := range detail.RunSteps {
-		retryStepNames[rs.StepID] = rs.StepID
+		stepNames[rs.StepID] = rs.StepID
 	}
-	if retrySteps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID); err == nil {
-		for _, s := range retrySteps {
-			retryStepNames[s.StepID] = s.Name
+	if steps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID); err == nil {
+		for _, s := range steps {
+			stepNames[s.StepID] = s.Name
 		}
 	}
 
-	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, nil, JobMeta{}, retryStepNames)
+	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, nil, JobMeta{}, stepNames)
 
 	// Pre-process completed steps: count them and pre-decrement in-degrees
 	// of their dependents so pending steps with completed upstream deps can launch.
