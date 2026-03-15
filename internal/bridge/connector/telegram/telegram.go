@@ -322,7 +322,7 @@ func (t *Telegram) handleTemplates(ctx context.Context) string {
 			machine = "any"
 		}
 		sb.WriteString(fmt.Sprintf("• `%s` — %s \\(%s\\)\n",
-			tmpl.Name,
+			escapeMarkdownV2(tmpl.Name),
 			escapeMarkdownV2(desc),
 			escapeMarkdownV2(machine)))
 	}

@@ -77,6 +77,9 @@ type RouterDeps struct {
 // via httpOnly cookie first, then Authorization: Bearer header as fallback.
 // WebSocket routes support cookie auth (preferred) and first-message auth.
 func NewRouter(deps RouterDeps) chi.Router {
+	if deps.Handlers == nil {
+		panic("api.NewRouter: RouterDeps.Handlers is required")
+	}
 	h := deps.Handlers
 	r := chi.NewRouter()
 

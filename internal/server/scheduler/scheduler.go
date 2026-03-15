@@ -142,7 +142,7 @@ func (s *Scheduler) buildFuncJob(schedule store.CronSchedule) func() {
 
 		ev := event.Event{
 			EventID:   uuid.New().String(),
-			Type:      "trigger.cron",
+			Type:      event.TypeTriggerCron,
 			Timestamp: now,
 			Source:    "scheduler",
 			Payload: map[string]any{
