@@ -156,7 +156,7 @@ export function JobsPage() {
             <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Steps</th>
+              <th className="px-4 py-2">Tasks</th>
               <th className="px-4 py-2">Machine</th>
               <th className="px-4 py-2">Trigger</th>
               <th className="px-4 py-2">Created</th>

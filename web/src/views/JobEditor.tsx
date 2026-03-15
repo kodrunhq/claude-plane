@@ -4,7 +4,7 @@ import { Plus, Save, Play, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-reac
 import { JobRunHistory } from '../components/jobs/JobRunHistory.tsx';
 import { toast } from 'sonner';
 import { DAGCanvas } from '../components/dag/DAGCanvas.tsx';
-import { StepEditor } from '../components/jobs/StepEditor.tsx';
+import { TaskEditor } from '../components/jobs/TaskEditor.tsx';
 import { SchedulePanel } from '../components/jobs/SchedulePanel.tsx';
 import { TriggerPanel } from '../components/jobs/TriggerPanel.tsx';
 import { JobMetaForm } from '../components/jobs/JobMetaForm.tsx';
@@ -15,15 +15,15 @@ import {
   useJob,
   useCreateJob,
   useUpdateJob,
-  useAddStep,
-  useUpdateStep,
-  useDeleteStep,
+  useAddTask,
+  useUpdateTask,
+  useDeleteTask,
   useAddDependency,
   useTriggerRun,
 } from '../hooks/useJobs.ts';
 import { useMachines } from '../hooks/useMachines.ts';
 import { useJobEditorStore } from '../stores/jobs.ts';
-import type { UpdateStepParams } from '../types/job.ts';
+import type { UpdateTaskParams } from '../types/job.ts';
 
 type EditorTab = 'details' | 'tasks' | 'triggers' | 'schedule' | 'settings';
 
@@ -44,14 +44,14 @@ export function JobEditor() {
   const { data: machines } = useMachines();
   const createJob = useCreateJob();
   const updateJob = useUpdateJob();
-  const addStep = useAddStep();
-  const updateStep = useUpdateStep();
-  const deleteStep = useDeleteStep();
+  const addTask = useAddTask();
+  const updateTask = useUpdateTask();
+  const deleteTask = useDeleteTask();
   const addDependency = useAddDependency();
   const triggerRun = useTriggerRun();
 
-  const selectedStepId = useJobEditorStore((s) => s.selectedStepId);
-  const selectStep = useJobEditorStore((s) => s.selectStep);
+  const selectedTaskId = useJobEditorStore((s) => s.selectedTaskId);
+  const selectTask = useJobEditorStore((s) => s.selectTask);
 
   const [jobName, setJobName] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -62,7 +62,7 @@ export function JobEditor() {
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
   const [activeTab, setActiveTab] = useState<EditorTab>('tasks');
   const [showRunModal, setShowRunModal] = useState(false);
-  const stepDirtyRef = useRef(false);
+  const taskDirtyRef = useRef(false);
 
   // Sync job data when loaded
   useEffect(() => {
@@ -79,30 +79,30 @@ export function JobEditor() {
 
   // Cleanup selection on unmount
   useEffect(() => {
-    return () => selectStep(null);
-  }, [selectStep]);
+    return () => selectTask(null);
+  }, [selectTask]);
 
-  const handleStepDirtyChange = useCallback((dirty: boolean) => {
-    stepDirtyRef.current = dirty;
+  const handleTaskDirtyChange = useCallback((dirty: boolean) => {
+    taskDirtyRef.current = dirty;
   }, []);
 
   function confirmIfDirty(): boolean {
-    if (!stepDirtyRef.current) return true;
-    return window.confirm('You have unsaved step changes. Discard them?');
+    if (!taskDirtyRef.current) return true;
+    return window.confirm('You have unsaved task changes. Discard them?');
   }
 
   const effectiveJobId = isNew ? jobId : id;
   const steps = jobDetail?.steps ?? [];
   const dependencies = jobDetail?.dependencies ?? [];
-  const selectedStep = steps.find((s) => s.step_id === selectedStepId) ?? null;
+  const selectedTask = steps.find((s) => s.step_id === selectedTaskId) ?? null;
 
   const handleNodeClick = useCallback(
-    (stepId: string) => {
-      if (stepId === selectedStepId) return;
+    (taskId: string) => {
+      if (taskId === selectedTaskId) return;
       if (!confirmIfDirty()) return;
-      selectStep(stepId);
+      selectTask(taskId);
     },
-    [selectedStepId, selectStep],
+    [selectedTaskId, selectTask],
   );
 
   function buildJobParams() {
@@ -131,40 +131,40 @@ export function JobEditor() {
     }
   }
 
-  async function handleAddStep() {
+  async function handleAddTask() {
     const jid = await ensureJobCreated();
     if (!jid) return;
     if (!machines || machines.length === 0) {
-      toast.error('No machines are available. Connect a machine before adding a step.');
+      toast.error('No machines are available. Connect a machine before adding a task.');
       return;
     }
     try {
-      const step = await addStep.mutateAsync({
+      const newTask = await addTask.mutateAsync({
         jobId: jid,
         params: {
           name: '',
           machine_id: machines[0].machine_id,
         },
       });
-      selectStep(step.step_id);
+      selectTask(newTask.step_id);
       setActiveTab('tasks');
       if (isNew) {
         navigate(`/jobs/${jid}`, { replace: true });
       }
-      toast.success('Step added');
+      toast.success('Task added');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add step');
+      toast.error(err instanceof Error ? err.message : 'Failed to add task');
     }
   }
 
   const handleConnect = useCallback(
-    async (sourceStepId: string, targetStepId: string) => {
+    async (sourceTaskId: string, targetTaskId: string) => {
       if (!effectiveJobId) return;
       try {
         await addDependency.mutateAsync({
           jobId: effectiveJobId,
-          stepId: targetStepId,
-          dependsOnStepId: sourceStepId,
+          taskId: targetTaskId,
+          dependsOnTaskId: sourceTaskId,
         });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Invalid dependency (possible cycle)');
@@ -194,8 +194,8 @@ export function JobEditor() {
       toast.error('Save the job first');
       return;
     }
-    if (stepDirtyRef.current) {
-      toast.error('Save your step changes before running');
+    if (taskDirtyRef.current) {
+      toast.error('Save your task changes before running');
       return;
     }
     // If job has parameters, show the modal for overrides
@@ -222,27 +222,27 @@ export function JobEditor() {
     }
   }
 
-  function handleStepSave(stepId: string, params: UpdateStepParams) {
+  function handleTaskSave(taskId: string, params: UpdateTaskParams) {
     if (!effectiveJobId) return;
-    updateStep.mutate(
-      { jobId: effectiveJobId, stepId, params },
+    updateTask.mutate(
+      { jobId: effectiveJobId, taskId, params },
       {
-        onSuccess: () => toast.success('Step updated'),
-        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to update step'),
+        onSuccess: () => toast.success('Task updated'),
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to update task'),
       },
     );
   }
 
-  function handleStepDelete(stepId: string) {
+  function handleTaskDelete(taskId: string) {
     if (!effectiveJobId) return;
-    deleteStep.mutate(
-      { jobId: effectiveJobId, stepId },
+    deleteTask.mutate(
+      { jobId: effectiveJobId, taskId },
       {
         onSuccess: () => {
-          selectStep(null);
-          toast.success('Step deleted');
+          selectTask(null);
+          toast.success('Task deleted');
         },
-        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete step'),
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to delete task'),
       },
     );
   }
@@ -281,11 +281,11 @@ export function JobEditor() {
         />
 
         <button
-          onClick={handleAddStep}
+          onClick={handleAddTask}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
         >
           <Plus size={14} />
-          Add Step
+          Add Task
         </button>
         <button
           onClick={handleSave}
@@ -341,14 +341,14 @@ export function JobEditor() {
           </div>
         )}
 
-        {/* Tasks tab — preserves the original DAG + StepEditor layout */}
+        {/* Tasks tab — preserves the original DAG + TaskEditor layout */}
         {activeTab === 'tasks' && (
           <div className="flex flex-1 min-h-0">
             {/* DAG Canvas (left) */}
             <div className="flex-1 min-w-0">
               {steps.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
-                  <p>No steps yet. Click "Add Step" to begin.</p>
+                  <p>No tasks yet. Click "Add Task" to begin.</p>
                   {isNew && !jobId && (
                     <div className="mt-4 w-64">
                       <JobMetaForm
@@ -364,21 +364,21 @@ export function JobEditor() {
                   steps={steps}
                   dependencies={dependencies}
                   editable
-                  selectedStepId={selectedStepId}
+                  selectedStepId={selectedTaskId}
                   onNodeClick={handleNodeClick}
                   onConnect={handleConnect}
                 />
               )}
             </div>
 
-            {/* Step Editor sidebar (right) */}
+            {/* Task Editor sidebar (right) */}
             <div className="w-80 border-l border-border-primary bg-bg-secondary shrink-0 flex flex-col">
-              <StepEditor
-                step={selectedStep}
+              <TaskEditor
+                task={selectedTask}
                 machines={machines ?? []}
-                onSave={handleStepSave}
-                onDelete={handleStepDelete}
-                onDirtyChange={handleStepDirtyChange}
+                onSave={handleTaskSave}
+                onDelete={handleTaskDelete}
+                onDirtyChange={handleTaskDirtyChange}
               />
             </div>
           </div>
