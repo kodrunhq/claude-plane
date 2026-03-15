@@ -40,7 +40,7 @@ func (s *Store) CreateProvisioningToken(ctx context.Context, t ProvisioningToken
 		`INSERT INTO provisioning_tokens
 		 (token, short_code, machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
 		  agent_key_pem, server_address, grpc_address, created_by, created_at, expires_at)
-		 VALUES (?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.Token, t.ShortCode, t.MachineID, t.TargetOS, t.TargetArch, t.CACertPEM, t.AgentCertPEM,
 		t.AgentKeyPEM, t.ServerAddress, t.GRPCAddress, t.CreatedBy,
 		t.CreatedAt.UTC(), t.ExpiresAt.UTC(),
@@ -59,6 +59,9 @@ func (s *Store) GetProvisioningToken(ctx context.Context, token string) (*Provis
 	var pt ProvisioningToken
 	var redeemedAt sql.NullTime
 
+	// NOTE: short_code may be NULL in the database for legacy tokens created before
+	// migration 13. We use COALESCE(short_code, '') so that callers always see an
+	// empty string when short_code is not set.
 	err := s.reader.QueryRowContext(ctx,
 		`SELECT token, COALESCE(short_code, ''), machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
 		        agent_key_pem, server_address, grpc_address, created_by, created_at,
