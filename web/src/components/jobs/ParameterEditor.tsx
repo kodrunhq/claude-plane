@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 const PARAM_KEY_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -56,13 +56,10 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
 
   // Sync from parent when parameters change externally (e.g. server load).
   const serializedParams = useMemo(() => JSON.stringify(parameters), [parameters]);
-  const prevSerializedRef = useRef(serializedParams);
   useEffect(() => {
-    if (serializedParams !== prevSerializedRef.current) {
-      prevSerializedRef.current = serializedParams;
-      setEntries(toEntries(parameters));
-    }
-  }, [serializedParams, parameters]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local entries on external parameter change
+    setEntries(toEntries(parameters));
+  }, [serializedParams]); // eslint-disable-line react-hooks/exhaustive-deps -- parameters is captured via serializedParams
 
   const duplicateKeys = useMemo(() => {
     const seen = new Map<string, number>();
