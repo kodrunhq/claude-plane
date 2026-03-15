@@ -51,19 +51,39 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	}
 }
 
+// RouterDeps holds all dependencies required by NewRouter, replacing the
+// previous 15 positional parameters with named fields.
+type RouterDeps struct {
+	Handlers           *Handlers
+	SessionHandler     *session.SessionHandler
+	WSHandler          http.HandlerFunc
+	EventsWSHandler    http.HandlerFunc
+	JobHandler         *handler.JobHandler
+	RunHandler         *handler.RunHandler
+	EventHandler       *handler.EventHandler
+	WebhookHandler     *handler.WebhookHandler
+	TriggerHandler     *handler.TriggerHandler
+	IngestHandler      *handler.IngestHandler
+	ScheduleHandler    *handler.ScheduleHandler
+	UserHandler        *handler.UserHandler
+	CredentialHandler  *handler.CredentialHandler
+	PreferencesHandler *handler.PreferencesHandler
+	APIKeyAuth         *APIKeyAuth
+}
+
 // NewRouter creates a chi router with all API routes configured.
 // Public routes (register, login) require no authentication.
 // Protected routes (logout, machines, sessions) require a valid JWT, checked
 // via httpOnly cookie first, then Authorization: Bearer header as fallback.
 // WebSocket routes support cookie auth (preferred) and first-message auth.
-func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler http.HandlerFunc, eventsWSHandler http.HandlerFunc, jobHandler *handler.JobHandler, runHandler *handler.RunHandler, eventHandler *handler.EventHandler, webhookHandler *handler.WebhookHandler, triggerHandler *handler.TriggerHandler, ingestHandler *handler.IngestHandler, scheduleHandler *handler.ScheduleHandler, userHandler *handler.UserHandler, credentialHandler *handler.CredentialHandler, preferencesHandler *handler.PreferencesHandler, apiKeyAuth ...*APIKeyAuth) chi.Router {
+func NewRouter(deps RouterDeps) chi.Router {
+	if deps.Handlers == nil {
+		panic("api.NewRouter: RouterDeps.Handlers is required")
+	}
+	h := deps.Handlers
 	r := chi.NewRouter()
 
-	// Resolve optional API key auth for all protected routes.
-	var aka *APIKeyAuth
-	if len(apiKeyAuth) > 0 {
-		aka = apiKeyAuth[0]
-	}
+	aka := deps.APIKeyAuth
 
 	// Global middleware
 	r.Use(middleware.RequestID)
@@ -74,11 +94,11 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 	r.Use(securityHeadersMiddleware)
 
 	// WebSocket routes — auth handled inside handlers (cookie or first-message)
-	if wsHandler != nil {
-		r.Get("/ws/terminal/{sessionID}", wsHandler)
+	if deps.WSHandler != nil {
+		r.Get("/ws/terminal/{sessionID}", deps.WSHandler)
 	}
-	if eventsWSHandler != nil {
-		r.Get("/ws/events", eventsWSHandler)
+	if deps.EventsWSHandler != nil {
+		r.Get("/ws/events", deps.EventsWSHandler)
 	}
 
 	// 5 requests per minute per IP for auth endpoints
@@ -97,54 +117,54 @@ func NewRouter(h *Handlers, sessionHandler *session.SessionHandler, wsHandler ht
 			r.Get("/machines/{machineID}", h.GetMachine)
 
 			// Session routes
-			if sessionHandler != nil {
-				r.Post("/sessions", sessionHandler.CreateSession)
-				r.Get("/sessions", sessionHandler.ListSessions)
-				r.Get("/sessions/{sessionID}", sessionHandler.GetSession)
-				r.Delete("/sessions/{sessionID}", sessionHandler.TerminateSession)
-				r.Post("/sessions/{sessionID}/inject", sessionHandler.InjectSession)
-				r.Get("/sessions/{sessionID}/injections", sessionHandler.ListInjections)
+			if deps.SessionHandler != nil {
+				r.Post("/sessions", deps.SessionHandler.CreateSession)
+				r.Get("/sessions", deps.SessionHandler.ListSessions)
+				r.Get("/sessions/{sessionID}", deps.SessionHandler.GetSession)
+				r.Delete("/sessions/{sessionID}", deps.SessionHandler.TerminateSession)
+				r.Post("/sessions/{sessionID}/inject", deps.SessionHandler.InjectSession)
+				r.Get("/sessions/{sessionID}/injections", deps.SessionHandler.ListInjections)
 			}
 		})
 	})
 
 	// Job system routes (flat paths, JWT + optional API key protected)
-	if jobHandler != nil || runHandler != nil || eventHandler != nil || webhookHandler != nil || triggerHandler != nil || scheduleHandler != nil || userHandler != nil || credentialHandler != nil || preferencesHandler != nil {
+	if deps.JobHandler != nil || deps.RunHandler != nil || deps.EventHandler != nil || deps.WebhookHandler != nil || deps.TriggerHandler != nil || deps.ScheduleHandler != nil || deps.UserHandler != nil || deps.CredentialHandler != nil || deps.PreferencesHandler != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware(h.authSvc, aka))
-			if jobHandler != nil {
-				handler.RegisterJobRoutes(r, jobHandler)
+			if deps.JobHandler != nil {
+				handler.RegisterJobRoutes(r, deps.JobHandler)
 			}
-			if runHandler != nil {
-				handler.RegisterRunRoutes(r, runHandler)
+			if deps.RunHandler != nil {
+				handler.RegisterRunRoutes(r, deps.RunHandler)
 			}
-			if eventHandler != nil {
-				handler.RegisterEventRoutes(r, eventHandler)
+			if deps.EventHandler != nil {
+				handler.RegisterEventRoutes(r, deps.EventHandler)
 			}
-			if webhookHandler != nil {
-				handler.RegisterWebhookRoutes(r, webhookHandler)
+			if deps.WebhookHandler != nil {
+				handler.RegisterWebhookRoutes(r, deps.WebhookHandler)
 			}
-			if triggerHandler != nil {
-				handler.RegisterTriggerRoutes(r, triggerHandler)
+			if deps.TriggerHandler != nil {
+				handler.RegisterTriggerRoutes(r, deps.TriggerHandler)
 			}
-			if scheduleHandler != nil {
-				handler.RegisterScheduleRoutes(r, scheduleHandler)
+			if deps.ScheduleHandler != nil {
+				handler.RegisterScheduleRoutes(r, deps.ScheduleHandler)
 			}
-			if userHandler != nil {
-				handler.RegisterUserRoutes(r, userHandler)
+			if deps.UserHandler != nil {
+				handler.RegisterUserRoutes(r, deps.UserHandler)
 			}
-			if credentialHandler != nil {
-				handler.RegisterCredentialRoutes(r, credentialHandler)
+			if deps.CredentialHandler != nil {
+				handler.RegisterCredentialRoutes(r, deps.CredentialHandler)
 			}
-			if preferencesHandler != nil {
-				handler.RegisterPreferencesRoutes(r, preferencesHandler)
+			if deps.PreferencesHandler != nil {
+				handler.RegisterPreferencesRoutes(r, deps.PreferencesHandler)
 			}
 		})
 	}
 
 	// Ingest routes are public (auth is handled via HMAC signatures).
-	if ingestHandler != nil {
-		handler.RegisterIngestRoutes(r, ingestHandler)
+	if deps.IngestHandler != nil {
+		handler.RegisterIngestRoutes(r, deps.IngestHandler)
 	}
 
 	return r

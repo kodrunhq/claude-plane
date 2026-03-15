@@ -48,10 +48,12 @@ type TLSConfig struct {
 
 // AgentSettings holds agent-specific configuration.
 type AgentSettings struct {
-	MachineID    string `toml:"machine_id"`
-	DataDir      string `toml:"data_dir"`
-	MaxSessions  int    `toml:"max_sessions"`
-	ClaudeCLIPath string `toml:"claude_cli_path"`
+	MachineID          string `toml:"machine_id"`
+	DataDir            string `toml:"data_dir"`
+	MaxSessions        int    `toml:"max_sessions"`
+	ClaudeCLIPath      string `toml:"claude_cli_path"`
+	IdlePromptMarker   string `toml:"idle_prompt_marker"`
+	IdleStartupTimeout string `toml:"idle_startup_timeout"`
 }
 
 // LoadAgentConfig reads a TOML config file, parses it into an AgentConfig,

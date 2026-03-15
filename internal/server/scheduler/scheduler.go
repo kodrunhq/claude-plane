@@ -12,39 +12,22 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
+
+	"github.com/kodrunhq/claude-plane/internal/server/event"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
-
-// CronSchedule mirrors store.CronSchedule to avoid import cycles.
-type CronSchedule struct {
-	ScheduleID      string
-	JobID           string
-	CronExpr        string
-	Timezone        string
-	Enabled         bool
-	NextRunAt       *time.Time
-	LastTriggeredAt *time.Time
-}
-
-// Event mirrors event.Event to avoid import cycles.
-type Event struct {
-	EventID   string         `json:"event_id"`
-	Type      string         `json:"event_type"`
-	Timestamp time.Time      `json:"timestamp"`
-	Source    string         `json:"source"`
-	Payload   map[string]any `json:"payload"`
-}
 
 // ScheduleStore is the persistence interface required by the Scheduler.
 // Satisfied by store.Store.
 type ScheduleStore interface {
-	ListEnabledSchedules(ctx context.Context) ([]CronSchedule, error)
-	GetSchedule(ctx context.Context, scheduleID string) (*CronSchedule, error)
+	ListEnabledSchedules(ctx context.Context) ([]store.CronSchedule, error)
+	GetSchedule(ctx context.Context, scheduleID string) (*store.CronSchedule, error)
 	UpdateScheduleTimestamps(ctx context.Context, scheduleID string, lastTriggered, nextRun time.Time) error
 }
 
 // EventPublisher publishes events to the event bus.
 type EventPublisher interface {
-	Publish(ctx context.Context, event Event) error
+	Publish(ctx context.Context, ev event.Event) error
 }
 
 // Scheduler manages cron-based schedule entries and fires trigger events.
@@ -132,7 +115,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 // addEntryLocked registers a single CronSchedule with the underlying cron runner
 // and returns the computed next run time. Must be called with s.mu held.
-func (s *Scheduler) addEntryLocked(schedule CronSchedule) (time.Time, error) {
+func (s *Scheduler) addEntryLocked(schedule store.CronSchedule) (time.Time, error) {
 	if _, err := time.LoadLocation(schedule.Timezone); err != nil {
 		return time.Time{}, fmt.Errorf("invalid timezone %q for schedule %s: %w", schedule.Timezone, schedule.ScheduleID, err)
 	}
@@ -152,14 +135,14 @@ func (s *Scheduler) addEntryLocked(schedule CronSchedule) (time.Time, error) {
 
 // buildFuncJob returns the closure executed by the cron runner each time the
 // schedule fires. It publishes a trigger.cron event and updates timestamps.
-func (s *Scheduler) buildFuncJob(schedule CronSchedule) func() {
+func (s *Scheduler) buildFuncJob(schedule store.CronSchedule) func() {
 	return func() {
 		now := time.Now().UTC()
 		ctx := context.Background()
 
-		ev := Event{
+		ev := event.Event{
 			EventID:   uuid.New().String(),
-			Type:      "trigger.cron",
+			Type:      event.TypeTriggerCron,
 			Timestamp: now,
 			Source:    "scheduler",
 			Payload: map[string]any{
@@ -225,19 +208,9 @@ func (s *Scheduler) ReloadSchedule(ctx context.Context, scheduleID string) error
 		return nil
 	}
 
-	cronSched := CronSchedule{
-		ScheduleID:      sc.ScheduleID,
-		JobID:           sc.JobID,
-		CronExpr:        sc.CronExpr,
-		Timezone:        sc.Timezone,
-		Enabled:         sc.Enabled,
-		NextRunAt:       sc.NextRunAt,
-		LastTriggeredAt: sc.LastTriggeredAt,
-	}
-
 	// Step 3: re-add entry under lock.
 	s.mu.Lock()
-	nextRun, addErr := s.addEntryLocked(cronSched)
+	nextRun, addErr := s.addEntryLocked(*sc)
 	s.mu.Unlock()
 
 	if addErr != nil {
@@ -280,30 +253,3 @@ func (s *Scheduler) Stop() {
 	<-stopCtx.Done()
 }
 
-// ScheduleStoreFuncs satisfies ScheduleStore via injected function closures.
-type ScheduleStoreFuncs struct {
-	ListEnabledSchedulesFn     func(ctx context.Context) ([]CronSchedule, error)
-	GetScheduleFn              func(ctx context.Context, scheduleID string) (*CronSchedule, error)
-	UpdateScheduleTimestampsFn func(ctx context.Context, scheduleID string, lastTriggered, nextRun time.Time) error
-}
-
-func (f *ScheduleStoreFuncs) ListEnabledSchedules(ctx context.Context) ([]CronSchedule, error) {
-	return f.ListEnabledSchedulesFn(ctx)
-}
-
-func (f *ScheduleStoreFuncs) GetSchedule(ctx context.Context, scheduleID string) (*CronSchedule, error) {
-	return f.GetScheduleFn(ctx, scheduleID)
-}
-
-func (f *ScheduleStoreFuncs) UpdateScheduleTimestamps(ctx context.Context, scheduleID string, lastTriggered, nextRun time.Time) error {
-	return f.UpdateScheduleTimestampsFn(ctx, scheduleID, lastTriggered, nextRun)
-}
-
-// EventPublisherFuncs satisfies EventPublisher via an injected function closure.
-type EventPublisherFuncs struct {
-	PublishFn func(ctx context.Context, event Event) error
-}
-
-func (f *EventPublisherFuncs) Publish(ctx context.Context, event Event) error {
-	return f.PublishFn(ctx, event)
-}

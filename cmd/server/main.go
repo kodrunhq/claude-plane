@@ -266,60 +266,7 @@ func newServeCmd() *cobra.Command {
 			orch.SetPublisher(eventBus)
 
 			// ---- Cron scheduler ----
-			schedStore := &scheduler.ScheduleStoreFuncs{
-				ListEnabledSchedulesFn: func(c context.Context) ([]scheduler.CronSchedule, error) {
-					storeSchedules, err := s.ListEnabledSchedules(c)
-					if err != nil {
-						return nil, err
-					}
-					result := make([]scheduler.CronSchedule, len(storeSchedules))
-					for i, ss := range storeSchedules {
-						result[i] = scheduler.CronSchedule{
-							ScheduleID:      ss.ScheduleID,
-							JobID:           ss.JobID,
-							CronExpr:        ss.CronExpr,
-							Timezone:        ss.Timezone,
-							Enabled:         ss.Enabled,
-							NextRunAt:       ss.NextRunAt,
-							LastTriggeredAt: ss.LastTriggeredAt,
-						}
-					}
-					return result, nil
-				},
-				GetScheduleFn: func(c context.Context, scheduleID string) (*scheduler.CronSchedule, error) {
-					ss, err := s.GetSchedule(c, scheduleID)
-					if err != nil {
-						return nil, err
-					}
-					return &scheduler.CronSchedule{
-						ScheduleID:      ss.ScheduleID,
-						JobID:           ss.JobID,
-						CronExpr:        ss.CronExpr,
-						Timezone:        ss.Timezone,
-						Enabled:         ss.Enabled,
-						NextRunAt:       ss.NextRunAt,
-						LastTriggeredAt: ss.LastTriggeredAt,
-					}, nil
-				},
-				UpdateScheduleTimestampsFn: func(c context.Context, scheduleID string, lastTriggered, nextRun time.Time) error {
-					return s.UpdateScheduleTimestamps(c, scheduleID, lastTriggered, nextRun)
-				},
-			}
-
-			// Event publisher adapter — bridges scheduler.Event to event.Event for the bus.
-			schedEventBus := &scheduler.EventPublisherFuncs{
-				PublishFn: func(c context.Context, ev scheduler.Event) error {
-					return eventBus.Publish(c, event.Event{
-						EventID:   ev.EventID,
-						Type:      ev.Type,
-						Timestamp: ev.Timestamp,
-						Source:    ev.Source,
-						Payload:   ev.Payload,
-					})
-				},
-			}
-
-			sched := scheduler.NewScheduler(schedStore, schedEventBus, slog.Default())
+			sched := scheduler.NewScheduler(s, eventBus, slog.Default())
 			if err := sched.Start(ctx); err != nil {
 				return fmt.Errorf("start scheduler: %w", err)
 			}
@@ -396,7 +343,23 @@ func newServeCmd() *cobra.Command {
 
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
-			router := api.NewRouter(handlers, sessionHandler, wsHandler, eventsWSHandler, jobHandler, runHandler, eventHandler, webhookHandler, triggerHandler, ingestHandler, scheduleHandler, userHandler, credentialHandler, preferencesHandler, apiKeyAuth)
+			router := api.NewRouter(api.RouterDeps{
+				Handlers:           handlers,
+				SessionHandler:     sessionHandler,
+				WSHandler:          wsHandler,
+				EventsWSHandler:    eventsWSHandler,
+				JobHandler:         jobHandler,
+				RunHandler:         runHandler,
+				EventHandler:       eventHandler,
+				WebhookHandler:     webhookHandler,
+				TriggerHandler:     triggerHandler,
+				IngestHandler:      ingestHandler,
+				ScheduleHandler:    scheduleHandler,
+				UserHandler:        userHandler,
+				CredentialHandler:  credentialHandler,
+				PreferencesHandler: preferencesHandler,
+				APIKeyAuth:         apiKeyAuth,
+			})
 
 			// Agent binary download endpoint (public, no JWT required).
 			dlHandler := agentdl.NewHandler(agentdl.AgentBinariesFS)

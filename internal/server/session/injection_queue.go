@@ -302,11 +302,10 @@ func (q *InjectionQueue) handleSessionEvent(_ context.Context, evt event.Event) 
 
 	q.mu.Lock()
 	sq, exists := q.queues[sessionID]
-	q.mu.Unlock()
-
 	if exists {
 		sq.closeOnce.Do(func() { close(sq.done) })
 	}
+	q.mu.Unlock()
 	return nil
 }
 
