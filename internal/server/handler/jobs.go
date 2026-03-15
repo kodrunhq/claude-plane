@@ -113,6 +113,12 @@ func writeError(w http.ResponseWriter, status int, message string) {
 // validateRunJobStep validates run_job-specific fields: job_params JSON validity,
 // size cap, target_job_id existence, authorization, and cycle detection.
 func (h *JobHandler) validateRunJobStep(w http.ResponseWriter, r *http.Request, currentJobID, targetJobID, jobParams string) bool {
+	// Validate target_job_id is provided
+	if targetJobID == "" {
+		writeError(w, http.StatusBadRequest, "target_job_id is required for run_job tasks")
+		return false
+	}
+
 	// Validate job_params JSON
 	if jobParams != "" {
 		if len(jobParams) > maxJobParamsSize {

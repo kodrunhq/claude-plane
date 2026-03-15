@@ -12,13 +12,22 @@ const maxCheckOutputLen = 4096
 // Claude session prompts.
 const maxBodyLen = 4096
 
+// truncateSuffix is appended to truncated body text.
+const truncateSuffix = "... [truncated]"
+
 // truncateBody returns s truncated to maxBodyLen runes if it exceeds the limit.
+// The returned string never exceeds maxBodyLen runes including the suffix.
 func truncateBody(s string) string {
 	runes := []rune(s)
 	if len(runes) <= maxBodyLen {
 		return s
 	}
-	return string(runes[:maxBodyLen]) + "... [truncated]"
+	suffixRunes := []rune(truncateSuffix)
+	cutAt := maxBodyLen - len(suffixRunes)
+	if cutAt < 0 {
+		cutAt = 0
+	}
+	return string(runes[:cutAt]) + truncateSuffix
 }
 
 // PRData represents relevant fields from a GitHub Pull Request.
