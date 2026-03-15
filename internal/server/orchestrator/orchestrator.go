@@ -62,7 +62,15 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	}
 
 	// Create run in DB
-	run, err := o.store.CreateRun(ctx, jobID, triggerType, triggerDetail...)
+	detail0 := ""
+	if len(triggerDetail) > 0 {
+		detail0 = triggerDetail[0]
+	}
+	run, err := o.store.CreateRun(ctx, store.CreateRunParams{
+		JobID:         jobID,
+		TriggerType:   triggerType,
+		TriggerDetail: detail0,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create run: %w", err)
 	}

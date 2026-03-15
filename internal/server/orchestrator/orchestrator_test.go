@@ -25,7 +25,7 @@ func TestOrchestrator_CreateRun(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up job with steps and dependencies
-	job, _ := s.CreateJob(ctx, "Test Job", "desc", "")
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Test Job", Description: "desc"})
 	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
@@ -60,7 +60,7 @@ func TestOrchestrator_CreateRun_CycleRejected(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Cycle Job", "", "")
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Cycle Job"})
 	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	stepC, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "C", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 2, OnFailure: "fail_run"})
@@ -81,7 +81,7 @@ func TestOrchestrator_CancelRun(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Cancel Job", "", "")
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Cancel Job"})
 	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
@@ -108,7 +108,7 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Retry Job", "", "")
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Retry Job"})
 	stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "p", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
@@ -155,7 +155,7 @@ func TestOrchestrator_OnStepCompleted_ExternalAPI(t *testing.T) {
 
 	// Test 2: OnStepCompleted routes to the correct active DAGRunner
 	t.Run("routes_to_active_runner", func(t *testing.T) {
-		job, _ := s.CreateJob(ctx, "OnStepCompleted Job", "", "")
+		job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "OnStepCompleted Job"})
 		stepA, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 		stepB, _ := s.CreateStep(ctx, store.CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 		_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
