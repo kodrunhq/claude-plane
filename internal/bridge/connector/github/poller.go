@@ -663,7 +663,7 @@ func (p *RepoPoller) processIssueComments(ctx context.Context, trigger *CommentT
 		}
 
 		// Extract issue number and title from issue_url (last segment is the number)
-		issueNumber, issueTitle, issueURL := extractIssueInfoFromURL(c.IssueURL, c.HTMLURL)
+		issueNumber, issueTitle, issueURL := extractIssueInfoFromURL(c.IssueURL)
 
 		variables := ExtractIssueCommentVariables(c, p.repo, issueNumber, issueTitle, issueURL)
 		results = append(results, MatchedEvent{
@@ -745,7 +745,7 @@ func (p *RepoPoller) processPRComments(ctx context.Context, trigger *CommentTrig
 			continue
 		}
 
-		prNumber, prTitle, prURL := extractPRInfoFromURL(c.PullRequestURL, c.HTMLURL)
+		prNumber, prTitle, prURL := extractPRInfoFromURL(c.PullRequestURL)
 
 		variables := ExtractPRCommentVariables(c, p.repo, prNumber, prTitle, prURL)
 		results = append(results, MatchedEvent{
@@ -920,30 +920,39 @@ func (p *RepoPoller) processReleases(ctx context.Context, trigger *ReleaseTrigge
 	return results, rateLow, nil
 }
 
-// extractIssueInfoFromURL extracts issue number from an issue API URL.
-// Returns the number, empty title, and the HTML URL of the comment as fallback.
-func extractIssueInfoFromURL(issueAPIURL, commentHTMLURL string) (int, string, string) {
-	// issueAPIURL looks like https://api.github.com/repos/owner/repo/issues/42
+// extractIssueInfoFromURL extracts issue number and constructs the issue HTML URL
+// from a GitHub API URL like https://api.github.com/repos/owner/repo/issues/42.
+// Title is not available from the comment endpoint — returned empty.
+func extractIssueInfoFromURL(issueAPIURL string) (int, string, string) {
 	parts := strings.Split(issueAPIURL, "/")
-	if len(parts) > 0 {
+	// Expected: [..., "repos", owner, repo, "issues", number]
+	if len(parts) >= 5 {
 		n, err := strconv.Atoi(parts[len(parts)-1])
 		if err == nil {
-			return n, "", commentHTMLURL
+			owner := parts[len(parts)-4]
+			repo := parts[len(parts)-3]
+			htmlURL := fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repo, n)
+			return n, "", htmlURL
 		}
 	}
-	return 0, "", commentHTMLURL
+	return 0, "", ""
 }
 
-// extractPRInfoFromURL extracts PR number from a PR API URL.
-func extractPRInfoFromURL(prAPIURL, commentHTMLURL string) (int, string, string) {
+// extractPRInfoFromURL extracts PR number and constructs the PR HTML URL
+// from a GitHub API URL like https://api.github.com/repos/owner/repo/pulls/42.
+// Title is not available from the comment endpoint — returned empty.
+func extractPRInfoFromURL(prAPIURL string) (int, string, string) {
 	parts := strings.Split(prAPIURL, "/")
-	if len(parts) > 0 {
+	if len(parts) >= 5 {
 		n, err := strconv.Atoi(parts[len(parts)-1])
 		if err == nil {
-			return n, "", commentHTMLURL
+			owner := parts[len(parts)-4]
+			repo := parts[len(parts)-3]
+			htmlURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, n)
+			return n, "", htmlURL
 		}
 	}
-	return 0, "", commentHTMLURL
+	return 0, "", ""
 }
 
 // isAfter returns true when candidate is lexicographically greater than base.

@@ -36,8 +36,11 @@ export function ConnectorCard({ connector, onEdit, onDelete }: ConnectorCardProp
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={handleCardClick}
-      className="bg-bg-secondary border border-border-primary rounded-lg p-4 flex flex-col gap-3 cursor-pointer hover:border-accent-primary/40 transition-colors"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCardClick(); } }}
+      className="bg-bg-secondary border border-border-primary rounded-lg p-4 flex flex-col gap-3 cursor-pointer hover:border-accent-primary/40 transition-colors focus:outline-none focus:ring-2 focus:ring-accent-primary/50"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
