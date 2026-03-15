@@ -264,18 +264,17 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
   const lastDirty = useRef(false);
   const { data: templates } = useTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [taskType, setTaskType] = useState<TaskType>('claude');
+  const [taskType, setTaskType] = useState<TaskType>(() => step ? resolveTaskType(step) : 'claude');
   const [maxRetriesState, setMaxRetriesState] = useState(step?.max_retries ?? 0);
 
-  // Sync task type and max retries from step
+  // Sync task type and max retries when selected step changes.
   useEffect(() => {
     if (step) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing task type from step data
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local form state on step selection change
       setTaskType(resolveTaskType(step));
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing max retries from step data
       setMaxRetriesState(step.max_retries ?? 0);
     }
-  }, [step?.step_id, step?.task_type, step?.max_retries]);
+  }, [step]); // full step object — re-syncs on any server update
 
   const checkDirty = useCallback(() => {
     if (!formRef.current || !step || !onDirtyChange) return;
@@ -286,7 +285,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
     }
   }, [step, onDirtyChange, taskType]);
 
-  // Reset state when step changes
+  // Reset dirty state and template selection when step changes.
   useEffect(() => {
     lastDirty.current = false;
     onDirtyChange?.(false);
