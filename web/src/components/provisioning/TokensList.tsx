@@ -74,6 +74,11 @@ function TokenRow({ token, onRevokeRequest }: TokenRowProps) {
         <span className="text-sm font-mono text-text-primary">{token.machine_id}</span>
       </td>
       <td className="px-4 py-3">
+        <code className="text-sm font-mono font-medium text-accent-primary tracking-wider">
+          {token.short_code}
+        </code>
+      </td>
+      <td className="px-4 py-3">
         <TokenStatusBadge token={token} />
       </td>
       <td className="px-4 py-3 text-xs font-mono text-text-secondary">
@@ -126,6 +131,9 @@ export function TokensList({ tokens }: TokensListProps) {
             <tr className="bg-bg-secondary">
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
                 Machine ID
+              </th>
+              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                Join Code
               </th>
               <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-secondary">
                 Status

@@ -12,6 +12,7 @@ import (
 // machine. Once redeemed, the token cannot be used again.
 type ProvisioningToken struct {
 	Token         string     `json:"token"`
+	ShortCode     string     `json:"short_code"`
 	MachineID     string     `json:"machine_id"`
 	TargetOS      string     `json:"target_os"`
 	TargetArch    string     `json:"target_arch"`
@@ -37,10 +38,10 @@ var ErrTokenAlreadyRedeemed = errors.New("token already redeemed")
 func (s *Store) CreateProvisioningToken(ctx context.Context, t ProvisioningToken) error {
 	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO provisioning_tokens
-		 (token, machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
+		 (token, short_code, machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
 		  agent_key_pem, server_address, grpc_address, created_by, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.Token, t.MachineID, t.TargetOS, t.TargetArch, t.CACertPEM, t.AgentCertPEM,
+		 VALUES (?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.Token, t.ShortCode, t.MachineID, t.TargetOS, t.TargetArch, t.CACertPEM, t.AgentCertPEM,
 		t.AgentKeyPEM, t.ServerAddress, t.GRPCAddress, t.CreatedBy,
 		t.CreatedAt.UTC(), t.ExpiresAt.UTC(),
 	)
@@ -59,13 +60,13 @@ func (s *Store) GetProvisioningToken(ctx context.Context, token string) (*Provis
 	var redeemedAt sql.NullTime
 
 	err := s.reader.QueryRowContext(ctx,
-		`SELECT token, machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
+		`SELECT token, COALESCE(short_code, ''), machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
 		        agent_key_pem, server_address, grpc_address, created_by, created_at,
 		        expires_at, redeemed_at
 		 FROM provisioning_tokens WHERE token = ?`,
 		token,
 	).Scan(
-		&pt.Token, &pt.MachineID, &pt.TargetOS, &pt.TargetArch, &pt.CACertPEM, &pt.AgentCertPEM,
+		&pt.Token, &pt.ShortCode, &pt.MachineID, &pt.TargetOS, &pt.TargetArch, &pt.CACertPEM, &pt.AgentCertPEM,
 		&pt.AgentKeyPEM, &pt.ServerAddress, &pt.GRPCAddress, &pt.CreatedBy, &pt.CreatedAt,
 		&pt.ExpiresAt, &redeemedAt,
 	)
@@ -83,6 +84,42 @@ func (s *Store) GetProvisioningToken(ctx context.Context, token string) (*Provis
 
 	if time.Now().UTC().After(pt.ExpiresAt.UTC()) {
 		return nil, fmt.Errorf("get provisioning token: %w", ErrTokenExpired)
+	}
+
+	return &pt, nil
+}
+
+// GetProvisioningTokenByCode retrieves a provisioning token by its short code.
+// Returns the same errors as GetProvisioningToken.
+func (s *Store) GetProvisioningTokenByCode(ctx context.Context, code string) (*ProvisioningToken, error) {
+	var pt ProvisioningToken
+	var redeemedAt sql.NullTime
+
+	err := s.reader.QueryRowContext(ctx,
+		`SELECT token, COALESCE(short_code, ''), machine_id, target_os, target_arch, ca_cert_pem, agent_cert_pem,
+		        agent_key_pem, server_address, grpc_address, created_by, created_at,
+		        expires_at, redeemed_at
+		 FROM provisioning_tokens WHERE short_code = ?`,
+		code,
+	).Scan(
+		&pt.Token, &pt.ShortCode, &pt.MachineID, &pt.TargetOS, &pt.TargetArch, &pt.CACertPEM, &pt.AgentCertPEM,
+		&pt.AgentKeyPEM, &pt.ServerAddress, &pt.GRPCAddress, &pt.CreatedBy, &pt.CreatedAt,
+		&pt.ExpiresAt, &redeemedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("provisioning token by code: %w", ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get provisioning token by code: %w", err)
+	}
+
+	if redeemedAt.Valid {
+		pt.RedeemedAt = &redeemedAt.Time
+		return nil, fmt.Errorf("get provisioning token by code: %w", ErrTokenAlreadyRedeemed)
+	}
+
+	if time.Now().UTC().After(pt.ExpiresAt.UTC()) {
+		return nil, fmt.Errorf("get provisioning token by code: %w", ErrTokenExpired)
 	}
 
 	return &pt, nil
@@ -137,6 +174,7 @@ func (s *Store) RedeemProvisioningToken(ctx context.Context, token string) error
 // It omits the embedded certificates to keep response payloads small.
 type ProvisioningTokenSummary struct {
 	Token         string     `json:"token"`
+	ShortCode     string     `json:"short_code"`
 	MachineID     string     `json:"machine_id"`
 	TargetOS      string     `json:"target_os"`
 	TargetArch    string     `json:"target_arch"`
@@ -152,7 +190,7 @@ type ProvisioningTokenSummary struct {
 // (newest first). Certificates are omitted from the result.
 func (s *Store) ListProvisioningTokens(ctx context.Context) ([]ProvisioningTokenSummary, error) {
 	rows, err := s.reader.QueryContext(ctx,
-		`SELECT token, machine_id, target_os, target_arch, server_address, grpc_address,
+		`SELECT token, COALESCE(short_code, ''), machine_id, target_os, target_arch, server_address, grpc_address,
 		        created_by, created_at, expires_at, redeemed_at
 		 FROM provisioning_tokens
 		 ORDER BY created_at DESC`,
@@ -167,7 +205,7 @@ func (s *Store) ListProvisioningTokens(ctx context.Context) ([]ProvisioningToken
 		var t ProvisioningTokenSummary
 		var redeemedAt sql.NullTime
 		if err := rows.Scan(
-			&t.Token, &t.MachineID, &t.TargetOS, &t.TargetArch,
+			&t.Token, &t.ShortCode, &t.MachineID, &t.TargetOS, &t.TargetArch,
 			&t.ServerAddress, &t.GRPCAddress, &t.CreatedBy,
 			&t.CreatedAt, &t.ExpiresAt, &redeemedAt,
 		); err != nil {
