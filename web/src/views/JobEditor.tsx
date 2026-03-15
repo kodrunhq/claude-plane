@@ -364,7 +364,7 @@ export function JobEditor() {
                   steps={steps}
                   dependencies={dependencies}
                   editable
-                  selectedStepId={selectedTaskId}
+                  selectedTaskId={selectedTaskId}
                   onNodeClick={handleNodeClick}
                   onConnect={handleConnect}
                 />
