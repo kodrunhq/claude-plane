@@ -10,6 +10,7 @@ import type {
   CreateStepParams,
   UpdateStepParams,
   ListRunsParams,
+  TriggerRunParams,
 } from '../types/job.ts';
 
 export const jobsApi = {
@@ -56,10 +57,10 @@ export const jobsApi = {
     ),
 
   // Runs
-  triggerRun: (jobId: string) =>
+  triggerRun: (jobId: string, params?: TriggerRunParams) =>
     request<Run>(`/jobs/${encodeURIComponent(jobId)}/runs`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify(params ?? {}),
     }),
   listRuns: (params?: ListRunsParams) => {
     const searchParams = new URLSearchParams();
@@ -79,4 +80,9 @@ export const jobsApi = {
       `/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepId)}/retry`,
       { method: 'POST' },
     ),
+  repairRun: (runId: string, params?: { parameters?: Record<string, string> }) =>
+    request<Run>(`/runs/${encodeURIComponent(runId)}/repair`, {
+      method: 'POST',
+      body: JSON.stringify(params ?? {}),
+    }),
 };

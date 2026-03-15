@@ -45,3 +45,15 @@ export function useRetryStep() {
     },
   });
 }
+
+export function useRepairRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, parameters }: { runId: string; parameters?: Record<string, string> }) =>
+      jobsApi.repairRun(runId, parameters ? { parameters } : undefined),
+    onSuccess: (_, { runId }) => {
+      qc.invalidateQueries({ queryKey: ['runs', 'detail', runId] });
+      qc.invalidateQueries({ queryKey: ['runs', 'list'] });
+    },
+  });
+}

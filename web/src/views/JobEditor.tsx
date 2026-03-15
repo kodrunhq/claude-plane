@@ -168,7 +168,7 @@ export function JobEditor() {
       return;
     }
     try {
-      const run = await triggerRun.mutateAsync(effectiveJobId);
+      const run = await triggerRun.mutateAsync({ jobId: effectiveJobId });
       toast.success('Run started');
       navigate(`/runs/${run.run_id}`);
     } catch (err) {
