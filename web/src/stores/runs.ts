@@ -1,46 +1,46 @@
 import { create } from 'zustand';
-import type { RunStep } from '../types/job.ts';
+import type { RunTask } from '../types/job.ts';
 
 interface RunStore {
   /** The currently viewed run ID */
   activeRunId: string | null;
-  /** Map of stepId -> RunStep for the active run */
-  stepStatuses: Map<string, RunStep>;
-  selectedStepId: string | null;
+  /** Map of stepId -> RunTask for the active run */
+  taskStatuses: Map<string, RunTask>;
+  selectedTaskId: string | null;
 
   setActiveRunId: (runId: string | null) => void;
-  setStepStatuses: (steps: RunStep[]) => void;
-  updateStepStatus: (runId: string, stepId: string, status: string, sessionId?: string) => void;
-  selectStep: (id: string | null) => void;
+  setTaskStatuses: (tasks: RunTask[]) => void;
+  updateTaskStatus: (runId: string, stepId: string, status: string, sessionId?: string) => void;
+  selectTask: (id: string | null) => void;
   reset: () => void;
 }
 
 export const useRunStore = create<RunStore>((set) => ({
   activeRunId: null,
-  stepStatuses: new Map(),
-  selectedStepId: null,
+  taskStatuses: new Map(),
+  selectedTaskId: null,
 
   setActiveRunId: (runId) =>
     set((state) => {
       if (state.activeRunId === runId) return state;
-      return { activeRunId: runId, stepStatuses: new Map(), selectedStepId: null };
+      return { activeRunId: runId, taskStatuses: new Map(), selectedTaskId: null };
     }),
 
-  setStepStatuses: (steps) =>
+  setTaskStatuses: (tasks) =>
     set({
-      stepStatuses: new Map(steps.map((s) => [s.step_id, s])),
+      taskStatuses: new Map(tasks.map((t) => [t.step_id, t])),
     }),
 
-  updateStepStatus: (runId, stepId, status, sessionId) =>
+  updateTaskStatus: (runId, stepId, status, sessionId) =>
     set((state) => {
       // Ignore updates for runs other than the currently viewed one
       if (state.activeRunId && state.activeRunId !== runId) return state;
-      const updated = new Map(state.stepStatuses);
+      const updated = new Map(state.taskStatuses);
       const existing = updated.get(stepId);
       if (existing) {
         updated.set(stepId, {
           ...existing,
-          status: status as RunStep['status'],
+          status: status as RunTask['status'],
           ...(sessionId ? { session_id: sessionId } : {}),
         });
       } else {
@@ -48,13 +48,13 @@ export const useRunStore = create<RunStore>((set) => ({
           run_step_id: '',
           run_id: runId,
           step_id: stepId,
-          status: status as RunStep['status'],
+          status: status as RunTask['status'],
           ...(sessionId ? { session_id: sessionId } : {}),
         });
       }
-      return { stepStatuses: updated };
+      return { taskStatuses: updated };
     }),
 
-  selectStep: (id) => set({ selectedStepId: id }),
-  reset: () => set({ activeRunId: null, stepStatuses: new Map(), selectedStepId: null }),
+  selectTask: (id) => set({ selectedTaskId: id }),
+  reset: () => set({ activeRunId: null, taskStatuses: new Map(), selectedTaskId: null }),
 }));
