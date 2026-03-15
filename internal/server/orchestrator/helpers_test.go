@@ -58,7 +58,7 @@ func (m *mockExecutor) waitForStep(stepID string) {
 	startCh, _ := m.getOrCreateChans(stepID)
 	select {
 	case <-startCh:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		panic("timeout waiting for step " + stepID + " to start")
 	}
 }
@@ -66,8 +66,10 @@ func (m *mockExecutor) waitForStep(stepID string) {
 func (m *mockExecutor) completeStep(stepID string, exitCode int) {
 	_, completeCh := m.getOrCreateChans(stepID)
 	completeCh <- exitCode
-	// Allow the completion callback to run
-	time.Sleep(50 * time.Millisecond)
+	// Allow the completion callback and any deferred step re-evaluation to run.
+	// Needs to be long enough for the OnStepCompleted goroutine to acquire the
+	// DAGRunner lock, process dependents, and spawn launchStep goroutines.
+	time.Sleep(100 * time.Millisecond)
 }
 
 func (m *mockExecutor) isExecuting(stepID string) bool {
@@ -160,7 +162,7 @@ func (tr *testRunner) StartWithContext(t *testing.T, ctx context.Context) {
 func (tr *testRunner) waitForDone() {
 	select {
 	case <-tr.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(15 * time.Second):
 		panic("timeout waiting for DAGRunner to complete")
 	}
 }

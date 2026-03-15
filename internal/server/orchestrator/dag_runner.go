@@ -343,6 +343,15 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	d.mu.Lock()
 
+	// If the context was already cancelled (e.g., by CancelRun or job timeout),
+	// skip processing. CancelRun handles marking steps as cancelled in the DB.
+	// Without this check, the onRunComplete callback races with CancelRun's DB
+	// updates, potentially overwriting "cancelled" with "failed".
+	if d.ctx != nil && d.ctx.Err() != nil {
+		d.mu.Unlock()
+		return
+	}
+
 	rs, ok := d.steps[stepID]
 	if !ok {
 		d.mu.Unlock()

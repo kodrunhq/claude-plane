@@ -780,7 +780,10 @@ func TestDAGRunner_SessionKeyParallel(t *testing.T) {
 
 func TestDAGRunner_SessionKeyBlocksLaunch(t *testing.T) {
 	// A(shared), B(shared), C(no key): all roots.
-	// A and C should start in parallel. B must wait for A to finish.
+	// Exactly one of A or B claims "shared" and starts; the other is deferred.
+	// C (no key) always starts. The deferred step launches after the holder completes.
+	// Because Go map iteration is non-deterministic, the test must handle either
+	// A or B being the initial holder.
 	mock := newMockExecutor()
 	runner := buildTestRunner(t, "run-sk-blocks",
 		[]testStep{
@@ -794,27 +797,43 @@ func TestDAGRunner_SessionKeyBlocksLaunch(t *testing.T) {
 
 	runner.Start(t)
 
-	// A and C should start (C has no key, A claims "shared")
-	mock.waitForStep("a")
+	// C always starts (no session key).
 	mock.waitForStep("c")
 
-	// B should be deferred — same key as A
-	time.Sleep(100 * time.Millisecond)
-	if mock.isExecuting("b") {
-		t.Error("B should be deferred while A holds session key 'shared'")
+	// Exactly one of A or B should start (whoever claims "shared" first).
+	// Determine which one by polling both.
+	var holder, deferred string
+	deadline := time.Now().Add(10 * time.Second)
+	for holder == "" && time.Now().Before(deadline) {
+		if mock.isExecuting("a") {
+			holder, deferred = "a", "b"
+		} else if mock.isExecuting("b") {
+			holder, deferred = "b", "a"
+		} else {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if holder == "" {
+		t.Fatal("neither A nor B started within timeout")
 	}
 
-	// Complete C first — B still can't launch (A holds the key)
+	// The deferred step should not be executing
+	time.Sleep(100 * time.Millisecond)
+	if mock.isExecuting(deferred) {
+		t.Errorf("%s should be deferred while %s holds session key 'shared'", deferred, holder)
+	}
+
+	// Complete C first — deferred step still can't launch (holder has the key)
 	mock.completeStep("c", 0)
 	time.Sleep(100 * time.Millisecond)
-	if mock.isExecuting("b") {
-		t.Error("B should still be deferred after C completes")
+	if mock.isExecuting(deferred) {
+		t.Errorf("%s should still be deferred after C completes", deferred)
 	}
 
-	// Complete A — B should now launch
-	mock.completeStep("a", 0)
-	mock.waitForStep("b")
-	mock.completeStep("b", 0)
+	// Complete the holder — deferred step should now launch
+	mock.completeStep(holder, 0)
+	mock.waitForStep(deferred)
+	mock.completeStep(deferred, 0)
 
 	runner.waitForDone()
 	if runner.finalStatus != "completed" {
