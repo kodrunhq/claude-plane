@@ -197,13 +197,14 @@ func ExtractPRCommentVariables(comment PRCommentData, repo string, prNumber int,
 }
 
 // ExtractPRReviewVariables returns template variables for a PR review.
-func ExtractPRReviewVariables(review PRReviewData, repo string, prNumber int, prURL string) map[string]string {
+func ExtractPRReviewVariables(review PRReviewData, repo string, prNumber int, prTitle, prURL string) map[string]string {
 	return map[string]string{
-		"REVIEW_STATE":   review.State,
+		"REVIEW_STATE":   strings.ToLower(review.State),
 		"REVIEW_AUTHOR":  review.User.Login,
 		"REVIEW_BODY":    truncateBody(review.Body),
 		"REVIEW_URL":     review.HTMLURL,
 		"PR_NUMBER":      strconv.Itoa(prNumber),
+		"PR_TITLE":       prTitle,
 		"PR_URL":         prURL,
 		"REPO_FULL_NAME": repo,
 	}

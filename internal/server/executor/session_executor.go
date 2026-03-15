@@ -106,7 +106,9 @@ type SessionStepExecutor struct {
 // and the orchestrator (executor needs orchestrator to start runs, orchestrator
 // needs executor to execute steps).
 func (e *SessionStepExecutor) SetRunStarter(rs RunStarter) {
+	e.mu.Lock()
 	e.runStarter = rs
+	e.mu.Unlock()
 }
 
 // NewSessionStepExecutor creates a new SessionStepExecutor.
@@ -179,16 +181,27 @@ func (e *SessionStepExecutor) executeRunJob(
 	targetJobID := resolveField(runStep.TargetJobIDSnapshot, resolveCtx)
 	if targetJobID == "" {
 		e.logger.Error("run_job task has no target_job_id", "step_id", runStep.StepID)
-		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
-		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+		if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0); err != nil {
+			e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+		}
+		if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode); err != nil {
+			e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+		}
 		onComplete(runStep.StepID, failureExitCode)
 		return
 	}
 
-	if e.runStarter == nil {
+	e.mu.RLock()
+	rs := e.runStarter
+	e.mu.RUnlock()
+	if rs == nil {
 		e.logger.Error("run_job task cannot execute: no RunStarter configured", "step_id", runStep.StepID)
-		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
-		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+		if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0); err != nil {
+			e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+		}
+		if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode); err != nil {
+			e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+		}
 		onComplete(runStep.StepID, failureExitCode)
 		return
 	}
@@ -198,8 +211,12 @@ func (e *SessionStepExecutor) executeRunJob(
 	if runStep.JobParamsSnapshot != "" {
 		if err := json.Unmarshal([]byte(runStep.JobParamsSnapshot), &params); err != nil {
 			e.logger.Error("failed to parse job_params", "error", err, "step_id", runStep.StepID)
-			_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
-			_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+			if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0); err != nil {
+				e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+			}
+			if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode); err != nil {
+				e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+			}
 			onComplete(runStep.StepID, failureExitCode)
 			return
 		}
@@ -215,22 +232,28 @@ func (e *SessionStepExecutor) executeRunJob(
 	}
 
 	// Mark step as running
-	_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
+	if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0); err != nil {
+		e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+	}
 
 	// Fire and forget: start the child run
-	if err := e.runStarter.StartRun(ctx, targetJobID, params); err != nil {
+	if err := rs.StartRun(ctx, targetJobID, params); err != nil {
 		e.logger.Error("failed to start child job run",
 			"error", err,
 			"target_job_id", targetJobID,
 			"step_id", runStep.StepID,
 		)
-		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+		if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode); err != nil {
+			e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+		}
 		onComplete(runStep.StepID, failureExitCode)
 		return
 	}
 
 	// Immediately mark as completed
-	_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusCompleted, "", 0)
+	if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusCompleted, "", 0); err != nil {
+		e.logger.Warn("failed to update run step status", "error", err, "run_step_id", runStep.RunStepID)
+	}
 	onComplete(runStep.StepID, 0)
 }
 
