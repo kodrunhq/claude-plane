@@ -12,12 +12,13 @@ const maxCheckOutputLen = 4096
 // Claude session prompts.
 const maxBodyLen = 4096
 
-// truncateBody returns s truncated to maxBodyLen characters if it exceeds the limit.
+// truncateBody returns s truncated to maxBodyLen runes if it exceeds the limit.
 func truncateBody(s string) string {
-	if len(s) <= maxBodyLen {
+	runes := []rune(s)
+	if len(runes) <= maxBodyLen {
 		return s
 	}
-	return s[:maxBodyLen] + "... [truncated]"
+	return string(runes[:maxBodyLen]) + "... [truncated]"
 }
 
 // PRData represents relevant fields from a GitHub Pull Request.

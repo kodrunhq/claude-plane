@@ -11,7 +11,7 @@ interface SessionCardProps {
 
 export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps) {
   const isActive = session.status === 'running' || session.status === 'created';
-  const isTerminalSession = session.command !== '' && session.command !== 'claude';
+  const isTerminalSession = session.command !== '' && !session.command.startsWith('claude');
 
   return (
     <div

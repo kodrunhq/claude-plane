@@ -164,7 +164,10 @@ func (h *JobHandler) checkRunJobCycle(r *http.Request, originJobID, jobID string
 	}
 	detail, err := h.store.GetJob(r.Context(), jobID)
 	if err != nil {
-		return nil // target doesn't exist yet or was deleted — no cycle
+		if errors.Is(err, store.ErrNotFound) {
+			return nil // target doesn't exist yet or was deleted — no cycle
+		}
+		return fmt.Errorf("checking run_job cycle: %w", err)
 	}
 	for _, step := range detail.Steps {
 		if step.TaskType != "run_job" || step.TargetJobID == "" {
