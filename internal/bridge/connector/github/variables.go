@@ -108,6 +108,106 @@ func ExtractCheckRunVariables(cr CheckRunData, repo string) map[string]string {
 	}
 }
 
+// IssueCommentData represents a comment from the GitHub issue comments endpoint.
+type IssueCommentData struct {
+	ID        int64  `json:"id"`
+	Body      string `json:"body"`
+	HTMLURL   string `json:"html_url"`
+	UpdatedAt string `json:"updated_at"`
+	User      struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	IssueURL string `json:"issue_url"`
+}
+
+// PRCommentData represents a review comment from the GitHub PR comments endpoint.
+type PRCommentData struct {
+	ID        int64  `json:"id"`
+	Body      string `json:"body"`
+	HTMLURL   string `json:"html_url"`
+	UpdatedAt string `json:"updated_at"`
+	User      struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	PullRequestURL string `json:"pull_request_url"`
+}
+
+// PRReviewData represents a review from the GitHub PR reviews endpoint.
+type PRReviewData struct {
+	ID          int64  `json:"id"`
+	State       string `json:"state"`
+	Body        string `json:"body"`
+	HTMLURL     string `json:"html_url"`
+	SubmittedAt string `json:"submitted_at"`
+	User        struct {
+		Login string `json:"login"`
+	} `json:"user"`
+}
+
+// ReleaseData represents a release from the GitHub releases endpoint.
+type ReleaseData struct {
+	ID      int64  `json:"id"`
+	TagName string `json:"tag_name"`
+	Name    string `json:"name"`
+	Body    string `json:"body"`
+	HTMLURL string `json:"html_url"`
+	Author  struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	PublishedAt string `json:"published_at"`
+}
+
+// ExtractIssueCommentVariables returns template variables for an issue comment.
+func ExtractIssueCommentVariables(comment IssueCommentData, repo string, issueNumber int, issueTitle, issueURL string) map[string]string {
+	return map[string]string{
+		"COMMENT_BODY":   comment.Body,
+		"COMMENT_AUTHOR": comment.User.Login,
+		"COMMENT_URL":    comment.HTMLURL,
+		"ISSUE_NUMBER":   strconv.Itoa(issueNumber),
+		"ISSUE_TITLE":    issueTitle,
+		"ISSUE_URL":      issueURL,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
+// ExtractPRCommentVariables returns template variables for a PR review comment.
+func ExtractPRCommentVariables(comment PRCommentData, repo string, prNumber int, prTitle, prURL string) map[string]string {
+	return map[string]string{
+		"COMMENT_BODY":   comment.Body,
+		"COMMENT_AUTHOR": comment.User.Login,
+		"COMMENT_URL":    comment.HTMLURL,
+		"PR_NUMBER":      strconv.Itoa(prNumber),
+		"PR_TITLE":       prTitle,
+		"PR_URL":         prURL,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
+// ExtractPRReviewVariables returns template variables for a PR review.
+func ExtractPRReviewVariables(review PRReviewData, repo string, prNumber int, prURL string) map[string]string {
+	return map[string]string{
+		"REVIEW_STATE":   review.State,
+		"REVIEW_AUTHOR":  review.User.Login,
+		"REVIEW_BODY":    review.Body,
+		"REVIEW_URL":     review.HTMLURL,
+		"PR_NUMBER":      strconv.Itoa(prNumber),
+		"PR_URL":         prURL,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
+// ExtractReleaseVariables returns template variables for a release.
+func ExtractReleaseVariables(release ReleaseData, repo string) map[string]string {
+	return map[string]string{
+		"RELEASE_TAG":    release.TagName,
+		"RELEASE_NAME":   release.Name,
+		"RELEASE_BODY":   release.Body,
+		"RELEASE_URL":    release.HTMLURL,
+		"RELEASE_AUTHOR": release.Author.Login,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
 // ExtractIssueVariables returns a map of template variables derived from a
 // GitHub Issue payload. All 7 keys are always present. ISSUE_LABELS is a
 // comma-separated list of label names, or an empty string when no labels exist.

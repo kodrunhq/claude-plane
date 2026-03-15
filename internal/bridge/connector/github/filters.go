@@ -14,6 +14,8 @@ type Filters struct {
 	Conclusions   []string `json:"conclusions"`
 	Paths         []string `json:"paths"`
 	AuthorsIgnore []string `json:"authors_ignore"`
+	ReviewStates  []string `json:"review_states,omitempty"`
+	TagPatterns   []string `json:"tag_patterns,omitempty"`
 }
 
 // EventData carries the fields each filter checks against.
@@ -24,6 +26,8 @@ type EventData struct {
 	Conclusion   string
 	ChangedFiles []string
 	Author       string
+	ReviewState  string
+	Tag          string
 }
 
 // Match evaluates all configured filters (AND-combined).
@@ -45,6 +49,12 @@ func (f *Filters) Match(event EventData) bool {
 		return false
 	}
 	if !matchAuthorsIgnore(f.AuthorsIgnore, event.Author) {
+		return false
+	}
+	if !matchReviewStates(f.ReviewStates, event.ReviewState) {
+		return false
+	}
+	if !matchTagPatterns(f.TagPatterns, event.Tag) {
 		return false
 	}
 	return true
@@ -132,4 +142,32 @@ func matchAuthorsIgnore(filter []string, author string) bool {
 		}
 	}
 	return true
+}
+
+// matchReviewStates returns true if filter is empty or state is in the list.
+func matchReviewStates(states []string, state string) bool {
+	if len(states) == 0 {
+		return true
+	}
+	for _, s := range states {
+		if s == state {
+			return true
+		}
+	}
+	return false
+}
+
+// matchTagPatterns returns true if filter is empty or tag matches at least one
+// glob pattern. Uses path.Match semantics.
+func matchTagPatterns(patterns []string, tag string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+	for _, p := range patterns {
+		matched, _ := path.Match(p, tag)
+		if matched {
+			return true
+		}
+	}
+	return false
 }
