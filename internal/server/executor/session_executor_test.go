@@ -188,7 +188,7 @@ func TestExecuteStep_AgentNotConnected(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("no-such-machine"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("no-such-machine"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -207,7 +207,7 @@ func TestExecuteStep_CreateSessionStoreFails(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -236,7 +236,7 @@ func TestExecuteStep_SendCommandFails(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -261,7 +261,7 @@ func TestExecuteStep_SessionCompletes(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(stepID string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(stepID string, exitCode int) {
 		if stepID != "step-1" {
 			t.Errorf("stepID = %q, want %q", stepID, "step-1")
 		}
@@ -284,7 +284,7 @@ func TestExecuteStep_SessionFails(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -304,7 +304,7 @@ func TestExecuteStep_SessionTerminated(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -325,7 +325,7 @@ func TestExecuteStep_ContextCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan int, 1)
-	exec.ExecuteStep(ctx, makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(ctx, makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -357,7 +357,7 @@ func TestExecuteStep_SessionNotFoundExhausted(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -377,7 +377,7 @@ func TestExecuteStep_TransientDBError(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -413,7 +413,7 @@ func TestExecuteStep_DefaultCommand(t *testing.T) {
 	rs.CommandSnapshot = "" // empty → should default to "claude"
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), rs, func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), rs, nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 
@@ -440,7 +440,7 @@ func TestExecuteStep_SendsCreateSessionWithCorrectFields(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	ch := make(chan int, 1)
-	exec.ExecuteStep(context.Background(), makeRunStep("m1"), func(_ string, exitCode int) {
+	exec.ExecuteStep(context.Background(), makeRunStep("m1"), nil, func(_ string, exitCode int) {
 		ch <- exitCode
 	})
 

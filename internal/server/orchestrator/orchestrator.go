@@ -106,7 +106,13 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType))
 	}
 
-	runner := NewDAGRunner(run.RunID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete)
+	// Build step name map from steps for template resolution
+	stepNameMap := make(map[string]string, len(steps))
+	for _, s := range steps {
+		stepNameMap[s.StepID] = s.Name
+	}
+
+	runner := NewDAGRunner(run.RunID, jobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, nil, JobMeta{}, stepNameMap)
 
 	o.mu.Lock()
 	o.activeRuns[run.RunID] = runner
@@ -196,7 +202,19 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, retryJobID, status, "manual"))
 	}
 
-	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete)
+	// Build step name map for retry
+	retryStepNames := make(map[string]string)
+	for _, rs := range detail.RunSteps {
+		retryStepNames[rs.StepID] = rs.StepID // Use stepID as fallback; orchestrator tests don't need names
+	}
+	// Try to get real step names from job steps
+	if retrySteps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID); err == nil {
+		for _, s := range retrySteps {
+			retryStepNames[s.StepID] = s.Name
+		}
+	}
+
+	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, nil, JobMeta{}, retryStepNames)
 
 	// Pre-process completed steps: count them and pre-decrement in-degrees
 	// of their dependents so pending steps with completed upstream deps can launch.

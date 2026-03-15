@@ -279,12 +279,16 @@ func TestDAGRunner_DeepLinearChainSkipPropagation(t *testing.T) {
 func TestDAGRunner_CancelBeforeStart(t *testing.T) {
 	runner := NewDAGRunner(
 		"run-1",
+		"",
 		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: store.StatusPending}},
 		nil,
 		nil,
 		nil,
 		nil,
 		func(runID, status string) {},
+		nil,
+		JobMeta{},
+		nil,
 	)
 
 	// Should not panic
