@@ -72,7 +72,7 @@ export function JobsPage() {
   async function handleRun(e: React.MouseEvent, jobId: string) {
     e.stopPropagation();
     try {
-      const run = await triggerRun.mutateAsync(jobId);
+      const run = await triggerRun.mutateAsync({ jobId });
       toast.success('Run started');
       navigate(`/runs/${run.run_id}`);
     } catch (err) {
