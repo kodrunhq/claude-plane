@@ -94,7 +94,7 @@ func (s *Store) SearchContent(ctx context.Context, query string, limit, offset i
 		args = append(args, userID)
 	}
 
-	baseQuery += ` ORDER BY rank LIMIT ? OFFSET ?`
+	baseQuery += ` ORDER BY bm25(session_content) LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
 	rows, err := s.reader.QueryContext(ctx, baseQuery, args...)
