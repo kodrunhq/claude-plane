@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 type joinResponse struct {
@@ -41,13 +44,14 @@ func ExecuteJoin(serverURL, code, configDir string) error {
 		return fmt.Errorf("marshal request: %w", err)
 	}
 
-	resp, err := http.Post(serverURL+"/api/v1/provision/join", "application/json", bytes.NewReader(body))
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Post(serverURL+"/api/v1/provision/join", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("connect to server: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return fmt.Errorf("read response: %w", err)
 	}
@@ -105,9 +109,24 @@ data_dir   = %q
 	)
 
 	configPath := filepath.Join(configDir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0o640); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		return fmt.Errorf("write agent.toml: %w", err)
 	}
 
+	return nil
+}
+
+// ValidateServerURL checks that the server URL uses HTTPS unless insecure mode is enabled.
+func ValidateServerURL(serverURL string, insecure bool) error {
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		return fmt.Errorf("invalid server URL: %w", err)
+	}
+	if !insecure && strings.EqualFold(parsed.Scheme, "http") {
+		return fmt.Errorf("server URL must use HTTPS. Use --insecure to allow plain HTTP (not recommended for production)")
+	}
+	if insecure && strings.EqualFold(parsed.Scheme, "http") {
+		fmt.Fprintln(os.Stderr, "WARNING: Using plain HTTP. Certificate material will be transmitted unencrypted. Use HTTPS in production.")
+	}
 	return nil
 }

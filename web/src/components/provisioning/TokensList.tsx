@@ -75,7 +75,7 @@ function TokenRow({ token, onRevokeRequest }: TokenRowProps) {
       </td>
       <td className="px-4 py-3">
         <code className="text-sm font-mono font-medium text-accent-primary tracking-wider">
-          {token.short_code}
+          {token.short_code || '—'}
         </code>
       </td>
       <td className="px-4 py-3">

@@ -3,6 +3,7 @@ package provision
 import (
 	"crypto/rand"
 	"math/big"
+	"strings"
 )
 
 // shortCodeAlphabet excludes ambiguous characters: O/0, I/1, L.
@@ -10,7 +11,7 @@ const shortCodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 const shortCodeLength = 6
 
 // GenerateShortCode produces a cryptographically random 6-character code
-// from a 30-character alphabet (no ambiguous chars).
+// from a 31-character alphabet (no ambiguous chars).
 func GenerateShortCode() (string, error) {
 	alphabetLen := big.NewInt(int64(len(shortCodeAlphabet)))
 	code := make([]byte, shortCodeLength)
@@ -31,14 +32,7 @@ func ValidateShortCode(code string) bool {
 		return false
 	}
 	for _, ch := range code {
-		found := false
-		for _, valid := range shortCodeAlphabet {
-			if ch == valid {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !strings.ContainsRune(shortCodeAlphabet, ch) {
 			return false
 		}
 	}

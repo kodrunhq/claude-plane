@@ -140,6 +140,8 @@ install_binary() {
   fi
 
   cp "$BINARY_PATH" "${install_dir}/${binary_name}"
+  # Ensure binary is findable by subsequent commands in this script
+  export PATH="${install_dir}:${PATH}"
   ok "Installed ${binary_name} to ${install_dir}/${binary_name}"
 }
 
@@ -213,8 +215,10 @@ TOML
   local server_pid=$!
 
   # Wait for server to be ready
+  local ready=false
   for i in $(seq 1 30); do
     if curl -sf http://localhost:8080/api/v1/health &>/dev/null; then
+      ready=true
       break
     fi
     if ! kill -0 "$server_pid" 2>/dev/null; then
@@ -222,6 +226,10 @@ TOML
     fi
     sleep 1
   done
+
+  if [ "$ready" != "true" ]; then
+    fatal "Server did not become ready after 30 seconds"
+  fi
 
   echo ""
   ok "claude-plane is running!"
