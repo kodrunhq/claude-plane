@@ -112,9 +112,11 @@ Same script handles updates. If binary exists, it's overwritten. No special upda
 ### 3.1 Database Migration (Migration 13)
 
 ```sql
-ALTER TABLE provisioning_tokens ADD COLUMN short_code TEXT UNIQUE;
-CREATE INDEX IF NOT EXISTS idx_provisioning_tokens_short_code ON provisioning_tokens(short_code);
+ALTER TABLE provisioning_tokens ADD COLUMN short_code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_tokens_short_code ON provisioning_tokens(short_code);
 ```
+
+Note: SQLite's ALTER TABLE ADD COLUMN does not support inline UNIQUE constraints. Uniqueness is enforced by the UNIQUE INDEX instead.
 
 ### 3.2 Short Code Generation
 
@@ -242,12 +244,12 @@ claude-plane-agent join <CODE> [--server URL] [--config-dir DIR]
 1. Resolve server URL: `--server` flag → `CLAUDE_PLANE_SERVER` env var → error with message "Server URL required. Use --server or set CLAUDE_PLANE_SERVER."
 2. Validate URL scheme: if HTTP (not HTTPS), require `--insecure` flag. If `--insecure` is used, print warning: "WARNING: Using plain HTTP. Certificate material will be transmitted unencrypted. Use HTTPS in production."
 3. POST to `{server}/api/v1/provision/join` with `{"code": "CODE"}`.
-3. On success, write to `config-dir`:
+4. On success, write to `config-dir`:
    - `certs/ca.pem`
    - `certs/agent.pem`
    - `certs/agent-key.pem`
    - `agent.toml` with machine_id, server gRPC address, cert paths
-4. Print success:
+5. Print success:
    ```
    Agent configured for machine "nuc-01"
    Certificates written to /etc/claude-plane/certs/
@@ -256,7 +258,7 @@ claude-plane-agent join <CODE> [--server URL] [--config-dir DIR]
    Start the agent:
      claude-plane-agent run --config /etc/claude-plane/agent.toml
    ```
-5. On failure, print server error message and suggest checking the code.
+6. On failure, print server error message and suggest checking the code.
 
 ### 3.7 Frontend Changes
 
