@@ -13,6 +13,10 @@ export function createDefaultWatch(): WatchData {
       pull_request_opened: { enabled: false, filters: {} },
       check_run_completed: { enabled: false, filters: {} },
       issue_labeled: { enabled: false, filters: {} },
+      issue_comment: { enabled: false, filters: {} },
+      pull_request_comment: { enabled: false, filters: {} },
+      pull_request_review: { enabled: false, filters: {} },
+      release_published: { enabled: false, filters: {} },
     },
   };
 }

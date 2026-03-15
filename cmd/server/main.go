@@ -146,6 +146,12 @@ func newServeCmd() *cobra.Command {
 			grpcSrv.SetStepIdleHandler(stepExecutor)
 			orch := orchestrator.NewOrchestrator(ctx, s, stepExecutor)
 
+			// Wire run_job support: executor can trigger child runs via orchestrator.
+			stepExecutor.SetRunStarter(executor.RunStarterFunc(func(ctx context.Context, jobID string, params map[string]string) error {
+				_, err := orch.CreateRun(ctx, jobID, "run_job", params)
+				return err
+			}))
+
 			// ---- Event bus and subscribers ----
 			eventBus := event.NewBus(slog.Default())
 			defer eventBus.Close()

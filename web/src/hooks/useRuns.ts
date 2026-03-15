@@ -34,11 +34,11 @@ export function useCancelRun() {
   });
 }
 
-export function useRetryStep() {
+export function useRetryTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ runId, stepId }: { runId: string; stepId: string }) =>
-      jobsApi.retryStep(runId, stepId),
+    mutationFn: ({ runId, taskId }: { runId: string; taskId: string }) =>
+      jobsApi.retryTask(runId, taskId),
     onSuccess: (_, { runId }) => {
       qc.invalidateQueries({ queryKey: ['runs', 'detail', runId] });
       qc.invalidateQueries({ queryKey: ['runs', 'list'] });

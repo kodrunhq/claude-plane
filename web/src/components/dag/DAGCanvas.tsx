@@ -12,32 +12,32 @@ import type { Connection, Node, Edge } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import '@xyflow/react/dist/style.css';
 
-import { StepNode } from './StepNode.tsx';
-import { StepEdge } from './StepEdge.tsx';
-import type { StepNodeData } from './StepNode.tsx';
-import type { Step, StepDependency, RunStep } from '../../types/job.ts';
+import { TaskNode } from './TaskNode.tsx';
+import { TaskEdge } from './TaskEdge.tsx';
+import type { TaskNodeData } from './TaskNode.tsx';
+import type { Task, TaskDependency, RunTask } from '../../types/job.ts';
 
-const nodeTypes = { step: StepNode };
-const edgeTypes = { step: StepEdge };
+const nodeTypes = { step: TaskNode };
+const edgeTypes = { step: TaskEdge };
 
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 60;
 
 interface DAGCanvasProps {
-  steps: Step[];
-  dependencies: StepDependency[];
-  runSteps?: RunStep[];
+  steps: Task[];
+  dependencies: TaskDependency[];
+  runSteps?: RunTask[];
   editable?: boolean;
-  selectedStepId?: string | null;
-  onNodeClick?: (stepId: string) => void;
+  selectedTaskId?: string | null;
+  onNodeClick?: (taskId: string) => void;
   onConnect?: (sourceStepId: string, targetStepId: string) => void;
   className?: string;
 }
 
 function getLayoutedElements(
-  nodes: Node<StepNodeData>[],
+  nodes: Node<TaskNodeData>[],
   edges: Edge[],
-): { nodes: Node<StepNodeData>[]; edges: Edge[] } {
+): { nodes: Node<TaskNodeData>[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 });
@@ -65,7 +65,7 @@ function getLayoutedElements(
   return { nodes: layoutedNodes, edges };
 }
 
-function buildRunStepMap(runSteps?: RunStep[]): Map<string, RunStep> {
+function buildRunTaskMap(runSteps?: RunTask[]): Map<string, RunTask> {
   if (!runSteps) return new Map();
   return new Map(runSteps.map((rs) => [rs.step_id, rs]));
 }
@@ -75,15 +75,15 @@ export function DAGCanvas({
   dependencies,
   runSteps,
   editable = false,
-  selectedStepId,
+  selectedTaskId,
   onNodeClick,
   onConnect: onConnectProp,
   className = '',
 }: DAGCanvasProps) {
-  const runStepMap = useMemo(() => buildRunStepMap(runSteps), [runSteps]);
+  const runStepMap = useMemo(() => buildRunTaskMap(runSteps), [runSteps]);
 
   const { initialNodes, initialEdges } = useMemo(() => {
-    const nodes: Node<StepNodeData>[] = steps.map((step) => {
+    const nodes: Node<TaskNodeData>[] = steps.map((step) => {
       const rs = runStepMap.get(step.step_id);
       return {
         id: step.step_id,
@@ -130,10 +130,10 @@ export function DAGCanvas({
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
-        data: { ...node.data, selected: node.id === selectedStepId },
+        data: { ...node.data, selected: node.id === selectedTaskId },
       })),
     );
-  }, [selectedStepId, setNodes]);
+  }, [selectedTaskId, setNodes]);
 
   const handleConnect = useCallback(
     (connection: Connection) => {

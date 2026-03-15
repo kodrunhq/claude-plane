@@ -7,6 +7,29 @@ import (
 
 const maxCheckOutputLen = 4096
 
+// maxBodyLen caps user-controlled text fields (comment bodies, review bodies,
+// release notes) to mitigate prompt-injection risk when these values flow into
+// Claude session prompts.
+const maxBodyLen = 4096
+
+// truncateSuffix is appended to truncated body text.
+const truncateSuffix = "... [truncated]"
+
+// truncateBody returns s truncated to maxBodyLen runes if it exceeds the limit.
+// The returned string never exceeds maxBodyLen runes including the suffix.
+func truncateBody(s string) string {
+	runes := []rune(s)
+	if len(runes) <= maxBodyLen {
+		return s
+	}
+	suffixRunes := []rune(truncateSuffix)
+	cutAt := maxBodyLen - len(suffixRunes)
+	if cutAt < 0 {
+		cutAt = 0
+	}
+	return string(runes[:cutAt]) + truncateSuffix
+}
+
 // PRData represents relevant fields from a GitHub Pull Request.
 type PRData struct {
 	Number    int    `json:"number"`
@@ -71,7 +94,7 @@ func ExtractPRVariables(pr PRData, repo string) map[string]string {
 	return map[string]string{
 		"PR_URL":         pr.HTMLURL,
 		"PR_TITLE":       pr.Title,
-		"PR_BODY":        pr.Body,
+		"PR_BODY":        truncateBody(pr.Body),
 		"PR_AUTHOR":      pr.User.Login,
 		"PR_BRANCH":      pr.Head.Ref,
 		"PR_BASE":        pr.Base.Ref,
@@ -105,6 +128,107 @@ func ExtractCheckRunVariables(cr CheckRunData, repo string) map[string]string {
 		"CHECK_OUTPUT":     output,
 		"PR_URL":           prURL,
 		"REPO_FULL_NAME":   repo,
+	}
+}
+
+// IssueCommentData represents a comment from the GitHub issue comments endpoint.
+type IssueCommentData struct {
+	ID        int64  `json:"id"`
+	Body      string `json:"body"`
+	HTMLURL   string `json:"html_url"`
+	UpdatedAt string `json:"updated_at"`
+	User      struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	IssueURL string `json:"issue_url"`
+}
+
+// PRCommentData represents a review comment from the GitHub PR comments endpoint.
+type PRCommentData struct {
+	ID        int64  `json:"id"`
+	Body      string `json:"body"`
+	HTMLURL   string `json:"html_url"`
+	UpdatedAt string `json:"updated_at"`
+	User      struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	PullRequestURL string `json:"pull_request_url"`
+}
+
+// PRReviewData represents a review from the GitHub PR reviews endpoint.
+type PRReviewData struct {
+	ID          int64  `json:"id"`
+	State       string `json:"state"`
+	Body        string `json:"body"`
+	HTMLURL     string `json:"html_url"`
+	SubmittedAt string `json:"submitted_at"`
+	User        struct {
+		Login string `json:"login"`
+	} `json:"user"`
+}
+
+// ReleaseData represents a release from the GitHub releases endpoint.
+type ReleaseData struct {
+	ID      int64  `json:"id"`
+	TagName string `json:"tag_name"`
+	Name    string `json:"name"`
+	Body    string `json:"body"`
+	HTMLURL string `json:"html_url"`
+	Author  struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	PublishedAt string `json:"published_at"`
+}
+
+// ExtractIssueCommentVariables returns template variables for an issue comment.
+func ExtractIssueCommentVariables(comment IssueCommentData, repo string, issueNumber int, issueTitle, issueURL string) map[string]string {
+	return map[string]string{
+		"COMMENT_BODY":   truncateBody(comment.Body),
+		"COMMENT_AUTHOR": comment.User.Login,
+		"COMMENT_URL":    comment.HTMLURL,
+		"ISSUE_NUMBER":   strconv.Itoa(issueNumber),
+		"ISSUE_TITLE":    issueTitle,
+		"ISSUE_URL":      issueURL,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
+// ExtractPRCommentVariables returns template variables for a PR review comment.
+func ExtractPRCommentVariables(comment PRCommentData, repo string, prNumber int, prTitle, prURL string) map[string]string {
+	return map[string]string{
+		"COMMENT_BODY":   truncateBody(comment.Body),
+		"COMMENT_AUTHOR": comment.User.Login,
+		"COMMENT_URL":    comment.HTMLURL,
+		"PR_NUMBER":      strconv.Itoa(prNumber),
+		"PR_TITLE":       prTitle,
+		"PR_URL":         prURL,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
+// ExtractPRReviewVariables returns template variables for a PR review.
+func ExtractPRReviewVariables(review PRReviewData, repo string, prNumber int, prTitle, prURL string) map[string]string {
+	return map[string]string{
+		"REVIEW_STATE":   strings.ToLower(review.State),
+		"REVIEW_AUTHOR":  review.User.Login,
+		"REVIEW_BODY":    truncateBody(review.Body),
+		"REVIEW_URL":     review.HTMLURL,
+		"PR_NUMBER":      strconv.Itoa(prNumber),
+		"PR_TITLE":       prTitle,
+		"PR_URL":         prURL,
+		"REPO_FULL_NAME": repo,
+	}
+}
+
+// ExtractReleaseVariables returns template variables for a release.
+func ExtractReleaseVariables(release ReleaseData, repo string) map[string]string {
+	return map[string]string{
+		"RELEASE_TAG":    release.TagName,
+		"RELEASE_NAME":   release.Name,
+		"RELEASE_BODY":   truncateBody(release.Body),
+		"RELEASE_URL":    release.HTMLURL,
+		"RELEASE_AUTHOR": release.Author.Login,
+		"REPO_FULL_NAME": repo,
 	}
 }
 

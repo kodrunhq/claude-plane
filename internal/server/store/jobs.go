@@ -62,6 +62,8 @@ type CreateStepParams struct {
 	MaxRetries        int
 	RetryDelaySeconds int
 	Parameters        string
+	TargetJobID       string
+	JobParams         string
 }
 
 // UpdateStepParams holds parameters for updating a step.
@@ -85,6 +87,8 @@ type UpdateStepParams struct {
 	MaxRetries        int
 	RetryDelaySeconds int
 	Parameters        string
+	TargetJobID       string
+	JobParams         string
 }
 
 // ListRunsOptions holds optional filters and pagination for ListAllRuns.
@@ -181,6 +185,8 @@ type Step struct {
 	MaxRetries        int    `json:"max_retries"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds"`
 	Parameters        string `json:"parameters,omitempty"`
+	TargetJobID       string `json:"target_job_id,omitempty"`
+	JobParams         string `json:"job_params,omitempty"`
 }
 
 // StepDependency represents a dependency edge in the step DAG.
@@ -230,6 +236,8 @@ type RunStep struct {
 	RetryDelaySecondsSnapshot    int        `json:"retry_delay_seconds_snapshot"`
 	Attempt                      int        `json:"attempt"`
 	ParametersSnapshot           string     `json:"parameters_snapshot,omitempty"`
+	TargetJobIDSnapshot          string     `json:"target_job_id_snapshot,omitempty"`
+	JobParamsSnapshot            string     `json:"job_params_snapshot,omitempty"`
 	OnFailure                    string     `json:"on_failure,omitempty"`
 }
 
@@ -474,8 +482,8 @@ func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, erro
 	}
 
 	// Validate task_type
-	if p.TaskType != "claude_session" && p.TaskType != "shell" {
-		return nil, fmt.Errorf("invalid task_type %q: must be claude_session or shell", p.TaskType)
+	if p.TaskType != "claude_session" && p.TaskType != "shell" && p.TaskType != "run_job" {
+		return nil, fmt.Errorf("invalid task_type %q: must be claude_session, shell, or run_job", p.TaskType)
 	}
 	// Validate run_if
 	if p.RunIf != "all_success" && p.RunIf != "all_done" {
@@ -492,18 +500,24 @@ func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, erro
 	if p.TaskType == "shell" {
 		p.Prompt = ""
 	}
+	// run_job tasks have no prompt or command
+	if p.TaskType == "run_job" {
+		p.Prompt = ""
+		p.Command = ""
+	}
 
 	id := uuid.New().String()
 	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO steps (step_id, job_id, name, prompt, machine_id, working_dir, command, args,
 		 timeout_seconds, sort_order, on_failure, skip_permissions, model, delay_seconds,
-		 task_type, session_key, run_if, max_retries, retry_delay_seconds, parameters)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 task_type, session_key, run_if, max_retries, retry_delay_seconds, parameters,
+		 target_job_id, job_params)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, p.JobID, p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args,
 		p.TimeoutSeconds, p.SortOrder, p.OnFailure,
 		p.SkipPermissions, p.Model, p.DelaySeconds,
 		p.TaskType, nullIfEmpty(p.SessionKey), p.RunIf, p.MaxRetries, p.RetryDelaySeconds,
-		nullIfEmpty(p.Parameters),
+		nullIfEmpty(p.Parameters), nullIfEmpty(p.TargetJobID), nullIfEmpty(p.JobParams),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create step: %w", err)
@@ -529,6 +543,8 @@ func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, erro
 		MaxRetries:        p.MaxRetries,
 		RetryDelaySeconds: p.RetryDelaySeconds,
 		Parameters:        p.Parameters,
+		TargetJobID:       p.TargetJobID,
+		JobParams:         p.JobParams,
 	}, nil
 }
 
@@ -543,8 +559,8 @@ func (s *Store) UpdateStep(ctx context.Context, p UpdateStepParams) error {
 	}
 
 	// Validate task_type
-	if p.TaskType != "claude_session" && p.TaskType != "shell" {
-		return fmt.Errorf("invalid task_type %q: must be claude_session or shell", p.TaskType)
+	if p.TaskType != "claude_session" && p.TaskType != "shell" && p.TaskType != "run_job" {
+		return fmt.Errorf("invalid task_type %q: must be claude_session, shell, or run_job", p.TaskType)
 	}
 	// Validate run_if
 	if p.RunIf != "all_success" && p.RunIf != "all_done" {
@@ -560,17 +576,23 @@ func (s *Store) UpdateStep(ctx context.Context, p UpdateStepParams) error {
 	if p.TaskType == "shell" {
 		p.Prompt = ""
 	}
+	// run_job tasks have no prompt or command
+	if p.TaskType == "run_job" {
+		p.Prompt = ""
+		p.Command = ""
+	}
 
 	result, err := s.writer.ExecContext(ctx,
 		`UPDATE steps SET name = ?, prompt = ?, machine_id = ?, working_dir = ?, command = ?, args = ?,
 		 timeout_seconds = ?, sort_order = ?, on_failure = ?, skip_permissions = ?, model = ?, delay_seconds = ?,
-		 task_type = ?, session_key = ?, run_if = ?, max_retries = ?, retry_delay_seconds = ?, parameters = ?
+		 task_type = ?, session_key = ?, run_if = ?, max_retries = ?, retry_delay_seconds = ?, parameters = ?,
+		 target_job_id = ?, job_params = ?
 		 WHERE step_id = ?`,
 		p.Name, p.Prompt, nullIfEmpty(p.MachineID), p.WorkingDir, p.Command, p.Args,
 		p.TimeoutSeconds, p.SortOrder, p.OnFailure,
 		p.SkipPermissions, p.Model, p.DelaySeconds,
 		p.TaskType, nullIfEmpty(p.SessionKey), p.RunIf, p.MaxRetries, p.RetryDelaySeconds,
-		nullIfEmpty(p.Parameters), p.StepID,
+		nullIfEmpty(p.Parameters), nullIfEmpty(p.TargetJobID), nullIfEmpty(p.JobParams), p.StepID,
 	)
 	if err != nil {
 		return fmt.Errorf("update step: %w", err)
@@ -635,7 +657,8 @@ func (s *Store) GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []S
 		        skip_permissions, COALESCE(model, ''), COALESCE(delay_seconds, 0),
 		        COALESCE(task_type, 'claude_session'), COALESCE(session_key, ''),
 		        COALESCE(run_if, 'all_success'), COALESCE(max_retries, 0),
-		        COALESCE(retry_delay_seconds, 30), COALESCE(parameters, '')
+		        COALESCE(retry_delay_seconds, 30), COALESCE(parameters, ''),
+		        COALESCE(target_job_id, ''), COALESCE(job_params, '')
 		 FROM steps WHERE job_id = ? ORDER BY sort_order`, jobID,
 	)
 	if err != nil {
@@ -650,7 +673,8 @@ func (s *Store) GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []S
 			&st.WorkingDir, &st.Command, &st.Args, &st.TimeoutSeconds, &st.SortOrder, &st.OnFailure,
 			&st.SkipPermissions, &st.Model, &st.DelaySeconds,
 			&st.TaskType, &st.SessionKey, &st.RunIf, &st.MaxRetries,
-			&st.RetryDelaySeconds, &st.Parameters); err != nil {
+			&st.RetryDelaySeconds, &st.Parameters,
+			&st.TargetJobID, &st.JobParams); err != nil {
 			return nil, nil, fmt.Errorf("scan step: %w", err)
 		}
 		steps = append(steps, st)
@@ -719,13 +743,15 @@ func (s *Store) InsertRunSteps(ctx context.Context, runID string, steps []Step) 
 			 prompt_snapshot, machine_id_snapshot, working_dir_snapshot, command_snapshot, args_snapshot,
 			 skip_permissions_snapshot, model_snapshot, delay_seconds_snapshot, on_failure_snapshot, timeout_seconds_snapshot,
 			 task_type_snapshot, session_key_snapshot, run_if_snapshot, max_retries_snapshot,
-			 retry_delay_seconds_snapshot, parameters_snapshot)
-			 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 retry_delay_seconds_snapshot, parameters_snapshot,
+			 target_job_id_snapshot, job_params_snapshot)
+			 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, runID, st.StepID, nullIfEmpty(st.MachineID),
 			st.Prompt, st.MachineID, st.WorkingDir, st.Command, st.Args,
 			st.SkipPermissions, st.Model, st.DelaySeconds, st.OnFailure, st.TimeoutSeconds,
 			st.TaskType, nullIfEmpty(st.SessionKey), st.RunIf, st.MaxRetries,
 			st.RetryDelaySeconds, nullIfEmpty(st.Parameters),
+			nullIfEmpty(st.TargetJobID), nullIfEmpty(st.JobParams),
 		)
 		if err != nil {
 			return fmt.Errorf("insert run step for %s: %w", st.StepID, err)
@@ -776,7 +802,8 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 		        COALESCE(task_type_snapshot, 'claude_session'), COALESCE(session_key_snapshot, ''),
 		        COALESCE(run_if_snapshot, 'all_success'), COALESCE(max_retries_snapshot, 0),
 		        COALESCE(retry_delay_seconds_snapshot, 30), COALESCE(attempt, 1),
-		        COALESCE(parameters_snapshot, '')
+		        COALESCE(parameters_snapshot, ''),
+		        COALESCE(target_job_id_snapshot, ''), COALESCE(job_params_snapshot, '')
 		 FROM run_steps WHERE run_id = ?`, runID,
 	)
 	if err != nil {
@@ -799,7 +826,8 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 			&rs.TaskTypeSnapshot, &rs.SessionKeySnapshot,
 			&rs.RunIfSnapshot, &rs.MaxRetriesSnapshot,
 			&rs.RetryDelaySecondsSnapshot, &rs.Attempt,
-			&rs.ParametersSnapshot); err != nil {
+			&rs.ParametersSnapshot,
+			&rs.TargetJobIDSnapshot, &rs.JobParamsSnapshot); err != nil {
 			return nil, fmt.Errorf("scan run step: %w", err)
 		}
 		rs.OnFailure = rs.OnFailureSnapshot

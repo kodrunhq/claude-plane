@@ -1,7 +1,7 @@
 import { Trash2 } from 'lucide-react';
 import { useTemplates } from '../../hooks/useTemplates.ts';
 import { TriggerConfig } from './TriggerConfig.tsx';
-import type { TriggerFilters } from './TriggerConfig.tsx';
+import type { TriggerFilters, TriggerType } from './TriggerConfig.tsx';
 
 export interface WatchData {
   id: string;  // stable unique key for React rendering
@@ -9,11 +9,7 @@ export interface WatchData {
   template: string;
   machine_id: string;
   poll_interval: string;
-  triggers: {
-    pull_request_opened: { enabled: boolean; filters: TriggerFilters };
-    check_run_completed: { enabled: boolean; filters: TriggerFilters };
-    issue_labeled: { enabled: boolean; filters: TriggerFilters };
-  };
+  triggers: Record<TriggerType, { enabled: boolean; filters: TriggerFilters }>;
 }
 
 export interface WatchEditorProps {
@@ -30,13 +26,15 @@ const POLL_INTERVAL_OPTIONS = [
   { value: '300s', label: '5 minutes' },
 ];
 
-const TRIGGER_TYPES = [
+const TRIGGER_TYPES: TriggerType[] = [
   'pull_request_opened',
   'check_run_completed',
   'issue_labeled',
-] as const;
-
-type TriggerType = (typeof TRIGGER_TYPES)[number];
+  'issue_comment',
+  'pull_request_comment',
+  'pull_request_review',
+  'release_published',
+];
 
 const inputClass =
   'w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30';

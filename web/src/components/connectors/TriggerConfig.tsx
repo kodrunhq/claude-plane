@@ -8,20 +8,35 @@ export interface TriggerFilters {
   conclusions?: string[];
   paths?: string[];
   authors_ignore?: string[];
+  review_states?: string[];
+  tag_patterns?: string[];
 }
 
+export type TriggerType =
+  | 'pull_request_opened'
+  | 'check_run_completed'
+  | 'issue_labeled'
+  | 'issue_comment'
+  | 'pull_request_comment'
+  | 'pull_request_review'
+  | 'release_published';
+
 export interface TriggerConfigProps {
-  type: 'pull_request_opened' | 'check_run_completed' | 'issue_labeled';
+  type: TriggerType;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
   filters: TriggerFilters;
   onFiltersChange: (filters: TriggerFilters) => void;
 }
 
-const TRIGGER_LABELS: Record<TriggerConfigProps['type'], string> = {
+const TRIGGER_LABELS: Record<TriggerType, string> = {
   pull_request_opened: 'Pull Request Opened',
   check_run_completed: 'Check Run Completed',
   issue_labeled: 'Issue Labeled',
+  issue_comment: 'Issue Comment',
+  pull_request_comment: 'PR Comment',
+  pull_request_review: 'PR Review Submitted',
+  release_published: 'Release Published',
 };
 
 const CONCLUSION_OPTIONS = [
@@ -31,6 +46,12 @@ const CONCLUSION_OPTIONS = [
   'cancelled',
   'neutral',
   'skipped',
+] as const;
+
+const REVIEW_STATE_OPTIONS = [
+  'approved',
+  'changes_requested',
+  'commented',
 ] as const;
 
 const tagInputClass =
@@ -132,6 +153,14 @@ export function TriggerConfig({
       ? current.filter((c) => c !== conclusion)
       : [...current, conclusion];
     updateFilter('conclusions', next);
+  }
+
+  function toggleReviewState(state: string) {
+    const current = filters.review_states ?? [];
+    const next = current.includes(state)
+      ? current.filter((s) => s !== state)
+      : [...current, state];
+    updateFilter('review_states', next);
   }
 
   return (
@@ -245,6 +274,69 @@ export function TriggerConfig({
                 values={filters.labels ?? []}
                 onChange={(v) => updateFilter('labels', v)}
                 placeholder="e.g. bug, help wanted"
+              />
+            </FilterField>
+          )}
+
+          {type === 'issue_comment' && (
+            <FilterField label="Ignore authors (press Enter to add)">
+              <TagInput
+                values={filters.authors_ignore ?? []}
+                onChange={(v) => updateFilter('authors_ignore', v)}
+                placeholder="e.g. dependabot[bot]"
+              />
+            </FilterField>
+          )}
+
+          {type === 'pull_request_comment' && (
+            <FilterField label="Ignore authors (press Enter to add)">
+              <TagInput
+                values={filters.authors_ignore ?? []}
+                onChange={(v) => updateFilter('authors_ignore', v)}
+                placeholder="e.g. dependabot[bot]"
+              />
+            </FilterField>
+          )}
+
+          {type === 'pull_request_review' && (
+            <>
+              <FilterField label="Review states">
+                <div className="flex flex-wrap gap-2">
+                  {REVIEW_STATE_OPTIONS.map((s) => {
+                    const checked = (filters.review_states ?? []).includes(s);
+                    return (
+                      <label
+                        key={s}
+                        className="flex items-center gap-1.5 cursor-pointer select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleReviewState(s)}
+                          className="accent-accent-primary"
+                        />
+                        <span className="text-xs text-text-primary">{s.replace(/_/g, ' ')}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </FilterField>
+              <FilterField label="Ignore authors (press Enter to add)">
+                <TagInput
+                  values={filters.authors_ignore ?? []}
+                  onChange={(v) => updateFilter('authors_ignore', v)}
+                  placeholder="e.g. dependabot[bot]"
+                />
+              </FilterField>
+            </>
+          )}
+
+          {type === 'release_published' && (
+            <FilterField label="Tag patterns (press Enter to add)">
+              <TagInput
+                values={filters.tag_patterns ?? []}
+                onChange={(v) => updateFilter('tag_patterns', v)}
+                placeholder="e.g. v1.*, v2.*"
               />
             </FilterField>
           )}
