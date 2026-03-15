@@ -517,10 +517,19 @@ func (d *DAGRunner) Cancel() {
 	}
 }
 
+// copyRunParams returns a snapshot of run parameters for safe use outside the lock.
+func (d *DAGRunner) copyRunParams() map[string]string {
+	out := make(map[string]string, len(d.runParams))
+	for k, v := range d.runParams {
+		out[k] = v
+	}
+	return out
+}
+
 // buildResolveContext creates a ResolveContext snapshot. Must be called with d.mu held.
 func (d *DAGRunner) buildResolveContext() *ResolveContext {
 	return &ResolveContext{
-		RunParams:   d.runParams,
+		RunParams:   d.copyRunParams(),
 		JobMeta:     d.jobMeta,
 		StepValues:  d.copyStepValues(),
 		StepResults: d.copyStepResults(),
