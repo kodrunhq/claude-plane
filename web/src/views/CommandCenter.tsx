@@ -427,7 +427,7 @@ function RecentJobRow({ job }: { job: Job }) {
       <div className="flex-1 min-w-0 mr-3">
         <p className="text-sm font-medium text-text-primary truncate">{job.name}</p>
         <p className="text-xs text-text-secondary mt-0.5">
-          {job.step_count != null ? `${job.step_count} step${job.step_count !== 1 ? 's' : ''}` : 'No steps'}
+          {job.step_count != null ? `${job.step_count} task${job.step_count !== 1 ? 's' : ''}` : 'No tasks'}
           {' · '}
           <TimeAgo date={job.updated_at} />
         </p>
