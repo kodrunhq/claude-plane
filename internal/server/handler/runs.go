@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -301,8 +300,8 @@ func (h *RunHandler) RepairRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.orch.RepairRun(r.Context(), runID, req.Parameters); err != nil {
-		if strings.Contains(err.Error(), "can only repair") {
-			writeError(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, orchestrator.ErrInvalidRunState) {
+			writeError(w, http.StatusBadRequest, "can only repair failed or cancelled runs")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())

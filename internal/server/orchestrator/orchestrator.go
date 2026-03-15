@@ -17,6 +17,10 @@ import (
 // of concurrent active runs.
 var ErrMaxConcurrentRuns = errors.New("max concurrent runs reached for this job")
 
+// ErrInvalidRunState is returned when a run is not in a terminal state
+// (failed or cancelled) and cannot be repaired.
+var ErrInvalidRunState = errors.New("run is not in a terminal state")
+
 // Orchestrator manages active DAGRunners for job runs.
 type Orchestrator struct {
 	mu         sync.Mutex
@@ -252,7 +256,7 @@ func (o *Orchestrator) RepairRun(ctx context.Context, runID string, paramOverrid
 		return fmt.Errorf("get run: %w", err)
 	}
 	if detail.Run.Status != store.StatusFailed && detail.Run.Status != store.StatusCancelled {
-		return fmt.Errorf("can only repair failed or cancelled runs")
+		return ErrInvalidRunState
 	}
 
 	// Merge parameter overrides (only existing keys)
@@ -342,7 +346,24 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 		}
 	}
 
-	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, nil, JobMeta{}, stepNames)
+	// Parse run parameters so retried/repaired runs retain template resolution
+	var runParams map[string]string
+	if detail.Run.Parameters != "" {
+		if err := json.Unmarshal([]byte(detail.Run.Parameters), &runParams); err != nil {
+			slog.Warn("failed to parse run parameters for rebuild", "error", err, "run_id", runID)
+		}
+	}
+
+	// Reconstruct job metadata from run data
+	jobMeta := JobMeta{
+		RunID:       runID,
+		TriggerType: detail.Run.TriggerType,
+	}
+	if jobDetail, err := o.store.GetJob(ctx, detail.Run.JobID); err == nil {
+		jobMeta.Name = jobDetail.Job.Name
+	}
+
+	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, runParams, jobMeta, stepNames)
 
 	// Pre-process completed steps: count them and pre-decrement in-degrees
 	// of their dependents so pending steps with completed upstream deps can launch.
