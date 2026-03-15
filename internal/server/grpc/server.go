@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/ingest"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"github.com/kodrunhq/claude-plane/internal/shared/status"
@@ -65,6 +66,7 @@ type agentService struct {
 	runStepLookup   RunStepLookup
 	taskValueStore  TaskValueStore
 	stepIdleHandler StepIdleHandler
+	ingestor        *ingest.ContentIngestor
 	logger          *slog.Logger
 }
 
@@ -133,6 +135,11 @@ func (s *GRPCServer) SetTaskValueStore(store TaskValueStore) {
 // SetStepIdleHandler sets the handler for StepIdleEvent from agents.
 func (s *GRPCServer) SetStepIdleHandler(handler StepIdleHandler) {
 	s.agentSvc.stepIdleHandler = handler
+}
+
+// SetContentIngestor sets the content ingestor for search indexing.
+func (s *GRPCServer) SetContentIngestor(ci *ingest.ContentIngestor) {
+	s.agentSvc.ingestor = ci
 }
 
 // Serve starts the gRPC server on the given listener.
@@ -292,6 +299,10 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			if s.registry != nil {
 				if out := res.event.GetSessionOutput(); out != nil {
 					s.registry.Publish(out.GetSessionId(), out.GetData())
+					// Tee output to content ingestor for search indexing
+					if s.ingestor != nil {
+						s.ingestor.Ingest(out.GetSessionId(), out.GetData())
+					}
 				}
 				if sc := res.event.GetScrollbackChunk(); sc != nil {
 					// Scrollback data is asciicast v2 JSONL. Parse each line
@@ -348,6 +359,10 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					"session_id", se.GetSessionId(),
 					"exit_code", se.GetExitCode(),
 				)
+				// Flush content ingestor for this session
+				if s.ingestor != nil {
+					s.ingestor.FlushSession(se.GetSessionId())
+				}
 			}
 
 			// Handle task values from agent — persist to the run step's value store.
