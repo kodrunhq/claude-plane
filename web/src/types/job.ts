@@ -36,6 +36,8 @@ export interface Task {
   max_retries?: number;
   retry_delay_seconds?: number;
   parameters?: Record<string, string>;
+  target_job_id?: string;
+  job_params?: Record<string, string>;
 }
 
 export interface TaskDependency {
@@ -113,6 +115,8 @@ export interface CreateTaskParams {
   max_retries?: number;
   retry_delay_seconds?: number;
   on_failure?: string;
+  target_job_id?: string;
+  job_params?: Record<string, string>;
 }
 
 export interface UpdateTaskParams {
@@ -131,6 +135,8 @@ export interface UpdateTaskParams {
   max_retries?: number;
   retry_delay_seconds?: number;
   on_failure?: string;
+  target_job_id?: string;
+  job_params?: Record<string, string>;
 }
 
 export interface TriggerRunParams {
