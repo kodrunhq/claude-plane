@@ -17,11 +17,38 @@ func newTestStoreForJobs(t *testing.T) *Store {
 	return s
 }
 
+// testCreateJob is a test helper that creates a job with minimal params.
+func testCreateJob(t *testing.T, s *Store, name, description, userID string) *Job {
+	t.Helper()
+	job, err := s.CreateJob(context.Background(), CreateJobParams{
+		Name:        name,
+		Description: description,
+		UserID:      userID,
+	})
+	if err != nil {
+		t.Fatalf("CreateJob(%q): %v", name, err)
+	}
+	return job
+}
+
+// testCreateRun is a test helper that creates a run with minimal params.
+func testCreateRun(t *testing.T, s *Store, jobID, triggerType string) *Run {
+	t.Helper()
+	run, err := s.CreateRun(context.Background(), CreateRunParams{
+		JobID:       jobID,
+		TriggerType: triggerType,
+	})
+	if err != nil {
+		t.Fatalf("CreateRun(%q, %q): %v", jobID, triggerType, err)
+	}
+	return run
+}
+
 func TestJobStore_CreateAndGetJob(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, err := s.CreateJob(ctx, "Test Job", "A test job", "")
+	job, err := s.CreateJob(ctx, CreateJobParams{Name: "Test Job", Description: "A test job"})
 	if err != nil {
 		t.Fatalf("CreateJob: %v", err)
 	}
@@ -33,6 +60,9 @@ func TestJobStore_CreateAndGetJob(t *testing.T) {
 	}
 	if job.Description != "A test job" {
 		t.Errorf("Description = %q, want %q", job.Description, "A test job")
+	}
+	if job.MaxConcurrentRuns != 1 {
+		t.Errorf("MaxConcurrentRuns = %d, want 1", job.MaxConcurrentRuns)
 	}
 
 	detail, err := s.GetJob(ctx, job.JobID)
@@ -49,18 +79,11 @@ func TestJobStore_CreateAndGetJob(t *testing.T) {
 
 func TestJobStore_ListJobs(t *testing.T) {
 	s := newTestStoreForJobs(t)
-	ctx := context.Background()
 
-	_, err := s.CreateJob(ctx, "Job A", "", "")
-	if err != nil {
-		t.Fatalf("CreateJob A: %v", err)
-	}
-	_, err = s.CreateJob(ctx, "Job B", "", "")
-	if err != nil {
-		t.Fatalf("CreateJob B: %v", err)
-	}
+	testCreateJob(t, s, "Job A", "", "")
+	testCreateJob(t, s, "Job B", "", "")
 
-	jobs, err := s.ListJobs(ctx)
+	jobs, err := s.ListJobs(context.Background())
 	if err != nil {
 		t.Fatalf("ListJobs: %v", err)
 	}
@@ -73,12 +96,13 @@ func TestUpdateJob(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, err := s.CreateJob(ctx, "Original Name", "Original desc", "")
-	if err != nil {
-		t.Fatalf("CreateJob: %v", err)
-	}
+	job := testCreateJob(t, s, "Original Name", "Original desc", "")
 
-	updated, err := s.UpdateJob(ctx, job.JobID, "New Name", "New desc")
+	updated, err := s.UpdateJob(ctx, UpdateJobParams{
+		JobID:       job.JobID,
+		Name:        "New Name",
+		Description: "New desc",
+	})
 	if err != nil {
 		t.Fatalf("UpdateJob: %v", err)
 	}
@@ -106,7 +130,9 @@ func TestUpdateJob_NotFound(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_, err := s.UpdateJob(ctx, "nonexistent-job-id", "Name", "Desc")
+	_, err := s.UpdateJob(ctx, UpdateJobParams{
+		JobID: "nonexistent-job-id", Name: "Name", Description: "Desc",
+	})
 	if err == nil {
 		t.Fatal("expected error for nonexistent job")
 	}
@@ -116,7 +142,7 @@ func TestJobStore_DeleteJob(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "To Delete", "", "")
+	job := testCreateJob(t, s, "To Delete", "", "")
 	if err := s.DeleteJob(ctx, job.JobID); err != nil {
 		t.Fatalf("DeleteJob: %v", err)
 	}
@@ -130,7 +156,7 @@ func TestJobStore_StepCRUD(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
+	job := testCreateJob(t, s, "Job", "", "")
 
 	step, err := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "Step 1", Prompt: "Do something", MachineID: "", WorkingDir: "/tmp", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	if err != nil {
@@ -141,6 +167,12 @@ func TestJobStore_StepCRUD(t *testing.T) {
 	}
 	if step.Name != "Step 1" {
 		t.Errorf("Name = %q, want %q", step.Name, "Step 1")
+	}
+	if step.TaskType != "claude_session" {
+		t.Errorf("TaskType = %q, want %q", step.TaskType, "claude_session")
+	}
+	if step.RunIf != "all_success" {
+		t.Errorf("RunIf = %q, want %q", step.RunIf, "all_success")
 	}
 
 	// Update step
@@ -172,7 +204,7 @@ func TestJobStore_Dependencies(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
+	job := testCreateJob(t, s, "Job", "", "")
 	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
@@ -223,15 +255,12 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
+	job := testCreateJob(t, s, "Job", "", "")
 	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "machine-a", WorkingDir: "/work", Command: "claude", Args: "--verbose", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "machine-a", WorkingDir: "/work2", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
 	// Create run
-	run, err := s.CreateRun(ctx, job.JobID, "manual")
-	if err != nil {
-		t.Fatalf("CreateRun: %v", err)
-	}
+	run := testCreateRun(t, s, job.JobID, "manual")
 	if run.RunID == "" {
 		t.Fatal("expected non-empty RunID")
 	}
@@ -241,7 +270,7 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 
 	// Insert run steps with snapshots
 	steps := []Step{*stepA, *stepB}
-	err = s.InsertRunSteps(ctx, run.RunID, steps)
+	err := s.InsertRunSteps(ctx, run.RunID, steps)
 	if err != nil {
 		t.Fatalf("InsertRunSteps: %v", err)
 	}
@@ -265,6 +294,15 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 		}
 		if rs.Status != StatusPending {
 			t.Errorf("RunStep Status = %q, want %q", rs.Status, StatusPending)
+		}
+		if rs.TaskTypeSnapshot != "claude_session" {
+			t.Errorf("TaskTypeSnapshot = %q, want %q", rs.TaskTypeSnapshot, "claude_session")
+		}
+		if rs.RunIfSnapshot != "all_success" {
+			t.Errorf("RunIfSnapshot = %q, want %q", rs.RunIfSnapshot, "all_success")
+		}
+		if rs.Attempt != 1 {
+			t.Errorf("Attempt = %d, want 1", rs.Attempt)
 		}
 	}
 
@@ -296,13 +334,12 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 
 func TestJobStore_ListRuns(t *testing.T) {
 	s := newTestStoreForJobs(t)
-	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
-	_, _ = s.CreateRun(ctx, job.JobID, "manual")
-	_, _ = s.CreateRun(ctx, job.JobID, "manual")
+	job := testCreateJob(t, s, "Job", "", "")
+	testCreateRun(t, s, job.JobID, "manual")
+	testCreateRun(t, s, job.JobID, "manual")
 
-	runs, err := s.ListRuns(ctx, job.JobID)
+	runs, err := s.ListRuns(context.Background(), job.JobID)
 	if err != nil {
 		t.Fatalf("ListRuns: %v", err)
 	}
@@ -313,15 +350,14 @@ func TestJobStore_ListRuns(t *testing.T) {
 
 func TestJobStore_ListAllRuns(t *testing.T) {
 	s := newTestStoreForJobs(t)
-	ctx := context.Background()
 
-	jobA, _ := s.CreateJob(ctx, "Job A", "", "")
-	jobB, _ := s.CreateJob(ctx, "Job B", "", "")
-	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
-	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
-	_, _ = s.CreateRun(ctx, jobB.JobID, "scheduled")
+	jobA := testCreateJob(t, s, "Job A", "", "")
+	jobB := testCreateJob(t, s, "Job B", "", "")
+	testCreateRun(t, s, jobA.JobID, "manual")
+	testCreateRun(t, s, jobA.JobID, "manual")
+	testCreateRun(t, s, jobB.JobID, "scheduled")
 
-	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	runs, err := s.ListAllRuns(context.Background(), ListRunsOptions{})
 	if err != nil {
 		t.Fatalf("ListAllRuns: %v", err)
 	}
@@ -334,9 +370,9 @@ func TestJobStore_ListAllRuns_FilterByStatus(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
-	run1, _ := s.CreateRun(ctx, job.JobID, "manual")
-	_, _ = s.CreateRun(ctx, job.JobID, "manual")
+	job := testCreateJob(t, s, "Job", "", "")
+	run1 := testCreateRun(t, s, job.JobID, "manual")
+	testCreateRun(t, s, job.JobID, "manual")
 
 	_ = s.UpdateRunStatus(ctx, run1.RunID, StatusCompleted)
 
@@ -356,11 +392,11 @@ func TestJobStore_ListAllRuns_FilterByJobID(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	jobA, _ := s.CreateJob(ctx, "Job A", "", "")
-	jobB, _ := s.CreateJob(ctx, "Job B", "", "")
-	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
-	_, _ = s.CreateRun(ctx, jobA.JobID, "manual")
-	_, _ = s.CreateRun(ctx, jobB.JobID, "manual")
+	jobA := testCreateJob(t, s, "Job A", "", "")
+	jobB := testCreateJob(t, s, "Job B", "", "")
+	testCreateRun(t, s, jobA.JobID, "manual")
+	testCreateRun(t, s, jobA.JobID, "manual")
+	testCreateRun(t, s, jobB.JobID, "manual")
 
 	runs, err := s.ListAllRuns(ctx, ListRunsOptions{JobID: jobA.JobID})
 	if err != nil {
@@ -380,9 +416,9 @@ func TestJobStore_ListAllRuns_Pagination(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
+	job := testCreateJob(t, s, "Job", "", "")
 	for i := 0; i < 5; i++ {
-		_, _ = s.CreateRun(ctx, job.JobID, "manual")
+		testCreateRun(t, s, job.JobID, "manual")
 	}
 
 	page1, err := s.ListAllRuns(ctx, ListRunsOptions{Limit: 3, Offset: 0})
@@ -417,8 +453,8 @@ func TestJobStore_ListAllRuns_IncludesJobName(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Named Job", "", "")
-	_, _ = s.CreateRun(ctx, job.JobID, "manual")
+	job := testCreateJob(t, s, "Named Job", "", "")
+	testCreateRun(t, s, job.JobID, "manual")
 
 	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
 	if err != nil {
@@ -434,15 +470,14 @@ func TestJobStore_ListAllRuns_IncludesJobName(t *testing.T) {
 
 func TestJobStore_ListAllRuns_DefaultLimit(t *testing.T) {
 	s := newTestStoreForJobs(t)
-	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
-	// Insert 55 runs — more than the default limit of 50.
+	job := testCreateJob(t, s, "Job", "", "")
+	// Insert 55 runs -- more than the default limit of 50.
 	for i := 0; i < 55; i++ {
-		_, _ = s.CreateRun(ctx, job.JobID, "manual")
+		testCreateRun(t, s, job.JobID, "manual")
 	}
 
-	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
+	runs, err := s.ListAllRuns(context.Background(), ListRunsOptions{})
 	if err != nil {
 		t.Fatalf("ListAllRuns default limit: %v", err)
 	}
@@ -471,12 +506,12 @@ func TestJobStore_DeleteJobCascades(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	job, _ := s.CreateJob(ctx, "Job", "", "")
+	job := testCreateJob(t, s, "Job", "", "")
 	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
 	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "prompt", MachineID: "", WorkingDir: "", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 	_ = s.AddDependency(ctx, stepB.StepID, stepA.StepID)
 
-	run, _ := s.CreateRun(ctx, job.JobID, "manual")
+	run := testCreateRun(t, s, job.JobID, "manual")
 	_ = s.InsertRunSteps(ctx, run.RunID, []Step{*stepA, *stepB})
 
 	// Delete job -- should cascade transactionally
@@ -523,13 +558,8 @@ func TestJobStore_ListJobsWithStats(t *testing.T) {
 		t.Fatalf("UpsertMachine nuc-02: %v", err)
 	}
 
-	jobA, err := s.CreateJob(ctx, "Job A", "desc A", "")
-	if err != nil {
-		t.Fatalf("CreateJob A: %v", err)
-	}
-	if _, err := s.CreateJob(ctx, "Job B", "", ""); err != nil {
-		t.Fatalf("CreateJob B: %v", err)
-	}
+	jobA := testCreateJob(t, s, "Job A", "desc A", "")
+	testCreateJob(t, s, "Job B", "", "")
 
 	// Add steps with machine_id to job A
 	stepA, err := s.CreateStep(ctx, CreateStepParams{
@@ -545,10 +575,7 @@ func TestJobStore_ListJobsWithStats(t *testing.T) {
 	}
 
 	// Add a run to job A so last_run_status is populated
-	run, err := s.CreateRun(ctx, jobA.JobID, "manual")
-	if err != nil {
-		t.Fatalf("CreateRun: %v", err)
-	}
+	run := testCreateRun(t, s, jobA.JobID, "manual")
 	if err := s.InsertRunSteps(ctx, run.RunID, []Step{*stepA}); err != nil {
 		t.Fatalf("InsertRunSteps: %v", err)
 	}
@@ -621,13 +648,13 @@ func TestJobStore_ListJobsWithStats_TriggerTypes(t *testing.T) {
 	ctx := context.Background()
 
 	// Job with event trigger only
-	jobEvent, _ := s.CreateJob(ctx, "Event Job", "", "")
+	jobEvent := testCreateJob(t, s, "Event Job", "", "")
 	_, _ = s.CreateJobTrigger(ctx, JobTrigger{
 		JobID: jobEvent.JobID, EventType: "run.completed", Enabled: true,
 	})
 
 	// Job with both cron and event trigger
-	jobMixed, _ := s.CreateJob(ctx, "Mixed Job", "", "")
+	jobMixed := testCreateJob(t, s, "Mixed Job", "", "")
 	_, _ = s.CreateSchedule(ctx, CreateScheduleParams{
 		JobID: jobMixed.JobID, CronExpr: "0 0 * * *",
 	})
@@ -661,10 +688,7 @@ func TestJobStore_ListAllRuns_IncludesMachineIDs(t *testing.T) {
 	_ = s.UpsertMachine("nuc-01", 5)
 	_ = s.UpsertMachine("nuc-02", 5)
 
-	job, err := s.CreateJob(ctx, "Job", "", "")
-	if err != nil {
-		t.Fatalf("CreateJob: %v", err)
-	}
+	job := testCreateJob(t, s, "Job", "", "")
 	step1, err := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "nuc-01", SortOrder: 1,
 	})
@@ -678,10 +702,7 @@ func TestJobStore_ListAllRuns_IncludesMachineIDs(t *testing.T) {
 		t.Fatalf("CreateStep 2: %v", err)
 	}
 
-	run, err := s.CreateRun(ctx, job.JobID, "manual")
-	if err != nil {
-		t.Fatalf("CreateRun: %v", err)
-	}
+	run := testCreateRun(t, s, job.JobID, "manual")
 	_ = s.InsertRunSteps(ctx, run.RunID, []Step{*step1, *step2})
 
 	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
@@ -703,16 +724,95 @@ func TestJobStore_ListAllRuns_IncludesMachineIDs(t *testing.T) {
 	}
 
 	// Run without run_steps should have empty MachineIDs
-	run2, err := s.CreateRun(ctx, job.JobID, "manual")
-	if err != nil {
-		t.Fatalf("CreateRun 2: %v", err)
-	}
+	run2 := testCreateRun(t, s, job.JobID, "manual")
 
 	runs, _ = s.ListAllRuns(ctx, ListRunsOptions{})
 	for _, r := range runs {
 		if r.RunID == run2.RunID && r.MachineIDs != "" {
 			t.Errorf("run without steps: MachineIDs = %q, want empty", r.MachineIDs)
 		}
+	}
+}
+
+func TestJobStore_RunWithParameters(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	job, err := s.CreateJob(ctx, CreateJobParams{
+		Name:              "Param Job",
+		Parameters:        `{"env": "staging"}`,
+		TimeoutSeconds:    300,
+		MaxConcurrentRuns: 3,
+	})
+	if err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+	if job.Parameters != `{"env": "staging"}` {
+		t.Errorf("Parameters = %q, want %q", job.Parameters, `{"env": "staging"}`)
+	}
+	if job.TimeoutSeconds != 300 {
+		t.Errorf("TimeoutSeconds = %d, want 300", job.TimeoutSeconds)
+	}
+	if job.MaxConcurrentRuns != 3 {
+		t.Errorf("MaxConcurrentRuns = %d, want 3", job.MaxConcurrentRuns)
+	}
+
+	// Create run with parameters
+	run, err := s.CreateRun(ctx, CreateRunParams{
+		JobID:         job.JobID,
+		TriggerType:   "manual",
+		TriggerDetail: "test",
+		Parameters:    `{"env": "prod"}`,
+	})
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	if run.Parameters != `{"env": "prod"}` {
+		t.Errorf("Run.Parameters = %q, want %q", run.Parameters, `{"env": "prod"}`)
+	}
+
+	// Update run parameters
+	err = s.UpdateRunParameters(ctx, run.RunID, `{"env": "updated"}`)
+	if err != nil {
+		t.Fatalf("UpdateRunParameters: %v", err)
+	}
+
+	detail, err := s.GetRunWithSteps(ctx, run.RunID)
+	if err != nil {
+		t.Fatalf("GetRunWithSteps: %v", err)
+	}
+	if detail.Run.Parameters != `{"env": "updated"}` {
+		t.Errorf("Updated Parameters = %q, want %q", detail.Run.Parameters, `{"env": "updated"}`)
+	}
+}
+
+func TestJobStore_UpdateRunStepAttempt(t *testing.T) {
+	s := newTestStoreForJobs(t)
+	ctx := context.Background()
+
+	_ = s.UpsertMachine("m1", 5)
+
+	job := testCreateJob(t, s, "Job", "", "")
+	step, _ := s.CreateStep(ctx, CreateStepParams{
+		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "do it",
+		OnFailure: "fail_run", MaxRetries: 3,
+	})
+	run := testCreateRun(t, s, job.JobID, "manual")
+	_ = s.InsertRunSteps(ctx, run.RunID, []Step{*step})
+
+	detail, _ := s.GetRunWithSteps(ctx, run.RunID)
+	if detail.RunSteps[0].Attempt != 1 {
+		t.Errorf("initial Attempt = %d, want 1", detail.RunSteps[0].Attempt)
+	}
+
+	err := s.UpdateRunStepAttempt(ctx, detail.RunSteps[0].RunStepID, 2)
+	if err != nil {
+		t.Fatalf("UpdateRunStepAttempt: %v", err)
+	}
+
+	detail, _ = s.GetRunWithSteps(ctx, run.RunID)
+	if detail.RunSteps[0].Attempt != 2 {
+		t.Errorf("updated Attempt = %d, want 2", detail.RunSteps[0].Attempt)
 	}
 }
 

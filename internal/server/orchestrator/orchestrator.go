@@ -2,13 +2,24 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// ErrMaxConcurrentRuns is returned when a job has reached its maximum number
+// of concurrent active runs.
+var ErrMaxConcurrentRuns = errors.New("max concurrent runs reached for this job")
+
+// ErrInvalidRunState is returned when a run is not in a terminal state
+// (failed or cancelled) and cannot be repaired.
+var ErrInvalidRunState = errors.New("run is not in a terminal state")
 
 // Orchestrator manages active DAGRunners for job runs.
 type Orchestrator struct {
@@ -46,10 +57,38 @@ func NewOrchestrator(ctx context.Context, s store.JobStoreIface, executor StepEx
 	}
 }
 
+// countActiveRunsForJob counts how many active runners belong to a given job.
+// Must be called with o.mu held.
+func (o *Orchestrator) countActiveRunsForJob(jobID string) int {
+	count := 0
+	for _, runner := range o.activeRuns {
+		if runner.jobID == jobID {
+			count++
+		}
+	}
+	return count
+}
+
 // CreateRun validates the DAG, creates a run in the DB, snapshots steps
 // into run_steps, builds a DAGRunner, and starts execution.
+// params provides runtime parameter overrides (merged with job defaults).
 // An optional triggerDetail string provides extra context about what triggered the run.
-func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string, triggerDetail ...string) (*store.Run, error) {
+func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string, params map[string]string, triggerDetail ...string) (*store.Run, error) {
+	// Get job to check max concurrent runs and parameters
+	job, err := o.store.GetJob(ctx, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("get job: %w", err)
+	}
+
+	// Check max concurrent runs
+	o.mu.Lock()
+	activeCount := o.countActiveRunsForJob(jobID)
+	if job.Job.MaxConcurrentRuns > 0 && activeCount >= job.Job.MaxConcurrentRuns {
+		o.mu.Unlock()
+		return nil, ErrMaxConcurrentRuns
+	}
+	o.mu.Unlock()
+
 	// Get steps and dependencies
 	steps, deps, err := o.store.GetStepsWithDeps(ctx, jobID)
 	if err != nil {
@@ -61,8 +100,24 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		return nil, fmt.Errorf("validate DAG: %w", err)
 	}
 
+	// Resolve parameters: merge job defaults with runtime overrides
+	resolvedParams := resolveParameters(job.Job.Parameters, params)
+	paramsJSON, err := json.Marshal(resolvedParams)
+	if err != nil {
+		return nil, fmt.Errorf("marshal parameters: %w", err)
+	}
+
 	// Create run in DB
-	run, err := o.store.CreateRun(ctx, jobID, triggerType, triggerDetail...)
+	detail0 := ""
+	if len(triggerDetail) > 0 {
+		detail0 = triggerDetail[0]
+	}
+	run, err := o.store.CreateRun(ctx, store.CreateRunParams{
+		JobID:         jobID,
+		TriggerType:   triggerType,
+		TriggerDetail: detail0,
+		Parameters:    string(paramsJSON),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create run: %w", err)
 	}
@@ -79,12 +134,14 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		return nil, fmt.Errorf("get run steps: %w", err)
 	}
 
-	// OnFailure is now populated from on_failure_snapshot by GetRunWithSteps.
-
 	// Build and start DAGRunner
 	capturedJobID := jobID
 	capturedTriggerType := triggerType
 	onComplete := func(runID string, status string) {
+		// Clean up shared sessions when the run finishes.
+		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+			cleanup.CleanupRunSessions(runID)
+		}
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
 		}
@@ -98,7 +155,24 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType))
 	}
 
-	runner := NewDAGRunner(run.RunID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete)
+	// Build step name map from steps for template resolution
+	stepNameMap := make(map[string]string, len(steps))
+	for _, s := range steps {
+		stepNameMap[s.StepID] = s.Name
+	}
+
+	jobMeta := JobMeta{
+		Name:        job.Job.Name,
+		RunID:       run.RunID,
+		TriggerType: triggerType,
+		StartTime:   run.CreatedAt.Format(time.RFC3339),
+	}
+	// Populate RunNumber by counting existing runs for this job.
+	if existingRuns, err := o.store.ListRuns(ctx, jobID); err == nil {
+		jobMeta.RunNumber = len(existingRuns)
+	}
+
+	runner := NewDAGRunner(run.RunID, jobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, resolvedParams, jobMeta, stepNameMap)
 
 	o.mu.Lock()
 	o.activeRuns[run.RunID] = runner
@@ -111,6 +185,22 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunStarted, run.RunID, jobID, store.StatusRunning, triggerType))
 
 	runner.Start(o.rootCtx)
+
+	// Job-level timeout
+	if job.Job.TimeoutSeconds > 0 {
+		timeout := time.Duration(job.Job.TimeoutSeconds) * time.Second
+		go func() {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				slog.Warn("job run timed out", "run_id", run.RunID, "timeout", timeout)
+				o.CancelRun(o.rootCtx, run.RunID)
+			case <-runner.Done():
+				// Run completed before timeout
+			}
+		}()
+	}
 
 	return run, nil
 }
@@ -156,25 +246,94 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusPending, "", 0); err != nil {
 				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
 			}
+			if err := o.store.UpdateRunStepAttempt(ctx, rs.RunStepID, 1); err != nil {
+				return fmt.Errorf("reset attempt for step %s: %w", rs.StepID, err)
+			}
 		}
 	}
 
+	return o.rebuildAndStartRun(ctx, runID)
+}
+
+// RepairRun resets all failed/skipped steps in a terminal run to pending,
+// optionally merges parameter overrides (only existing keys), clears task
+// values for reset steps, and rebuilds the DAG.
+func (o *Orchestrator) RepairRun(ctx context.Context, runID string, paramOverrides map[string]string) error {
+	detail, err := o.store.GetRunWithSteps(ctx, runID)
+	if err != nil {
+		return fmt.Errorf("get run: %w", err)
+	}
+	if detail.Run.Status != store.StatusFailed && detail.Run.Status != store.StatusCancelled {
+		return ErrInvalidRunState
+	}
+
+	// Merge parameter overrides (only existing keys)
+	if len(paramOverrides) > 0 && detail.Run.Parameters != "" {
+		existingParams := make(map[string]string)
+		if err := json.Unmarshal([]byte(detail.Run.Parameters), &existingParams); err != nil {
+			return fmt.Errorf("parse run parameters: %w", err)
+		}
+		for k, v := range paramOverrides {
+			if _, exists := existingParams[k]; exists {
+				existingParams[k] = v
+			}
+		}
+		paramsJSON, err := json.Marshal(existingParams)
+		if err != nil {
+			return fmt.Errorf("marshal parameters: %w", err)
+		}
+		if err := o.store.UpdateRunParameters(ctx, runID, string(paramsJSON)); err != nil {
+			return fmt.Errorf("update run parameters: %w", err)
+		}
+	}
+
+	// Reset failed/skipped/cancelled steps to pending, clear their task values and attempt counters
+	for _, rs := range detail.RunSteps {
+		if rs.Status == store.StatusFailed || rs.Status == store.StatusSkipped || rs.Status == store.StatusCancelled {
+			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusPending, "", 0); err != nil {
+				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
+			}
+			if err := o.store.UpdateRunStepAttempt(ctx, rs.RunStepID, 1); err != nil {
+				return fmt.Errorf("reset attempt for step %s: %w", rs.StepID, err)
+			}
+			if err := o.store.DeleteTaskValuesForStep(ctx, rs.RunStepID); err != nil {
+				return fmt.Errorf("clear task values for step %s: %w", rs.StepID, err)
+			}
+		}
+	}
+
+	return o.rebuildAndStartRun(ctx, runID)
+}
+
+// rebuildAndStartRun re-reads the run state, builds a new DAGRunner
+// pre-configured with completed steps, and starts execution. Shared by
+// RetryStep and RepairRun.
+func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) error {
 	// Update run status back to running
 	if err := o.store.UpdateRunStatus(ctx, runID, store.StatusRunning); err != nil {
 		return fmt.Errorf("update run status: %w", err)
 	}
 
 	// Re-read run state
-	detail, err = o.store.GetRunWithSteps(ctx, runID)
+	detail, err := o.store.GetRunWithSteps(ctx, runID)
 	if err != nil {
 		return fmt.Errorf("re-read run: %w", err)
 	}
 
-	// OnFailure is now populated from on_failure_snapshot by GetRunWithSteps.
+	// Get the job's dependencies
+	_, deps, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID)
+	if err != nil {
+		return fmt.Errorf("get deps: %w", err)
+	}
 
 	// Build new DAGRunner from current DB state
-	retryJobID := detail.Run.JobID
+	rebuildJobID := detail.Run.JobID
+	rebuildTriggerType := detail.Run.TriggerType
 	onComplete := func(runID string, status string) {
+		// Clean up shared sessions when the run finishes.
+		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+			cleanup.CleanupRunSessions(runID)
+		}
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
 		}
@@ -185,10 +344,48 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		if status == store.StatusFailed {
 			evType = event.TypeRunFailed
 		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, retryJobID, status, "manual"))
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, rebuildTriggerType))
 	}
 
-	runner := NewDAGRunner(runID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete)
+	// Build step name map
+	stepNames := make(map[string]string)
+	for _, rs := range detail.RunSteps {
+		stepNames[rs.StepID] = rs.StepID
+	}
+	if steps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID); err == nil {
+		for _, s := range steps {
+			stepNames[s.StepID] = s.Name
+		}
+	}
+
+	// Parse run parameters so retried/repaired runs retain template resolution
+	var runParams map[string]string
+	if detail.Run.Parameters != "" {
+		if err := json.Unmarshal([]byte(detail.Run.Parameters), &runParams); err != nil {
+			slog.Warn("failed to parse run parameters for rebuild", "error", err, "run_id", runID)
+		}
+	}
+
+	// Reconstruct job metadata from run data
+	jobMeta := JobMeta{
+		RunID:       runID,
+		TriggerType: detail.Run.TriggerType,
+		StartTime:   detail.Run.CreatedAt.Format(time.RFC3339),
+	}
+	if jobDetail, err := o.store.GetJob(ctx, detail.Run.JobID); err == nil {
+		jobMeta.Name = jobDetail.Job.Name
+	}
+	// Populate RunNumber by counting existing runs for this job.
+	if existingRuns, err := o.store.ListRuns(ctx, detail.Run.JobID); err == nil {
+		for i, r := range existingRuns {
+			if r.RunID == runID {
+				jobMeta.RunNumber = len(existingRuns) - i
+				break
+			}
+		}
+	}
+
+	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, runParams, jobMeta, stepNames)
 
 	// Pre-process completed steps: count them and pre-decrement in-degrees
 	// of their dependents so pending steps with completed upstream deps can launch.
@@ -228,6 +425,11 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 		runner.Cancel()
 	}
 
+	// Clean up shared sessions belonging to this run.
+	if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+		cleanup.CleanupRunSessions(runID)
+	}
+
 	// Mark pending/running run steps as cancelled
 	detail, err := o.store.GetRunWithSteps(ctx, runID)
 	if err != nil {
@@ -256,7 +458,7 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 // CreateRunErr is a thin wrapper around CreateRun that discards the returned
 // *store.Run, satisfying the event.OrchestratorIface interface.
 func (o *Orchestrator) CreateRunErr(ctx context.Context, jobID string, triggerType string) error {
-	_, err := o.CreateRun(ctx, jobID, triggerType)
+	_, err := o.CreateRun(ctx, jobID, triggerType, nil)
 	return err
 }
 

@@ -111,6 +111,7 @@ func newServeCmd() *cobra.Command {
 			grpcSrv := grpcserver.NewGRPCServer(tlsCfg, connMgr, slog.Default())
 			grpcSrv.SetRegistry(registry)
 			grpcSrv.SetSessionStore(s)
+			grpcSrv.SetTaskValueStore(s)
 
 			grpcLis, err := net.Listen("tcp", cfg.GRPC.Listen)
 			if err != nil {
@@ -141,6 +142,8 @@ func newServeCmd() *cobra.Command {
 
 			// Step executor — creates real PTY sessions on agents.
 			stepExecutor := executor.NewSessionStepExecutor(connMgr, s, slog.Default())
+			grpcSrv.SetRunStepLookup(stepExecutor)
+			grpcSrv.SetStepIdleHandler(stepExecutor)
 			orch := orchestrator.NewOrchestrator(ctx, s, stepExecutor)
 
 			// ---- Event bus and subscribers ----

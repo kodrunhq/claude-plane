@@ -34,7 +34,7 @@ func (m *mockExecutor) getOrCreateChans(stepID string) (chan struct{}, chan int)
 	return m.started[stepID], m.complete[stepID]
 }
 
-func (m *mockExecutor) ExecuteStep(ctx context.Context, runStep store.RunStep, onComplete func(stepID string, exitCode int)) {
+func (m *mockExecutor) ExecuteStep(ctx context.Context, runStep store.RunStep, resolveCtx *ResolveContext, onComplete func(stepID string, exitCode int)) {
 	startCh, completeCh := m.getOrCreateChans(runStep.StepID)
 
 	// Signal that step has started
@@ -58,7 +58,7 @@ func (m *mockExecutor) waitForStep(stepID string) {
 	startCh, _ := m.getOrCreateChans(stepID)
 	select {
 	case <-startCh:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		panic("timeout waiting for step " + stepID + " to start")
 	}
 }
@@ -66,8 +66,10 @@ func (m *mockExecutor) waitForStep(stepID string) {
 func (m *mockExecutor) completeStep(stepID string, exitCode int) {
 	_, completeCh := m.getOrCreateChans(stepID)
 	completeCh <- exitCode
-	// Allow the completion callback to run
-	time.Sleep(50 * time.Millisecond)
+	// Allow the completion callback and any deferred step re-evaluation to run.
+	// Needs to be long enough for the OnStepCompleted goroutine to acquire the
+	// DAGRunner lock, process dependents, and spawn launchStep goroutines.
+	time.Sleep(100 * time.Millisecond)
 }
 
 func (m *mockExecutor) isExecuting(stepID string) bool {
@@ -87,9 +89,14 @@ func (m *mockExecutor) isExecuting(stepID string) bool {
 
 // testStep defines a step for test setup.
 type testStep struct {
-	id           string
-	onFailure    string
-	delaySeconds int
+	id                string
+	name              string
+	onFailure         string
+	delaySeconds      int
+	runIf             string
+	sessionKey        string
+	maxRetries        int
+	retryDelaySeconds int
 }
 
 // testRunner wraps a DAGRunner for testing with completion tracking.
@@ -103,15 +110,30 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 	t.Helper()
 
 	runSteps := make([]store.RunStep, len(steps))
+	stepNames := make(map[string]string, len(steps))
 	for i, s := range steps {
-		runSteps[i] = store.RunStep{
-			RunStepID:            "rs-" + s.id,
-			RunID:                runID,
-			StepID:               s.id,
-			Status:               "pending",
-			OnFailure:            s.onFailure,
-			DelaySecondsSnapshot: s.delaySeconds,
+		runIf := s.runIf
+		if runIf == "" {
+			runIf = "all_success"
 		}
+		name := s.name
+		if name == "" {
+			name = s.id
+		}
+		runSteps[i] = store.RunStep{
+			RunStepID:                 "rs-" + s.id,
+			RunID:                     runID,
+			StepID:                    s.id,
+			Status:                    "pending",
+			OnFailure:                 s.onFailure,
+			DelaySecondsSnapshot:      s.delaySeconds,
+			RunIfSnapshot:             runIf,
+			SessionKeySnapshot:        s.sessionKey,
+			MaxRetriesSnapshot:        s.maxRetries,
+			RetryDelaySecondsSnapshot: s.retryDelaySeconds,
+			Attempt:                   1,
+		}
+		stepNames[s.id] = name
 	}
 
 	tr := &testRunner{
@@ -123,7 +145,7 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 		close(tr.done)
 	}
 
-	tr.dag = NewDAGRunner(runID, runSteps, deps, executor, nil, nil, onComplete)
+	tr.dag = NewDAGRunner(runID, "", runSteps, deps, executor, nil, nil, onComplete, nil, JobMeta{}, stepNames)
 	return tr
 }
 
@@ -140,7 +162,7 @@ func (tr *testRunner) StartWithContext(t *testing.T, ctx context.Context) {
 func (tr *testRunner) waitForDone() {
 	select {
 	case <-tr.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(15 * time.Second):
 		panic("timeout waiting for DAGRunner to complete")
 	}
 }
