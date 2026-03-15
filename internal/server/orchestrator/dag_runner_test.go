@@ -856,3 +856,105 @@ func TestDAGRunner_SessionKeyReleasedOnComplete(t *testing.T) {
 		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
 	}
 }
+
+func TestDAGRunner_RetryOnFailure(t *testing.T) {
+	// A(max_retries=2) → B: A fails on first attempt, succeeds on retry, B launches.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-retry-1",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", maxRetries: 2},
+			{id: "b", onFailure: "fail_run"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	// First attempt: A starts, fails
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retry: A should be re-executed
+	mock.waitForStep("a")
+	mock.completeStep("a", 0) // succeeds on retry
+
+	// B should now launch
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_RetryExhausted(t *testing.T) {
+	// A(max_retries=1) fails twice → failure propagates, B skipped.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-retry-exhaust",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", maxRetries: 1},
+			{id: "b", onFailure: "fail_run"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	// First attempt: fails
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retry (attempt 2): fails again
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retries exhausted — run should fail
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// B should be skipped (fail_run on A)
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusSkipped {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusSkipped)
+	}
+}
+
+func TestDAGRunner_RetryDoesNotSetFailedPrematurely(t *testing.T) {
+	// A(max_retries=2) fails once, retries, succeeds → run marked completed (not failed).
+	// This verifies d.failed is NOT set before retries are exhausted.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-retry-nofail",
+		[]testStep{
+			{id: "a", onFailure: "continue", maxRetries: 2},
+		},
+		nil,
+		mock,
+	)
+
+	runner.Start(t)
+
+	// First attempt: fails
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retry: succeeds
+	mock.waitForStep("a")
+	mock.completeStep("a", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q — d.failed was set prematurely", runner.finalStatus, "completed")
+	}
+}
