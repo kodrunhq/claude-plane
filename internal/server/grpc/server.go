@@ -56,6 +56,12 @@ type StepIdleHandler interface {
 	OnStepIdle(sessionID string)
 }
 
+// cleanupStore is the subset of store methods needed for pending cleanup dispatch.
+type cleanupStore interface {
+	ListPendingCleanups(ctx context.Context, machineID string) ([]string, error)
+	DeletePendingCleanups(ctx context.Context, machineID string) error
+}
+
 // agentService implements the AgentServiceServer interface.
 type agentService struct {
 	pb.UnimplementedAgentServiceServer
@@ -66,6 +72,7 @@ type agentService struct {
 	runStepLookup   RunStepLookup
 	taskValueStore  TaskValueStore
 	stepIdleHandler StepIdleHandler
+	cleanupStore    cleanupStore
 	ingestor        *ingest.ContentIngestor
 	logger          *slog.Logger
 }
@@ -135,6 +142,11 @@ func (s *GRPCServer) SetTaskValueStore(store TaskValueStore) {
 // SetStepIdleHandler sets the handler for StepIdleEvent from agents.
 func (s *GRPCServer) SetStepIdleHandler(handler StepIdleHandler) {
 	s.agentSvc.stepIdleHandler = handler
+}
+
+// SetCleanupStore sets the store used for dispatching pending cleanups on agent reconnect.
+func (s *GRPCServer) SetCleanupStore(cs cleanupStore) {
+	s.agentSvc.cleanupStore = cs
 }
 
 // SetContentIngestor sets the content ingestor for search indexing.
@@ -239,6 +251,32 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			s.logger.Error("failed to register agent with connection manager",
 				"machine_id", machineID, "error", regErr)
 			return regErr
+		}
+	}
+
+	// Dispatch any pending scrollback cleanups queued while the agent was offline.
+	if s.cleanupStore != nil {
+		agent := s.agentConnMgr.GetAgent(machineID)
+		if agent != nil {
+			go func() {
+				cleanups, err := s.cleanupStore.ListPendingCleanups(context.Background(), machineID)
+				if err != nil || len(cleanups) == 0 {
+					return
+				}
+				for _, sessionID := range cleanups {
+					cmd := &pb.ServerCommand{
+						Command: &pb.ServerCommand_CleanupScrollback{
+							CleanupScrollback: &pb.CleanupScrollbackCmd{SessionId: sessionID},
+						},
+					}
+					if err := agent.SendCommand(cmd); err != nil {
+						s.logger.Warn("failed to send pending cleanup", "error", err, "machine_id", machineID)
+						return
+					}
+				}
+				_ = s.cleanupStore.DeletePendingCleanups(context.Background(), machineID)
+				s.logger.Info("sent pending cleanups to agent", "machine_id", machineID, "count", len(cleanups))
+			}()
 		}
 	}
 
