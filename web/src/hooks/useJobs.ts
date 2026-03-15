@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '../api/jobs.ts';
-import type { CreateJobParams, CreateStepParams, UpdateStepParams, TriggerRunParams } from '../types/job.ts';
+import type { CreateJobParams, CreateTaskParams, UpdateTaskParams, TriggerRunParams } from '../types/job.ts';
 
 export function useJobs() {
   return useQuery({
@@ -45,29 +45,29 @@ export function useDeleteJob() {
   });
 }
 
-export function useAddStep() {
+export function useAddTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ jobId, params }: { jobId: string; params: CreateStepParams }) =>
-      jobsApi.addStep(jobId, params),
+    mutationFn: ({ jobId, params }: { jobId: string; params: CreateTaskParams }) =>
+      jobsApi.addTask(jobId, params),
     onSuccess: (_, { jobId }) => qc.invalidateQueries({ queryKey: ['jobs', jobId] }),
   });
 }
 
-export function useUpdateStep() {
+export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ jobId, stepId, params }: { jobId: string; stepId: string; params: UpdateStepParams }) =>
-      jobsApi.updateStep(jobId, stepId, params),
+    mutationFn: ({ jobId, taskId, params }: { jobId: string; taskId: string; params: UpdateTaskParams }) =>
+      jobsApi.updateTask(jobId, taskId, params),
     onSuccess: (_, { jobId }) => qc.invalidateQueries({ queryKey: ['jobs', jobId] }),
   });
 }
 
-export function useDeleteStep() {
+export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ jobId, stepId }: { jobId: string; stepId: string }) =>
-      jobsApi.deleteStep(jobId, stepId),
+    mutationFn: ({ jobId, taskId }: { jobId: string; taskId: string }) =>
+      jobsApi.deleteTask(jobId, taskId),
     onSuccess: (_, { jobId }) => qc.invalidateQueries({ queryKey: ['jobs', jobId] }),
   });
 }
@@ -75,8 +75,8 @@ export function useDeleteStep() {
 export function useAddDependency() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ jobId, stepId, dependsOnStepId }: { jobId: string; stepId: string; dependsOnStepId: string }) =>
-      jobsApi.addDependency(jobId, stepId, dependsOnStepId),
+    mutationFn: ({ jobId, taskId, dependsOnTaskId }: { jobId: string; taskId: string; dependsOnTaskId: string }) =>
+      jobsApi.addDependency(jobId, taskId, dependsOnTaskId),
     onSuccess: (_, { jobId }) => qc.invalidateQueries({ queryKey: ['jobs', jobId] }),
   });
 }
@@ -84,8 +84,8 @@ export function useAddDependency() {
 export function useRemoveDependency() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ jobId, stepId, depId }: { jobId: string; stepId: string; depId: string }) =>
-      jobsApi.removeDependency(jobId, stepId, depId),
+    mutationFn: ({ jobId, taskId, depId }: { jobId: string; taskId: string; depId: string }) =>
+      jobsApi.removeDependency(jobId, taskId, depId),
     onSuccess: (_, { jobId }) => qc.invalidateQueries({ queryKey: ['jobs', jobId] }),
   });
 }

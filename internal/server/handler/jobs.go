@@ -17,6 +17,12 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
+// maxJobParamsSize is the maximum size of the job_params JSON string (16 KB).
+const maxJobParamsSize = 16 * 1024
+
+// maxRunJobDepth is the maximum chain depth for run_job references (prevents indirect cycles).
+const maxRunJobDepth = 10
+
 // paramKeyRe validates parameter key names: starts with letter or underscore,
 // followed by letters, digits, or underscores.
 var paramKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -102,6 +108,85 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 // writeError delegates to the shared httputil.WriteError helper.
 func writeError(w http.ResponseWriter, status int, message string) {
 	httputil.WriteError(w, status, message)
+}
+
+// validateRunJobStep validates run_job-specific fields: job_params JSON validity,
+// size cap, target_job_id existence, authorization, and cycle detection.
+func (h *JobHandler) validateRunJobStep(w http.ResponseWriter, r *http.Request, currentJobID, targetJobID, jobParams string) bool {
+	// Validate target_job_id is provided
+	if targetJobID == "" {
+		writeError(w, http.StatusBadRequest, "target_job_id is required for run_job tasks")
+		return false
+	}
+
+	// Validate job_params JSON
+	if jobParams != "" {
+		if len(jobParams) > maxJobParamsSize {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("job_params exceeds maximum size of %d bytes", maxJobParamsSize))
+			return false
+		}
+		var params map[string]string
+		if err := json.Unmarshal([]byte(jobParams), &params); err != nil {
+			writeError(w, http.StatusBadRequest, "job_params must be a valid JSON object with string values")
+			return false
+		}
+	}
+
+	// Self-reference check
+	if targetJobID == currentJobID {
+		writeError(w, http.StatusBadRequest, "run_job task cannot target its own job")
+		return false
+	}
+
+	// Validate target job exists and user can access it
+	targetDetail, err := h.store.GetJob(r.Context(), targetJobID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusBadRequest, "target_job_id references a job that does not exist")
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return false
+	}
+	if !h.authorizeJob(w, r, &targetDetail.Job) {
+		return false
+	}
+
+	// Cycle detection: walk the run_job chain from the target
+	if err := h.checkRunJobCycle(r, currentJobID, targetJobID, 0); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+
+	return true
+}
+
+// checkRunJobCycle walks the run_job reference chain from jobID, looking for
+// a cycle back to originJobID. Returns an error if a cycle is found or the
+// chain exceeds maxRunJobDepth.
+func (h *JobHandler) checkRunJobCycle(r *http.Request, originJobID, jobID string, depth int) error {
+	if depth >= maxRunJobDepth {
+		return fmt.Errorf("run_job chain exceeds maximum depth of %d", maxRunJobDepth)
+	}
+	detail, err := h.store.GetJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil // target doesn't exist yet or was deleted — no cycle
+		}
+		return fmt.Errorf("checking run_job cycle: %w", err)
+	}
+	for _, step := range detail.Steps {
+		if step.TaskType != "run_job" || step.TargetJobID == "" {
+			continue
+		}
+		if step.TargetJobID == originJobID {
+			return fmt.Errorf("run_job creates a cycle: job %q indirectly triggers job %q", jobID, originJobID)
+		}
+		if err := h.checkRunJobCycle(r, originJobID, step.TargetJobID, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // createJobRequest is the JSON body for POST /api/v1/jobs.
@@ -329,6 +414,8 @@ type addStepRequest struct {
 	RunIf             string `json:"run_if"`
 	MaxRetries        int    `json:"max_retries"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds"`
+	TargetJobID       string `json:"target_job_id"`
+	JobParams         string `json:"job_params"`
 }
 
 // AddStep handles POST /api/v1/jobs/{jobID}/steps.
@@ -359,6 +446,18 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 	// For shell tasks, clear prompt.
 	if req.TaskType == "shell" {
 		req.Prompt = ""
+	}
+
+	// For run_job tasks, clear prompt, command, and machine_id.
+	if req.TaskType == "run_job" {
+		req.Prompt = ""
+		req.Command = ""
+		req.MachineID = ""
+
+		// Validate run_job-specific fields: JSON, existence, auth, cycles.
+		if !h.validateRunJobStep(w, r, detail.Job.JobID, req.TargetJobID, req.JobParams) {
+			return
+		}
 	}
 
 	// Default step name from current step count when empty.
@@ -393,6 +492,7 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
 	}
 
 	// Validate the new step together with existing steps.
@@ -421,6 +521,8 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
+		JobParams:         req.JobParams,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -448,6 +550,8 @@ type updateStepRequest struct {
 	RunIf             string `json:"run_if"`
 	MaxRetries        int    `json:"max_retries"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds"`
+	TargetJobID       string `json:"target_job_id"`
+	JobParams         string `json:"job_params"`
 }
 
 // UpdateStep handles PUT /api/v1/jobs/{jobID}/steps/{stepID}.
@@ -485,6 +589,18 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		req.Prompt = ""
 	}
 
+	// For run_job tasks, clear prompt, command, and machine_id.
+	if req.TaskType == "run_job" {
+		req.Prompt = ""
+		req.Command = ""
+		req.MachineID = ""
+
+		// Validate run_job-specific fields: JSON, existence, auth, cycles.
+		if !h.validateRunJobStep(w, r, detail.Job.JobID, req.TargetJobID, req.JobParams) {
+			return
+		}
+	}
+
 	// Validate model.
 	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" {
 		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku")
@@ -513,6 +629,7 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
 	}
 
 	// Build full steps list with the updated step replacing the original.
@@ -546,6 +663,8 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
+		JobParams:         req.JobParams,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

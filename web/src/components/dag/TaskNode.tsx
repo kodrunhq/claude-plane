@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react';
 import { Timer } from 'lucide-react';
 import type { NodeProps, Node } from '@xyflow/react';
 
-export interface StepNodeData {
+export interface TaskNodeData {
   label: string;
   status?: string;
   machineId?: string;
@@ -12,7 +12,7 @@ export interface StepNodeData {
   [key: string]: unknown;
 }
 
-type StepNodeType = Node<StepNodeData, 'step'>;
+type TaskNodeType = Node<TaskNodeData, 'step'>;
 
 const statusColors: Record<string, string> = {
   pending: 'bg-gray-500',
@@ -32,7 +32,7 @@ const statusBorderColors: Record<string, string> = {
   cancelled: 'border-orange-500',
 };
 
-export const StepNode = memo(function StepNode({ data }: NodeProps<StepNodeType>) {
+export const TaskNode = memo(function TaskNode({ data }: NodeProps<TaskNodeType>) {
   const status = data.status ?? 'pending';
   const borderColor = statusBorderColors[status] ?? 'border-gray-600';
   const isSelected = data.selected;

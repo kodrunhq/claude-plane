@@ -22,14 +22,25 @@ func ValidateJobSteps(steps []store.Step) []error {
 	var errs []error
 	sessionKeyMachines := make(map[string]string)
 	for _, s := range steps {
-		if s.TaskType != "claude_session" && s.TaskType != "shell" {
-			errs = append(errs, fmt.Errorf("step %q: task_type must be 'claude_session' or 'shell'", s.Name))
+		if s.TaskType != "claude_session" && s.TaskType != "shell" && s.TaskType != "run_job" {
+			errs = append(errs, fmt.Errorf("step %q: task_type must be 'claude_session', 'shell', or 'run_job'", s.Name))
 		}
 		if s.TaskType == "shell" && s.SessionKey != "" {
 			errs = append(errs, fmt.Errorf("step %q: shell tasks cannot share sessions", s.Name))
 		}
 		if s.TaskType == "shell" && s.Command == "" {
 			errs = append(errs, fmt.Errorf("step %q: shell tasks require a command", s.Name))
+		}
+		if s.TaskType == "run_job" {
+			if s.TargetJobID == "" {
+				errs = append(errs, fmt.Errorf("step %q: run_job tasks require a target_job_id", s.Name))
+			}
+			if s.MachineID != "" {
+				errs = append(errs, fmt.Errorf("step %q: run_job tasks must not have a machine_id", s.Name))
+			}
+			if s.SessionKey != "" {
+				errs = append(errs, fmt.Errorf("step %q: run_job tasks cannot share sessions", s.Name))
+			}
 		}
 		if s.SessionKey != "" {
 			if existing, ok := sessionKeyMachines[s.SessionKey]; ok {

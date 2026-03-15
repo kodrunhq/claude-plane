@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { RunDAGView } from '../components/runs/RunDAGView.tsx';
 import { RunStatusBadge } from '../components/runs/RunStatusBadge.tsx';
 import { TerminalView } from '../components/terminal/TerminalView.tsx';
-import { useRun, useCancelRun, useRetryStep, useRepairRun } from '../hooks/useRuns.ts';
+import { useRun, useCancelRun, useRetryTask, useRepairRun } from '../hooks/useRuns.ts';
 import { useJob } from '../hooks/useJobs.ts';
 import { useRunStore } from '../stores/runs.ts';
 import { formatDuration } from '../lib/format.ts';
@@ -23,14 +23,14 @@ export function RunDetail() {
   const dependencies = jobDetail?.dependencies ?? [];
 
   const cancelRun = useCancelRun();
-  const retryStep = useRetryStep();
+  const retryTask = useRetryTask();
   const repairRun = useRepairRun();
 
-  const selectedStepId = useRunStore((s) => s.selectedStepId);
-  const selectStep = useRunStore((s) => s.selectStep);
-  const setStepStatuses = useRunStore((s) => s.setStepStatuses);
+  const selectedTaskId = useRunStore((s) => s.selectedTaskId);
+  const selectTask = useRunStore((s) => s.selectTask);
+  const setTaskStatuses = useRunStore((s) => s.setTaskStatuses);
   const setActiveRunId = useRunStore((s) => s.setActiveRunId);
-  const stepStatuses = useRunStore((s) => s.stepStatuses);
+  const taskStatuses = useRunStore((s) => s.taskStatuses);
   const reset = useRunStore((s) => s.reset);
 
   // Reset store when route param changes to prevent state leaking between runs
@@ -39,32 +39,32 @@ export function RunDetail() {
     return () => reset();
   }, [id, setActiveRunId, reset]);
 
-  // Sync run steps to store
+  // Sync run tasks to store
   useEffect(() => {
     if (runSteps.length > 0) {
-      setStepStatuses(runSteps);
+      setTaskStatuses(runSteps);
     }
-  }, [runSteps, setStepStatuses]);
+  }, [runSteps, setTaskStatuses]);
 
-  // Build merged run steps from store (for live updates)
-  const mergedRunSteps = useMemo(() => {
-    if (stepStatuses.size === 0) return runSteps;
-    return runSteps.map((rs) => stepStatuses.get(rs.step_id) ?? rs);
-  }, [runSteps, stepStatuses]);
+  // Build merged run tasks from store (for live updates)
+  const mergedRunTasks = useMemo(() => {
+    if (taskStatuses.size === 0) return runSteps;
+    return runSteps.map((rs) => taskStatuses.get(rs.step_id) ?? rs);
+  }, [runSteps, taskStatuses]);
 
-  const selectedRunStep = useMemo(
-    () => mergedRunSteps.find((rs) => rs.step_id === selectedStepId),
-    [mergedRunSteps, selectedStepId],
+  const selectedRunTask = useMemo(
+    () => mergedRunTasks.find((rs) => rs.step_id === selectedTaskId),
+    [mergedRunTasks, selectedTaskId],
   );
 
-  const selectedStepName = useMemo(
-    () => steps.find((s) => s.step_id === selectedStepId)?.name,
-    [steps, selectedStepId],
+  const selectedTaskName = useMemo(
+    () => steps.find((s) => s.step_id === selectedTaskId)?.name,
+    [steps, selectedTaskId],
   );
 
-  const handleStepSelect = useCallback(
-    (stepId: string) => selectStep(stepId),
-    [selectStep],
+  const handleTaskSelect = useCallback(
+    (taskId: string) => selectTask(taskId),
+    [selectTask],
   );
 
   async function handleCancel() {
@@ -78,12 +78,12 @@ export function RunDetail() {
   }
 
   async function handleRetry() {
-    if (!id || !selectedStepId) return;
+    if (!id || !selectedTaskId) return;
     try {
-      await retryStep.mutateAsync({ runId: id, stepId: selectedStepId });
-      toast.success('Step retrying');
+      await retryTask.mutateAsync({ runId: id, taskId: selectedTaskId });
+      toast.success('Task retrying');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to retry step');
+      toast.error(err instanceof Error ? err.message : 'Failed to retry task');
     }
   }
 
@@ -168,7 +168,7 @@ export function RunDetail() {
   }
 
   const isActive = run.status === 'running' || run.status === 'pending';
-  const canRetry = selectedRunStep?.status === 'failed';
+  const canRetry = selectedRunTask?.status === 'failed';
   const canRepair = run.status === 'failed' || run.status === 'cancelled';
 
   return (
@@ -215,7 +215,7 @@ export function RunDetail() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30 transition-colors"
           >
             <RotateCcw size={14} />
-            Retry Step
+            Retry Task
           </button>
         )}
 
@@ -235,37 +235,37 @@ export function RunDetail() {
         <RunDAGView
           steps={steps}
           dependencies={dependencies}
-          runSteps={mergedRunSteps}
-          selectedStepId={selectedStepId}
-          onStepSelect={handleStepSelect}
+          runTasks={mergedRunTasks}
+          selectedTaskId={selectedTaskId}
+          onTaskSelect={handleTaskSelect}
         />
       </div>
 
-      {/* Step Terminal */}
+      {/* Task Terminal */}
       <div className="flex-1 min-h-0">
-        {selectedRunStep?.session_id ? (
+        {selectedRunTask?.session_id ? (
           <div className="h-full flex flex-col">
             <div className="px-3 py-1.5 bg-bg-secondary border-b border-border-primary text-xs text-text-secondary flex items-center justify-between">
               <span className="flex items-center gap-2">
-                {selectedStepName ?? 'Step'} - {selectedRunStep.status}
-                {selectedRunStep.task_type_snapshot && (
+                {selectedTaskName ?? 'Task'} - {selectedRunTask.status}
+                {selectedRunTask.task_type_snapshot && (
                   <span className="px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-secondary/70 text-[10px]">
-                    {selectedRunStep.task_type_snapshot}
+                    {selectedRunTask.task_type_snapshot}
                   </span>
                 )}
-                <AttemptBadge attempt={selectedRunStep.attempt} />
+                <AttemptBadge attempt={selectedRunTask.attempt} />
               </span>
-              {selectedRunStep.error && (
-                <span className="text-red-400 truncate ml-2">{selectedRunStep.error}</span>
+              {selectedRunTask.error && (
+                <span className="text-red-400 truncate ml-2">{selectedRunTask.error}</span>
               )}
             </div>
-            <TerminalView sessionId={selectedRunStep.session_id} className="flex-1" />
+            <TerminalView sessionId={selectedRunTask.session_id} className="flex-1" />
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-text-secondary text-sm">
-            {selectedStepId
-              ? 'Waiting for step to start...'
-              : 'Click a step in the DAG to view its terminal output'}
+            {selectedTaskId
+              ? 'Waiting for task to start...'
+              : 'Click a task in the DAG to view its terminal output'}
           </div>
         )}
       </div>

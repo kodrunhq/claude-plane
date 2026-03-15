@@ -2,14 +2,14 @@ import { memo } from 'react';
 import { BaseEdge, getSmoothStepPath } from '@xyflow/react';
 import type { EdgeProps, Edge } from '@xyflow/react';
 
-export interface StepEdgeData {
+export interface TaskEdgeData {
   sourceStatus?: string;
   [key: string]: unknown;
 }
 
-type StepEdgeType = Edge<StepEdgeData, 'step'>;
+type TaskEdgeType = Edge<TaskEdgeData, 'step'>;
 
-export const StepEdge = memo(function StepEdge(props: EdgeProps<StepEdgeType>) {
+export const TaskEdge = memo(function TaskEdge(props: EdgeProps<TaskEdgeType>) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props;
 
   const [edgePath] = getSmoothStepPath({

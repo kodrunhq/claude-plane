@@ -22,6 +22,8 @@ const (
 	prPerPage              = 30
 	checkRunPerPage        = 30
 	issuePerPage           = 30
+	commentPerPage         = 30
+	releasePerPage         = 10
 )
 
 // PRTrigger configures filtering for pull_request.opened events.
@@ -39,11 +41,30 @@ type IssueTrigger struct {
 	Filters Filters `json:"filters"`
 }
 
+// CommentTrigger configures filtering for issue/PR comment events.
+type CommentTrigger struct {
+	Filters Filters `json:"filters"`
+}
+
+// ReviewTrigger configures filtering for pull_request review events.
+type ReviewTrigger struct {
+	Filters Filters `json:"filters"`
+}
+
+// ReleaseTrigger configures filtering for release published events.
+type ReleaseTrigger struct {
+	Filters Filters `json:"filters"`
+}
+
 // TriggerConfig holds which GitHub event types to poll and their filters.
 type TriggerConfig struct {
-	PullRequestOpened *PRTrigger    `json:"pull_request_opened"`
-	CheckRunCompleted *CheckTrigger `json:"check_run_completed"`
-	IssueLabeled      *IssueTrigger `json:"issue_labeled"`
+	PullRequestOpened  *PRTrigger      `json:"pull_request_opened"`
+	CheckRunCompleted  *CheckTrigger   `json:"check_run_completed"`
+	IssueLabeled       *IssueTrigger   `json:"issue_labeled"`
+	IssueComment       *CommentTrigger `json:"issue_comment"`
+	PullRequestComment *CommentTrigger `json:"pull_request_comment"`
+	PullRequestReview  *ReviewTrigger  `json:"pull_request_review"`
+	ReleasePublished   *ReleaseTrigger `json:"release_published"`
 }
 
 // MatchedEvent is a successfully matched event ready for session creation.
@@ -163,6 +184,68 @@ func (p *RepoPoller) Poll(ctx context.Context) ([]MatchedEvent, error) {
 			p.logger.Warn("GitHub rate limit nearly exhausted, backing off",
 				slog.String("repo", p.repo),
 				slog.String("trigger", "issue_labeled"),
+			)
+			return results, nil
+		}
+	}
+
+	if p.triggers.IssueComment != nil {
+		commentResults, rateLow, err := p.processIssueComments(ctx, p.triggers.IssueComment)
+		if err != nil {
+			return results, fmt.Errorf("process issue comments for %s: %w", p.repo, err)
+		}
+		results = append(results, commentResults...)
+		if rateLow {
+			p.logger.Warn("GitHub rate limit nearly exhausted, backing off",
+				slog.String("repo", p.repo),
+				slog.String("trigger", "issue_comment"),
+			)
+			return results, nil
+		}
+	}
+
+	if p.triggers.PullRequestComment != nil {
+		commentResults, rateLow, err := p.processPRComments(ctx, p.triggers.PullRequestComment)
+		if err != nil {
+			return results, fmt.Errorf("process PR comments for %s: %w", p.repo, err)
+		}
+		results = append(results, commentResults...)
+		if rateLow {
+			p.logger.Warn("GitHub rate limit nearly exhausted, backing off",
+				slog.String("repo", p.repo),
+				slog.String("trigger", "pull_request_comment"),
+			)
+			return results, nil
+		}
+	}
+
+	if p.triggers.PullRequestReview != nil {
+		// PR reviews require iterating open PRs
+		prs := p.getCachedOpenPRs(ctx)
+		reviewResults, rateLow, err := p.processPRReviews(ctx, prs, p.triggers.PullRequestReview)
+		if err != nil {
+			return results, fmt.Errorf("process PR reviews for %s: %w", p.repo, err)
+		}
+		results = append(results, reviewResults...)
+		if rateLow {
+			p.logger.Warn("GitHub rate limit nearly exhausted, backing off",
+				slog.String("repo", p.repo),
+				slog.String("trigger", "pull_request_review"),
+			)
+			return results, nil
+		}
+	}
+
+	if p.triggers.ReleasePublished != nil {
+		releaseResults, rateLow, err := p.processReleases(ctx, p.triggers.ReleasePublished)
+		if err != nil {
+			return results, fmt.Errorf("process releases for %s: %w", p.repo, err)
+		}
+		results = append(results, releaseResults...)
+		if rateLow {
+			p.logger.Warn("GitHub rate limit nearly exhausted, backing off",
+				slog.String("repo", p.repo),
+				slog.String("trigger", "release_published"),
 			)
 		}
 	}
@@ -509,6 +592,367 @@ func (p *RepoPoller) checkRateLimit(resp *http.Response) bool {
 		return false
 	}
 	return n < rateLimitWarningThresh
+}
+
+// getCachedOpenPRs fetches open PRs, logging and returning empty on error.
+// This is used by triggers that need PR context (reviews) but may not have
+// already fetched PRs via the PR trigger.
+func (p *RepoPoller) getCachedOpenPRs(ctx context.Context) []PRData {
+	prs, _, err := p.fetchOpenPRs(ctx)
+	if err != nil {
+		p.logger.Warn("failed to fetch PRs for review trigger",
+			slog.String("repo", p.repo),
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+	return prs
+}
+
+// processIssueComments polls the issue comments endpoint and returns matched events.
+func (p *RepoPoller) processIssueComments(ctx context.Context, trigger *CommentTrigger) ([]MatchedEvent, bool, error) {
+	cursorKey := fmt.Sprintf("%s:issue_comment:%s", p.connID, p.repo)
+	cursor := p.state.GetCursor(cursorKey)
+
+	endpoint := fmt.Sprintf(
+		"%s/repos/%s/issues/comments?sort=updated&direction=desc&per_page=%d",
+		p.apiBase, p.repo, commentPerPage,
+	)
+	if cursor != "" {
+		endpoint += "&since=" + url.QueryEscape(cursor)
+	}
+
+	req, err := p.newRequest(ctx, http.MethodGet, endpoint)
+	if err != nil {
+		return nil, false, err
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, false, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	rateLow := p.checkRateLimit(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, rateLow, fmt.Errorf("GET %s returned %d", endpoint, resp.StatusCode)
+	}
+
+	var comments []IssueCommentData
+	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+		return nil, rateLow, fmt.Errorf("decode issue comments: %w", err)
+	}
+
+	var results []MatchedEvent
+	var latestUpdatedAt string
+
+	for _, c := range comments {
+		if isAfter(c.UpdatedAt, latestUpdatedAt) {
+			latestUpdatedAt = c.UpdatedAt
+		}
+
+		eventKey := fmt.Sprintf("issue_comment:%s:%d", p.repo, c.ID)
+		if p.state.IsProcessed(eventKey) {
+			continue
+		}
+
+		eventData := EventData{Author: c.User.Login}
+		if !trigger.Filters.Match(eventData) {
+			continue
+		}
+
+		// Extract issue number and title from issue_url (last segment is the number)
+		issueNumber, issueTitle, issueURL := extractIssueInfoFromURL(c.IssueURL)
+
+		variables := ExtractIssueCommentVariables(c, p.repo, issueNumber, issueTitle, issueURL)
+		results = append(results, MatchedEvent{
+			Template:  p.template,
+			Variables: variables,
+			EventKey:  eventKey,
+		})
+
+		if err := p.state.MarkProcessed(eventKey); err != nil {
+			p.logger.Warn("failed to mark issue comment processed",
+				slog.String("event_key", eventKey),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
+	if latestUpdatedAt != "" && isAfter(latestUpdatedAt, cursor) {
+		if err := p.state.SetCursor(cursorKey, latestUpdatedAt); err != nil {
+			p.logger.Warn("failed to set issue comment cursor",
+				slog.String("cursor_key", cursorKey),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
+	return results, rateLow, nil
+}
+
+// processPRComments polls the PR review comments endpoint and returns matched events.
+func (p *RepoPoller) processPRComments(ctx context.Context, trigger *CommentTrigger) ([]MatchedEvent, bool, error) {
+	cursorKey := fmt.Sprintf("%s:pr_comment:%s", p.connID, p.repo)
+	cursor := p.state.GetCursor(cursorKey)
+
+	endpoint := fmt.Sprintf(
+		"%s/repos/%s/pulls/comments?sort=updated&direction=desc&per_page=%d",
+		p.apiBase, p.repo, commentPerPage,
+	)
+	if cursor != "" {
+		endpoint += "&since=" + url.QueryEscape(cursor)
+	}
+
+	req, err := p.newRequest(ctx, http.MethodGet, endpoint)
+	if err != nil {
+		return nil, false, err
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, false, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	rateLow := p.checkRateLimit(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, rateLow, fmt.Errorf("GET %s returned %d", endpoint, resp.StatusCode)
+	}
+
+	var comments []PRCommentData
+	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+		return nil, rateLow, fmt.Errorf("decode PR comments: %w", err)
+	}
+
+	var results []MatchedEvent
+	var latestUpdatedAt string
+
+	for _, c := range comments {
+		if isAfter(c.UpdatedAt, latestUpdatedAt) {
+			latestUpdatedAt = c.UpdatedAt
+		}
+
+		eventKey := fmt.Sprintf("pr_comment:%s:%d", p.repo, c.ID)
+		if p.state.IsProcessed(eventKey) {
+			continue
+		}
+
+		eventData := EventData{Author: c.User.Login}
+		if !trigger.Filters.Match(eventData) {
+			continue
+		}
+
+		prNumber, prTitle, prURL := extractPRInfoFromURL(c.PullRequestURL)
+
+		variables := ExtractPRCommentVariables(c, p.repo, prNumber, prTitle, prURL)
+		results = append(results, MatchedEvent{
+			Template:  p.template,
+			Variables: variables,
+			EventKey:  eventKey,
+		})
+
+		if err := p.state.MarkProcessed(eventKey); err != nil {
+			p.logger.Warn("failed to mark PR comment processed",
+				slog.String("event_key", eventKey),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
+	if latestUpdatedAt != "" && isAfter(latestUpdatedAt, cursor) {
+		if err := p.state.SetCursor(cursorKey, latestUpdatedAt); err != nil {
+			p.logger.Warn("failed to set PR comment cursor",
+				slog.String("cursor_key", cursorKey),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
+	return results, rateLow, nil
+}
+
+// processPRReviews polls reviews for each open PR and returns matched events.
+func (p *RepoPoller) processPRReviews(ctx context.Context, prs []PRData, trigger *ReviewTrigger) ([]MatchedEvent, bool, error) {
+	var results []MatchedEvent
+
+	for _, pr := range prs {
+		reviews, rateLow, err := p.fetchPRReviews(ctx, pr.Number)
+		if err != nil {
+			p.logger.Warn("failed to fetch PR reviews",
+				slog.String("repo", p.repo),
+				slog.Int("pr", pr.Number),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+
+		for _, review := range reviews {
+			eventKey := fmt.Sprintf("review:%s:%d", p.repo, review.ID)
+			if p.state.IsProcessed(eventKey) {
+				continue
+			}
+
+			eventData := EventData{
+				Author:      review.User.Login,
+				ReviewState: strings.ToLower(review.State),
+			}
+			if !trigger.Filters.Match(eventData) {
+				continue
+			}
+
+			variables := ExtractPRReviewVariables(review, p.repo, pr.Number, pr.Title, pr.HTMLURL)
+			results = append(results, MatchedEvent{
+				Template:  p.template,
+				Variables: variables,
+				EventKey:  eventKey,
+			})
+
+			if err := p.state.MarkProcessed(eventKey); err != nil {
+				p.logger.Warn("failed to mark PR review processed",
+					slog.String("event_key", eventKey),
+					slog.String("error", err.Error()),
+				)
+			}
+		}
+
+		if rateLow {
+			return results, true, nil
+		}
+	}
+
+	return results, false, nil
+}
+
+// fetchPRReviews fetches reviews for a single PR.
+func (p *RepoPoller) fetchPRReviews(ctx context.Context, prNumber int) ([]PRReviewData, bool, error) {
+	endpoint := fmt.Sprintf(
+		"%s/repos/%s/pulls/%d/reviews?per_page=100",
+		p.apiBase, p.repo, prNumber,
+	)
+	req, err := p.newRequest(ctx, http.MethodGet, endpoint)
+	if err != nil {
+		return nil, false, err
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, false, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	rateLow := p.checkRateLimit(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, rateLow, fmt.Errorf("GET %s returned %d", endpoint, resp.StatusCode)
+	}
+
+	var reviews []PRReviewData
+	if err := json.NewDecoder(resp.Body).Decode(&reviews); err != nil {
+		return nil, rateLow, fmt.Errorf("decode PR reviews: %w", err)
+	}
+
+	return reviews, rateLow, nil
+}
+
+// processReleases polls the releases endpoint and returns matched events.
+func (p *RepoPoller) processReleases(ctx context.Context, trigger *ReleaseTrigger) ([]MatchedEvent, bool, error) {
+	endpoint := fmt.Sprintf(
+		"%s/repos/%s/releases?per_page=%d",
+		p.apiBase, p.repo, releasePerPage,
+	)
+
+	req, err := p.newRequest(ctx, http.MethodGet, endpoint)
+	if err != nil {
+		return nil, false, err
+	}
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, false, fmt.Errorf("GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+
+	rateLow := p.checkRateLimit(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, rateLow, fmt.Errorf("GET %s returned %d", endpoint, resp.StatusCode)
+	}
+
+	var releases []ReleaseData
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, rateLow, fmt.Errorf("decode releases: %w", err)
+	}
+
+	var results []MatchedEvent
+
+	for _, release := range releases {
+		eventKey := fmt.Sprintf("release:%s:%d", p.repo, release.ID)
+		if p.state.IsProcessed(eventKey) {
+			continue
+		}
+
+		eventData := EventData{
+			Tag:    release.TagName,
+			Author: release.Author.Login,
+		}
+		if !trigger.Filters.Match(eventData) {
+			continue
+		}
+
+		variables := ExtractReleaseVariables(release, p.repo)
+		results = append(results, MatchedEvent{
+			Template:  p.template,
+			Variables: variables,
+			EventKey:  eventKey,
+		})
+
+		if err := p.state.MarkProcessed(eventKey); err != nil {
+			p.logger.Warn("failed to mark release processed",
+				slog.String("event_key", eventKey),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
+	return results, rateLow, nil
+}
+
+// extractIssueInfoFromURL extracts issue number and constructs the issue HTML URL
+// from a GitHub API URL like https://api.github.com/repos/owner/repo/issues/42.
+// Title is not available from the comment endpoint — returned empty.
+func extractIssueInfoFromURL(issueAPIURL string) (int, string, string) {
+	parts := strings.Split(issueAPIURL, "/")
+	// Expected: [..., "repos", owner, repo, "issues", number]
+	if len(parts) >= 5 {
+		n, err := strconv.Atoi(parts[len(parts)-1])
+		if err == nil {
+			owner := parts[len(parts)-4]
+			repo := parts[len(parts)-3]
+			htmlURL := fmt.Sprintf("https://github.com/%s/%s/issues/%d", owner, repo, n)
+			return n, "", htmlURL
+		}
+	}
+	return 0, "", ""
+}
+
+// extractPRInfoFromURL extracts PR number and constructs the PR HTML URL
+// from a GitHub API URL like https://api.github.com/repos/owner/repo/pulls/42.
+// Title is not available from the comment endpoint — returned empty.
+func extractPRInfoFromURL(prAPIURL string) (int, string, string) {
+	parts := strings.Split(prAPIURL, "/")
+	if len(parts) >= 5 {
+		n, err := strconv.Atoi(parts[len(parts)-1])
+		if err == nil {
+			owner := parts[len(parts)-4]
+			repo := parts[len(parts)-3]
+			htmlURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, n)
+			return n, "", htmlURL
+		}
+	}
+	return 0, "", ""
 }
 
 // isAfter returns true when candidate is lexicographically greater than base.

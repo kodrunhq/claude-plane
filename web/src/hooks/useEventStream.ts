@@ -49,7 +49,7 @@ export function useEventStream() {
             case 'run.step.status': {
               const p = msg.payload as { runId?: string; stepId?: string; status?: string; sessionId?: string };
               if (p.runId && p.stepId && p.status) {
-                useRunStore.getState().updateStepStatus(p.runId, p.stepId, p.status, p.sessionId);
+                useRunStore.getState().updateTaskStatus(p.runId, p.stepId, p.status, p.sessionId);
               }
               queryClient.invalidateQueries({ queryKey: ['runs'] });
               break;

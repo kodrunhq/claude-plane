@@ -2,11 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { Bot, Terminal } from 'lucide-react';
 import { useCreateSession } from '../../hooks/useSessions.ts';
 import { useMachines } from '../../hooks/useMachines.ts';
 import { extractTemplateVariables } from '../../lib/templateVars.ts';
 import { TemplatePicker } from '../templates/TemplatePicker.tsx';
 import type { SessionTemplate } from '../../types/template.ts';
+
+type SessionType = 'claude' | 'terminal';
 
 // Estimated terminal font metrics and layout offsets.
 // These must match the configuration used by the xterm.js Terminal
@@ -27,6 +30,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   const createSession = useCreateSession();
   const { data: machines } = useMachines();
 
+  const [sessionType, setSessionType] = useState<SessionType>('claude');
   const [machineId, setMachineId] = useState(preselectedMachineId ?? '');
   const [workingDir, setWorkingDir] = useState('');
   const [command, setCommand] = useState('');
@@ -51,6 +55,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   useEffect(() => {
     if (!open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting form on close
+      setSessionType('claude');
       if (!preselectedMachineId) setMachineId('');
       setWorkingDir('');
       setCommand('');
@@ -84,15 +89,17 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
         ),
       );
 
+      const effectiveCommand = sessionType === 'terminal' ? 'bash' : command;
+
       const session = await createSession.mutateAsync({
         machine_id: machineId,
         terminal_size: { cols, rows },
-        ...(command ? { command } : {}),
+        ...(effectiveCommand ? { command: effectiveCommand } : {}),
         ...(workingDir ? { working_dir: workingDir } : {}),
-        ...(model ? { model } : {}),
-        ...(skipPermissions ? { skip_permissions: skipPermissions === '1' } : {}),
-        ...(selectedTemplate ? { template_id: selectedTemplate.template_id } : {}),
-        ...(variableNames.length > 0 ? { variables } : {}),
+        ...(sessionType === 'claude' && model ? { model } : {}),
+        ...(sessionType === 'claude' && skipPermissions ? { skip_permissions: skipPermissions === '1' } : {}),
+        ...(sessionType === 'claude' && selectedTemplate ? { template_id: selectedTemplate.template_id } : {}),
+        ...(sessionType === 'claude' && variableNames.length > 0 ? { variables } : {}),
       });
       toast.success('Session created');
       onClose();
@@ -112,22 +119,64 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
         <h2 className="text-lg font-semibold text-text-primary mb-4">New Session</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Session Type Selector */}
           <div>
-            <label className="block text-sm text-text-secondary mb-1">Template</label>
-            <TemplatePicker
-              onSelect={(template) => {
-                setSelectedTemplate(template);
-                setVariables({});
-                if (template.command) setCommand(template.command);
-                if (template.working_dir) setWorkingDir(template.working_dir);
-              }}
-            />
-            {selectedTemplate && (
-              <p className="text-xs text-accent-primary mt-1">
-                Using template: {selectedTemplate.name}
-              </p>
-            )}
+            <label className="block text-sm text-text-secondary mb-1">Session Type</label>
+            <div className="flex rounded-md border border-gray-600 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionType('claude');
+                }}
+                className={`flex items-center justify-center gap-2 flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                  sessionType === 'claude'
+                    ? 'bg-accent-primary text-white'
+                    : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <Bot size={16} />
+                Claude
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionType('terminal');
+                  setCommand('');
+                  setModel('');
+                  setSkipPermissions('');
+                  setSelectedTemplate(null);
+                  setVariables({});
+                }}
+                className={`flex items-center justify-center gap-2 flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                  sessionType === 'terminal'
+                    ? 'bg-accent-primary text-white'
+                    : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <Terminal size={16} />
+                Terminal
+              </button>
+            </div>
           </div>
+
+          {sessionType === 'claude' && (
+            <div>
+              <label className="block text-sm text-text-secondary mb-1">Template</label>
+              <TemplatePicker
+                onSelect={(template) => {
+                  setSelectedTemplate(template);
+                  setVariables({});
+                  if (template.command) setCommand(template.command);
+                  if (template.working_dir) setWorkingDir(template.working_dir);
+                }}
+              />
+              {selectedTemplate && (
+                <p className="text-xs text-accent-primary mt-1">
+                  Using template: {selectedTemplate.name}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-text-secondary mb-1">Machine</label>
@@ -162,62 +211,66 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-text-secondary mb-1">
-              Command <span className="text-text-secondary/50">(defaults to "claude")</span>
-            </label>
-            <input
-              type="text"
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              placeholder="claude"
-              className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
-            />
-          </div>
+          {sessionType === 'claude' && (
+            <>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">
+                  Command <span className="text-text-secondary/50">(defaults to "claude")</span>
+                </label>
+                <input
+                  type="text"
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  placeholder="claude"
+                  className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm text-text-secondary mb-1">
-              Model <span className="text-text-secondary/50">(optional)</span>
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary"
-            >
-              <option value="">Default</option>
-              <option value="opus">Opus</option>
-              <option value="sonnet">Sonnet</option>
-              <option value="haiku">Haiku</option>
-            </select>
-          </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">
+                  Model <span className="text-text-secondary/50">(optional)</span>
+                </label>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                >
+                  <option value="">Default</option>
+                  <option value="opus">Opus</option>
+                  <option value="sonnet">Sonnet</option>
+                  <option value="haiku">Haiku</option>
+                </select>
+              </div>
 
-          <div>
-            <label className="block text-sm text-text-secondary mb-1">
-              Skip Permissions <span className="text-text-secondary/50">(optional)</span>
-            </label>
-            <select
-              value={skipPermissions}
-              onChange={(e) => setSkipPermissions(e.target.value)}
-              className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary"
-            >
-              <option value="">Default (from settings)</option>
-              <option value="1">On</option>
-              <option value="0">Off</option>
-            </select>
-          </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">
+                  Skip Permissions <span className="text-text-secondary/50">(optional)</span>
+                </label>
+                <select
+                  value={skipPermissions}
+                  onChange={(e) => setSkipPermissions(e.target.value)}
+                  className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+                >
+                  <option value="">Default (from settings)</option>
+                  <option value="1">On</option>
+                  <option value="0">Off</option>
+                </select>
+              </div>
 
-          {variableNames.length > 0 && variableNames.map((varName) => (
-            <div key={varName}>
-              <label className="block text-sm text-text-secondary mb-1">{varName}</label>
-              <input
-                type="text"
-                value={variables[varName] ?? ''}
-                onChange={(e) => setVariables((prev) => ({ ...prev, [varName]: e.target.value }))}
-                placeholder={`Enter value for ${varName}`}
-                className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
-              />
-            </div>
-          ))}
+              {variableNames.length > 0 && variableNames.map((varName) => (
+                <div key={varName}>
+                  <label className="block text-sm text-text-secondary mb-1">{varName}</label>
+                  <input
+                    type="text"
+                    value={variables[varName] ?? ''}
+                    onChange={(e) => setVariables((prev) => ({ ...prev, [varName]: e.target.value }))}
+                    placeholder={`Enter value for ${varName}`}
+                    className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
+                  />
+                </div>
+              ))}
+            </>
+          )}
 
           <div className="flex justify-end gap-3 mt-2">
             <button

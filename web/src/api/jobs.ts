@@ -2,13 +2,13 @@ import { request } from './client.ts';
 import type {
   Job,
   JobDetail,
-  Step,
-  StepDependency,
+  Task,
+  TaskDependency,
   Run,
   RunDetail,
   CreateJobParams,
-  CreateStepParams,
-  UpdateStepParams,
+  CreateTaskParams,
+  UpdateTaskParams,
   ListRunsParams,
   TriggerRunParams,
 } from '../types/job.ts';
@@ -27,32 +27,32 @@ export const jobsApi = {
   delete: (id: string) =>
     request<void>(`/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
-  // Steps
-  addStep: (jobId: string, params: CreateStepParams) =>
-    request<Step>(`/jobs/${encodeURIComponent(jobId)}/steps`, {
+  // Tasks
+  addTask: (jobId: string, params: CreateTaskParams) =>
+    request<Task>(`/jobs/${encodeURIComponent(jobId)}/steps`, {
       method: 'POST',
       body: JSON.stringify(params),
     }),
-  updateStep: (jobId: string, stepId: string, params: UpdateStepParams) =>
+  updateTask: (jobId: string, taskId: string, params: UpdateTaskParams) =>
     request<{ status: string }>(
-      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(stepId)}`,
+      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(taskId)}`,
       { method: 'PUT', body: JSON.stringify(params) },
     ),
-  deleteStep: (jobId: string, stepId: string) =>
+  deleteTask: (jobId: string, taskId: string) =>
     request<void>(
-      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(stepId)}`,
+      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(taskId)}`,
       { method: 'DELETE' },
     ),
 
   // Dependencies
-  addDependency: (jobId: string, stepId: string, dependsOnStepId: string) =>
-    request<StepDependency>(
-      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(stepId)}/deps`,
-      { method: 'POST', body: JSON.stringify({ depends_on: dependsOnStepId }) },
+  addDependency: (jobId: string, taskId: string, dependsOnTaskId: string) =>
+    request<TaskDependency>(
+      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(taskId)}/deps`,
+      { method: 'POST', body: JSON.stringify({ depends_on: dependsOnTaskId }) },
     ),
-  removeDependency: (jobId: string, stepId: string, depId: string) =>
+  removeDependency: (jobId: string, taskId: string, depId: string) =>
     request<void>(
-      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(stepId)}/deps/${encodeURIComponent(depId)}`,
+      `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(taskId)}/deps/${encodeURIComponent(depId)}`,
       { method: 'DELETE' },
     ),
 
@@ -75,9 +75,9 @@ export const jobsApi = {
   getRun: (id: string) => request<RunDetail>(`/runs/${encodeURIComponent(id)}`),
   cancelRun: (id: string) =>
     request<Run>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  retryStep: (runId: string, stepId: string) =>
+  retryTask: (runId: string, taskId: string) =>
     request<{ status: string }>(
-      `/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepId)}/retry`,
+      `/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(taskId)}/retry`,
       { method: 'POST' },
     ),
   repairRun: (runId: string, params?: { parameters?: Record<string, string> }) =>

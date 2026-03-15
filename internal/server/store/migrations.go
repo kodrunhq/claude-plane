@@ -424,6 +424,16 @@ CREATE TABLE IF NOT EXISTS run_step_values (
 CREATE INDEX IF NOT EXISTS idx_run_step_values_run_step ON run_step_values(run_step_id);
 `,
 	},
+	{
+		Version:     11,
+		Description: "add run_job task type fields",
+		SQL: `
+ALTER TABLE steps ADD COLUMN target_job_id TEXT;
+ALTER TABLE steps ADD COLUMN job_params TEXT;
+ALTER TABLE run_steps ADD COLUMN target_job_id_snapshot TEXT;
+ALTER TABLE run_steps ADD COLUMN job_params_snapshot TEXT;
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
