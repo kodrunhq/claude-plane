@@ -336,6 +336,17 @@ func TestJoinHandler_ValidCode(t *testing.T) {
 	if resp["grpc_address"] != "test.example.com:9090" {
 		t.Errorf("grpc_address = %q, want %q", resp["grpc_address"], "test.example.com:9090")
 	}
+
+	// Assert cert fields are present in the response.
+	if resp["ca_cert_pem"] != "ca-data" {
+		t.Errorf("ca_cert_pem = %q, want %q", resp["ca_cert_pem"], "ca-data")
+	}
+	if resp["agent_cert_pem"] != "cert-data" {
+		t.Errorf("agent_cert_pem = %q, want %q", resp["agent_cert_pem"], "cert-data")
+	}
+	if resp["agent_key_pem"] != "key-data" {
+		t.Errorf("agent_key_pem = %q, want %q", resp["agent_key_pem"], "key-data")
+	}
 }
 
 func TestJoinHandler_InvalidCode(t *testing.T) {
@@ -353,6 +364,7 @@ func TestJoinHandler_InvalidCode(t *testing.T) {
 		{"invalid chars", `{"code":"a3x9k2"}`, http.StatusBadRequest},
 		{"ambiguous O", `{"code":"A3XOK2"}`, http.StatusBadRequest},
 		{"not found", `{"code":"ZZZZZZ"}`, http.StatusNotFound},
+		{"malformed json", "not json", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
@@ -369,6 +381,91 @@ func TestJoinHandler_InvalidCode(t *testing.T) {
 				t.Errorf("status = %d, want %d; body = %s", w.Code, tt.code, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestJoinHandler_ExpiredCode(t *testing.T) {
+	h, s := newProvisionHandlerFixture(t, &handler.UserClaims{UserID: "admin-id", Role: "admin"})
+	ctx := context.Background()
+
+	tok := store.ProvisioningToken{
+		Token:         "test-token-expired",
+		ShortCode:     "E5X9K2",
+		MachineID:     "worker-expired",
+		TargetOS:      "linux",
+		TargetArch:    "amd64",
+		CACertPEM:     "ca-data",
+		AgentCertPEM:  "cert-data",
+		AgentKeyPEM:   "key-data",
+		ServerAddress: "http://test.example.com",
+		GRPCAddress:   "test.example.com:9090",
+		CreatedBy:     "admin",
+		CreatedAt:     time.Now().UTC(),
+		ExpiresAt:     time.Now().UTC().Add(-time.Hour),
+	}
+	if err := s.CreateProvisioningToken(ctx, tok); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	body := `{"code":"E5X9K2"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision/join", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/provision/join", h.JoinByCode)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusNotFound, w.Body.String())
+	}
+}
+
+func TestJoinHandler_RedeemedCode(t *testing.T) {
+	h, s := newProvisionHandlerFixture(t, &handler.UserClaims{UserID: "admin-id", Role: "admin"})
+	ctx := context.Background()
+
+	tok := store.ProvisioningToken{
+		Token:         "test-token-redeemed",
+		ShortCode:     "R7Y8H3",
+		MachineID:     "worker-redeemed",
+		TargetOS:      "linux",
+		TargetArch:    "amd64",
+		CACertPEM:     "ca-data",
+		AgentCertPEM:  "cert-data",
+		AgentKeyPEM:   "key-data",
+		ServerAddress: "http://test.example.com",
+		GRPCAddress:   "test.example.com:9090",
+		CreatedBy:     "admin",
+		CreatedAt:     time.Now().UTC(),
+		ExpiresAt:     time.Now().UTC().Add(time.Hour),
+	}
+	if err := s.CreateProvisioningToken(ctx, tok); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// First call should succeed.
+	body := `{"code":"R7Y8H3"}`
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/provision/join", strings.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/provision/join", h.JoinByCode)
+	r.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first call: status = %d, want 200; body = %s", w1.Code, w1.Body.String())
+	}
+
+	// Second call with same code should fail (already redeemed).
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/provision/join", strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusNotFound {
+		t.Errorf("second call: status = %d, want %d; body = %s", w2.Code, http.StatusNotFound, w2.Body.String())
 	}
 }
 

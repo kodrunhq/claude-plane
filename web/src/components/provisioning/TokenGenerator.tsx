@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Copy, Check, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCreateProvisioningToken } from '../../hooks/useProvisioning.ts';
@@ -13,13 +13,16 @@ const DEFAULT_PARAMS: CreateProvisionParams = {
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       toast.success('Copied to clipboard');
-      setTimeout(() => setCopied(false), 2000);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error('Failed to copy to clipboard');
     }
@@ -41,9 +44,14 @@ function ExpiryCountdown({ expiresAt }: { expiresAt: string }) {
 
   // Re-render every second for countdown
   useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 1000);
+    const interval = setInterval(() => {
+      if (new Date(expiresAt).getTime() - Date.now() <= 0) {
+        clearInterval(interval);
+      }
+      setTick((t) => t + 1);
+    }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [expiresAt]);
 
   const now = new Date();
   const expires = new Date(expiresAt);
@@ -83,6 +91,7 @@ export function TokenGenerator() {
       const res = await createToken.mutateAsync(params);
       setResult(res);
       setParams(DEFAULT_PARAMS);
+      setShowAdvanced(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create provisioning token');
     }

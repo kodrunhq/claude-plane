@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -121,19 +122,15 @@ func newJoinCmd() *cobra.Command {
 				return err
 			}
 
-			// Enforce HTTPS unless --insecure is set
-			if !insecure && len(serverURL) >= 7 && serverURL[:7] == "http://" {
-				return fmt.Errorf("server URL must use HTTPS. Use --insecure to allow plain HTTP (not recommended for production)")
-			}
-			if insecure && len(serverURL) >= 7 && serverURL[:7] == "http://" {
-				fmt.Fprintln(os.Stderr, "WARNING: Using plain HTTP. Certificate material will be transmitted unencrypted. Use HTTPS in production.")
+			if err := agent.ValidateServerURL(serverURL, insecure); err != nil {
+				return err
 			}
 
 			if err := agent.ExecuteJoin(serverURL, code, configDir); err != nil {
 				return err
 			}
 
-			configPath := configDir + "/agent.toml"
+			configPath := filepath.Join(configDir, "agent.toml")
 			fmt.Printf("\nAgent configured for machine joining\n")
 			fmt.Printf("Certificates written to %s/certs/\n", configDir)
 			fmt.Printf("Config written to %s\n\n", configPath)

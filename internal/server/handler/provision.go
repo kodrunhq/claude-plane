@@ -187,14 +187,17 @@ func (h *ProvisionHandler) JoinByCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !provision.ValidateShortCode(req.Code) {
-		writeError(w, http.StatusBadRequest, "invalid code format: must be 6 characters from ABCDEFGHJKMNPQRSTUVWXYZ23456789")
+		writeError(w, http.StatusBadRequest, "invalid code format")
 		return
 	}
 
 	token, err := h.store.GetProvisioningTokenByCode(r.Context(), req.Code)
 	if err != nil {
-		// All error cases (not found, expired, redeemed) return 404
-		// to avoid leaking whether a code was ever valid.
+		if !errors.Is(err, store.ErrNotFound) &&
+			!errors.Is(err, store.ErrTokenExpired) &&
+			!errors.Is(err, store.ErrTokenAlreadyRedeemed) {
+			slog.Error("join by code lookup failed", "error", err)
+		}
 		writeError(w, http.StatusNotFound, "invalid or expired code")
 		return
 	}
