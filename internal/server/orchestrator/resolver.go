@@ -107,6 +107,13 @@ func resolveJobRef(ref string, meta JobMeta) string {
 //	steps.<name>.values.<key> — task value from a completed step
 //	steps.<name>.status       — completion status
 //	steps.<name>.exit_code    — exit code
+//
+// Security note: task values are untrusted output from Claude CLI sessions.
+// A malicious or confused model could emit values containing template markers
+// (e.g. ${VAR} or {{job.name}}) which would be resolved if the output is fed
+// back through ResolveReferences. This is mitigated by not resolving templates
+// in shell task Command fields (only Args), limiting the blast radius to
+// argument values where untrusted data is expected.
 func resolveStepRef(ref string, stepValues map[string]map[string]string, stepResults map[string]StepResult) string {
 	// Expected format: steps.<name>.<field>[.<subfield>]
 	parts := strings.SplitN(ref, ".", 4)
@@ -148,7 +155,9 @@ func resolveStepRef(ref string, stepValues map[string]map[string]string, stepRes
 }
 
 // resolveParameters merges job default parameters (JSON) with runtime overrides.
-// Overrides take precedence. Invalid JSON in jobDefaultsJSON is logged and ignored.
+// Only overrides for keys that exist in the job defaults are accepted; unknown
+// keys are silently dropped (with a warning log). If the job defines no
+// parameters, all overrides are ignored.
 func resolveParameters(jobDefaultsJSON string, overrides map[string]string) map[string]string {
 	defaults := make(map[string]string)
 	if jobDefaultsJSON != "" {
@@ -156,8 +165,13 @@ func resolveParameters(jobDefaultsJSON string, overrides map[string]string) map[
 			slog.Warn("invalid job parameters JSON", "error", err)
 		}
 	}
+	// Only allow overrides for keys that exist in job defaults.
 	for k, v := range overrides {
-		defaults[k] = v
+		if _, exists := defaults[k]; exists {
+			defaults[k] = v
+		} else {
+			slog.Warn("ignoring unknown parameter override", "key", k)
+		}
 	}
 	return defaults
 }
