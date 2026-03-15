@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Terminal, Server, Activity, Plus, AlertCircle, RefreshCw, Workflow, Play, Clock } from 'lucide-react';
+import { Server, Activity, Plus, AlertCircle, RefreshCw, Workflow, Play } from 'lucide-react';
 import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
 import { useJobs } from '../hooks/useJobs.ts';
@@ -121,8 +121,8 @@ export function CommandCenter() {
         </button>
       </div>
 
-      {/* Stats Row — Sessions & Machines */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      {/* Stats Row — 5 cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard
           icon={<Activity size={24} />}
           label="Active Sessions"
@@ -135,16 +135,6 @@ export function CommandCenter() {
           value={isLoading ? '--' : String(onlineMachines.length)}
           accent="green"
         />
-        <StatCard
-          icon={<Terminal size={24} />}
-          label="Total Sessions"
-          value={isLoading ? '--' : String(sessions?.length ?? 0)}
-          accent="purple"
-        />
-      </div>
-
-      {/* Stats Row — Jobs & Runs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           icon={<Workflow size={24} />}
           label="Total Jobs"
@@ -165,16 +155,131 @@ export function CommandCenter() {
           value={isJobsRunsLoading ? '--' : completionRate !== null ? `${completionRate}%` : 'N/A'}
           accent="green"
         />
-        <StatCard
-          icon={<Clock size={24} />}
-          label="Jobs Run"
-          value={isJobsRunsLoading ? '--' : String(countJobsWithRuns(jobs ?? []))}
-          href="/jobs"
-          accent="cyan"
-        />
       </div>
 
-      {/* Templates */}
+      {/* Machines & Active Sessions — side-by-side */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Machines */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+              Machines
+            </h2>
+            <Link
+              to="/machines"
+              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              View All Machines
+            </Link>
+          </div>
+          {isLoading ? (
+            <SkeletonGrid count={3} />
+          ) : (machines ?? []).length === 0 ? (
+            <p className="text-sm text-text-secondary py-8 text-center">
+              No machines registered yet.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(machines ?? []).map((machine) => (
+                <MachineCard
+                  key={machine.machine_id}
+                  machine={machine}
+                  onCreateSession={handleCreateSession}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Active Sessions */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+              Active Sessions
+            </h2>
+            <Link
+              to="/sessions"
+              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+            >
+              View All Sessions
+            </Link>
+          </div>
+          {isLoading ? (
+            <SkeletonGrid count={3} />
+          ) : (
+            <SessionList
+              sessions={activeSessions.slice(0, 6)}
+              onAttach={handleAttach}
+              onTerminate={handleTerminate}
+              emptyMessage="No active sessions. Create one to get started."
+            />
+          )}
+        </section>
+      </div>
+
+      {/* Recent Jobs — full width */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+            Recent Jobs
+          </h2>
+          <Link
+            to="/jobs"
+            className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+          >
+            View All Jobs
+          </Link>
+        </div>
+        {isJobsRunsLoading ? (
+          <SkeletonList count={3} />
+        ) : recentJobs.length === 0 ? (
+          <div className="bg-bg-secondary rounded-lg p-6 text-center">
+            <p className="text-sm text-text-secondary">No jobs yet.</p>
+            <Link
+              to="/jobs/new"
+              className="inline-block mt-2 text-xs text-accent-primary hover:text-accent-primary/80"
+            >
+              Create your first job
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
+            {recentJobs.map((job) => (
+              <RecentJobRow key={job.job_id} job={job} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Recent Runs — full width */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
+            Recent Runs
+          </h2>
+          <Link
+            to="/runs"
+            className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+          >
+            View All Runs
+          </Link>
+        </div>
+        {isJobsRunsLoading ? (
+          <SkeletonList count={3} />
+        ) : recentRuns.length === 0 ? (
+          <div className="bg-bg-secondary rounded-lg p-6 text-center">
+            <p className="text-sm text-text-secondary">No runs yet.</p>
+          </div>
+        ) : (
+          <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
+            {recentRuns.map((run) => (
+              <RecentRunRow key={run.run_id} run={run} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Templates — bottom, conditional */}
       {(templates ?? []).length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
@@ -198,154 +303,6 @@ export function CommandCenter() {
           </div>
         </section>
       )}
-      {templates && templates.length === 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
-              Templates
-            </h2>
-            <Link
-              to="/templates"
-              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-            >
-              View All Templates
-            </Link>
-          </div>
-          <div className="bg-bg-secondary rounded-lg border border-border-primary p-6 text-center">
-            <p className="text-sm text-text-secondary">
-              No templates yet. Create one to define reusable session configs.
-            </p>
-            <Link
-              to="/templates/new"
-              className="inline-block mt-2 text-xs text-accent-primary hover:text-accent-primary/80"
-            >
-              Create your first template
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {/* Recent Jobs & Recent Runs — 2-column */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Recent Jobs */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
-              Recent Jobs
-            </h2>
-            <Link
-              to="/jobs"
-              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-            >
-              View All Jobs
-            </Link>
-          </div>
-          {isJobsRunsLoading ? (
-            <SkeletonList count={3} />
-          ) : recentJobs.length === 0 ? (
-            <div className="bg-bg-secondary rounded-lg p-6 text-center">
-              <p className="text-sm text-text-secondary">No jobs yet.</p>
-              <Link
-                to="/jobs/new"
-                className="inline-block mt-2 text-xs text-accent-primary hover:text-accent-primary/80"
-              >
-                Create your first job
-              </Link>
-            </div>
-          ) : (
-            <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
-              {recentJobs.map((job) => (
-                <RecentJobRow key={job.job_id} job={job} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Recent Runs */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
-              Recent Runs
-            </h2>
-            <Link
-              to="/runs"
-              className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-            >
-              View All Runs
-            </Link>
-          </div>
-          {isJobsRunsLoading ? (
-            <SkeletonList count={3} />
-          ) : recentRuns.length === 0 ? (
-            <div className="bg-bg-secondary rounded-lg p-6 text-center">
-              <p className="text-sm text-text-secondary">No runs yet.</p>
-            </div>
-          ) : (
-            <div className="bg-bg-secondary rounded-lg border border-border-primary divide-y divide-border-primary">
-              {recentRuns.map((run) => (
-                <RecentRunRow key={run.run_id} run={run} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Active Sessions */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
-            Active Sessions
-          </h2>
-          <Link
-            to="/sessions"
-            className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-          >
-            View All Sessions
-          </Link>
-        </div>
-        {isLoading ? (
-          <SkeletonGrid count={3} />
-        ) : (
-          <SessionList
-            sessions={activeSessions.slice(0, 6)}
-            onAttach={handleAttach}
-            onTerminate={handleTerminate}
-            emptyMessage="No active sessions. Create one to get started."
-          />
-        )}
-      </section>
-
-      {/* Machines */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
-            Machines
-          </h2>
-          <Link
-            to="/machines"
-            className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
-          >
-            View All Machines
-          </Link>
-        </div>
-        {isLoading ? (
-          <SkeletonGrid count={3} />
-        ) : (machines ?? []).length === 0 ? (
-          <p className="text-sm text-text-secondary py-8 text-center">
-            No machines registered yet.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {(machines ?? []).map((machine) => (
-              <MachineCard
-                key={machine.machine_id}
-                machine={machine}
-                onCreateSession={handleCreateSession}
-              />
-            ))}
-          </div>
-        )}
-      </section>
 
       <NewSessionModal
         open={modalOpen}
@@ -364,10 +321,6 @@ export function CommandCenter() {
       />
     </div>
   );
-}
-
-function countJobsWithRuns(jobs: Job[]): number {
-  return jobs.filter((j) => j.last_run_status !== undefined && j.last_run_status !== null).length;
 }
 
 const STAT_ACCENTS = {
