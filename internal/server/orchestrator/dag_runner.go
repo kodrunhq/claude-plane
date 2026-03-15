@@ -312,12 +312,7 @@ func (d *DAGRunner) Start(parentCtx context.Context) {
 func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 	// Build ResolveContext snapshot under lock
 	d.mu.Lock()
-	resolveCtx := &ResolveContext{
-		RunParams:   d.runParams,
-		JobMeta:     d.jobMeta,
-		StepValues:  d.copyStepValues(),
-		StepResults: d.copyStepResults(),
-	}
+	resolveCtx := d.buildResolveContext()
 	d.mu.Unlock()
 
 	delay := time.Duration(rs.DelaySecondsSnapshot) * time.Second
@@ -378,8 +373,47 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		rs.Status = store.StatusFailed
 		ec := exitCode
 		rs.ExitCode = &ec
-		d.failed = true
 		d.updateRunStepInDB(rs.RunStepID, store.StatusFailed, "", exitCode)
+
+		// Check retries BEFORE setting d.failed
+		if rs.MaxRetriesSnapshot > 0 && rs.Attempt <= rs.MaxRetriesSnapshot {
+			rs.Attempt++
+			d.updateRunStepAttempt(rs.RunStepID, rs.Attempt)
+			// Session key already released above
+			ctx := d.ctx
+			rsCopy := *rs
+			d.mu.Unlock()
+			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
+
+			// Schedule retry with delay
+			delay := time.Duration(rsCopy.RetryDelaySecondsSnapshot) * time.Second
+			go func() {
+				if delay > 0 {
+					timer := time.NewTimer(delay)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+					case <-ctx.Done():
+						return
+					}
+				}
+				d.mu.Lock()
+				if ctx.Err() != nil {
+					d.mu.Unlock()
+					return
+				}
+				rsCopy.Status = store.StatusRunning
+				d.steps[rsCopy.StepID].Status = store.StatusRunning
+				d.updateRunStepInDB(rsCopy.RunStepID, store.StatusRunning, "", 0)
+				resolveCtx := d.buildResolveContext()
+				d.mu.Unlock()
+				d.executor.ExecuteStep(ctx, rsCopy, resolveCtx, d.OnStepCompleted)
+			}()
+			return
+		}
+
+		// Retries exhausted (or no retries) — NOW set d.failed
+		d.failed = true
 
 		if rs.OnFailure == "fail_run" {
 			// Mark remaining pending steps as skipped
@@ -471,6 +505,26 @@ func (d *DAGRunner) Cancel() {
 	d.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+}
+
+// buildResolveContext creates a ResolveContext snapshot. Must be called with d.mu held.
+func (d *DAGRunner) buildResolveContext() *ResolveContext {
+	return &ResolveContext{
+		RunParams:   d.runParams,
+		JobMeta:     d.jobMeta,
+		StepValues:  d.copyStepValues(),
+		StepResults: d.copyStepResults(),
+	}
+}
+
+// updateRunStepAttempt persists a run step attempt counter change. No-op if store is nil (unit tests).
+func (d *DAGRunner) updateRunStepAttempt(runStepID string, attempt int) {
+	if d.store == nil {
+		return
+	}
+	if err := d.store.UpdateRunStepAttempt(d.ctx, runStepID, attempt); err != nil {
+		slog.Warn("failed to update run step attempt", "error", err, "run_step_id", runStepID, "attempt", attempt)
 	}
 }
 
