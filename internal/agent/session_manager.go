@@ -32,6 +32,12 @@ type SessionManager struct {
 	taskTypeMu sync.RWMutex
 	taskTypes  map[string]string // session_id -> "shell" | "claude_session"
 
+	// Per-session output buffers for task value extraction.
+	// For shared sessions, the buffer is drained on each StepIdleEvent
+	// so that task values are attributed to the correct step.
+	outputBufMu sync.Mutex
+	outputBufs  map[string]*[]byte // session_id -> output buffer (pointer for in-place updates from relay goroutine)
+
 	// Relay state.
 	relayMu     sync.Mutex
 	relayCtx    context.Context
@@ -54,6 +60,7 @@ func NewSessionManager(cliPath, dataDir string, logger *slog.Logger, idleOpts ..
 		sessions:         make(map[string]*Session),
 		attached:         make(map[string]bool),
 		taskTypes:        make(map[string]string),
+		outputBufs:       make(map[string]*[]byte),
 		logger:           logger,
 		cliPath:          cliPath,
 		dataDir:          dataDir,
@@ -193,12 +200,15 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 		var onIdle func()
 		if keepAlive {
-			// Keep-alive (shared session): signal step completion to the server
-			// without exiting the CLI. The session stays alive for subsequent prompts.
+			// Keep-alive (shared session): extract task values from the output
+			// accumulated since the last extraction, then signal step completion
+			// to the server. The session stays alive for subsequent prompts.
 			onIdle = func() {
-				sm.logger.Info("idle prompt detected, sending StepIdleEvent (keep-alive)",
+				sm.logger.Info("idle prompt detected, extracting task values and sending StepIdleEvent (keep-alive)",
 					"session_id", sessionID,
 				)
+				// Extract and send task values for this step before signalling idle.
+				sm.extractAndSendStepTaskValues(sessionID)
 				sm.sendEvent(&pb.AgentEvent{
 					Event: &pb.AgentEvent_StepIdle{
 						StepIdle: &pb.StepIdleEvent{
@@ -417,7 +427,7 @@ func (sm *SessionManager) getSession(id string) *Session {
 	return sm.sessions[id]
 }
 
-// removeSession deletes a session from the sessions, attached, and taskTypes maps.
+// removeSession deletes a session from the sessions, attached, taskTypes, and outputBufs maps.
 func (sm *SessionManager) removeSession(sessionID string) {
 	sm.mu.Lock()
 	delete(sm.sessions, sessionID)
@@ -430,6 +440,10 @@ func (sm *SessionManager) removeSession(sessionID string) {
 	sm.taskTypeMu.Lock()
 	delete(sm.taskTypes, sessionID)
 	sm.taskTypeMu.Unlock()
+
+	sm.outputBufMu.Lock()
+	delete(sm.outputBufs, sessionID)
+	sm.outputBufMu.Unlock()
 }
 
 // StartRelay begins sending session output events to sendCh.
@@ -455,13 +469,17 @@ const maxOutputCapture = 64 * 1024
 // startSessionRelay starts a goroutine that reads from the session's output channel
 // and forwards to the gRPC send channel. Must be called with relayMu held.
 func (sm *SessionManager) startSessionRelay(sess *Session) {
+	// Register a shared output buffer for this session so that the onIdle
+	// callback (for shared sessions) can drain it for per-step task values.
+	sessionID := sess.SessionID()
+	outputBuf := make([]byte, 0)
+	sm.outputBufMu.Lock()
+	sm.outputBufs[sessionID] = &outputBuf
+	sm.outputBufMu.Unlock()
+
 	sm.relayWg.Add(1)
 	go func() {
 		defer sm.relayWg.Done()
-		sessionID := sess.SessionID()
-
-		// Collect the tail of raw output for task value extraction on exit.
-		var outputBuf []byte
 
 		for {
 			select {
@@ -480,7 +498,11 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 					})
 
 					// Extract and send task values before exit event.
-					sm.extractAndSendTaskValues(sessionID, outputBuf)
+					sm.outputBufMu.Lock()
+					bufSnapshot := make([]byte, len(*sm.outputBufs[sessionID]))
+					copy(bufSnapshot, *sm.outputBufs[sessionID])
+					sm.outputBufMu.Unlock()
+					sm.extractAndSendTaskValues(sessionID, bufSnapshot)
 
 					// Send exit event with exit code so the server can persist the final status.
 					sm.sendEvent(&pb.AgentEvent{
@@ -498,7 +520,11 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 				}
 
 				// Accumulate output for task value extraction (keep last maxOutputCapture bytes).
-				outputBuf = appendCapped(outputBuf, data, maxOutputCapture)
+				sm.outputBufMu.Lock()
+				if bp := sm.outputBufs[sessionID]; bp != nil {
+					*bp = appendCapped(*bp, data, maxOutputCapture)
+				}
+				sm.outputBufMu.Unlock()
 
 				// Only relay live output if session is attached.
 				if sm.isAttached(sessionID) {
@@ -526,6 +552,25 @@ func appendCapped(buf, data []byte, maxSize int) []byte {
 	return buf
 }
 
+// extractAndSendStepTaskValues drains the per-session output buffer and sends
+// task values for the current step. Used by shared (keep-alive) sessions on
+// idle to attribute task values to the correct step before completion.
+func (sm *SessionManager) extractAndSendStepTaskValues(sessionID string) {
+	sm.outputBufMu.Lock()
+	bp := sm.outputBufs[sessionID]
+	if bp == nil || len(*bp) == 0 {
+		sm.outputBufMu.Unlock()
+		return
+	}
+	// Drain: snapshot the buffer and reset it.
+	bufSnapshot := make([]byte, len(*bp))
+	copy(bufSnapshot, *bp)
+	*bp = (*bp)[:0]
+	sm.outputBufMu.Unlock()
+
+	sm.extractAndSendTaskValues(sessionID, bufSnapshot)
+}
+
 // extractAndSendTaskValues parses task value markers from session output and
 // sends a TaskValuesEvent if any values were found. For shell tasks, the last
 // 32 KB of stdout is also captured as an automatic "stdout" value.
@@ -542,7 +587,7 @@ func (sm *SessionManager) extractAndSendTaskValues(sessionID string, outputBuf [
 	taskType := sm.taskTypes[sessionID]
 	sm.taskTypeMu.RUnlock()
 
-	if taskType == "shell" {
+	if taskType == "shell" && len(vals) < maxTaskValueCount {
 		stdout := outputStr
 		if len(stdout) > maxTaskValueSize {
 			stdout = stdout[len(stdout)-maxTaskValueSize:]

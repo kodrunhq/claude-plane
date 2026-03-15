@@ -279,11 +279,14 @@ func (o *Orchestrator) RepairRun(ctx context.Context, runID string, paramOverrid
 		}
 	}
 
-	// Reset failed/skipped steps to pending, clear their task values
+	// Reset failed/skipped/cancelled steps to pending, clear their task values and attempt counters
 	for _, rs := range detail.RunSteps {
-		if rs.Status == store.StatusFailed || rs.Status == store.StatusSkipped {
+		if rs.Status == store.StatusFailed || rs.Status == store.StatusSkipped || rs.Status == store.StatusCancelled {
 			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusPending, "", 0); err != nil {
 				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
+			}
+			if err := o.store.UpdateRunStepAttempt(ctx, rs.RunStepID, 1); err != nil {
+				return fmt.Errorf("reset attempt for step %s: %w", rs.StepID, err)
 			}
 			if err := o.store.DeleteTaskValuesForStep(ctx, rs.RunStepID); err != nil {
 				return fmt.Errorf("clear task values for step %s: %w", rs.StepID, err)

@@ -3,7 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -11,6 +13,9 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// runParamKeyRe validates run parameter key names.
+var runParamKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 const (
 	defaultListRunsLimit = 50
@@ -111,6 +116,13 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TriggerType == "" {
 		req.TriggerType = "manual"
+	}
+
+	for k := range req.Parameters {
+		if !runParamKeyRe.MatchString(k) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid parameter key %q: must match [a-zA-Z_][a-zA-Z0-9_]*", k))
+			return
+		}
 	}
 
 	run, err := h.orch.CreateRun(r.Context(), jobID, req.TriggerType, req.Parameters, req.TriggerDetail)

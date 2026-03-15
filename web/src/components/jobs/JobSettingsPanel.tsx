@@ -40,14 +40,14 @@ export function JobSettingsPanel({
         <input
           id="job-max-concurrent"
           type="number"
-          min={0}
+          min={1}
           max={100}
           value={maxConcurrentRuns}
-          onChange={(e) => onMaxConcurrentChange(clampInt(e.target.value, 0, 100))}
+          onChange={(e) => onMaxConcurrentChange(clampInt(e.target.value, 1, 100))}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
         />
         <p className="text-[10px] text-text-secondary/70 mt-0.5">
-          Maximum number of concurrent runs for this job. 0 means unlimited.
+          Minimum 1. Maximum number of concurrent runs for this job.
         </p>
       </div>
     </div>
