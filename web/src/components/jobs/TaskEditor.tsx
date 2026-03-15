@@ -1,9 +1,10 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { Task, UpdateTaskParams } from '../../types/job.ts';
+import type { Task, UpdateTaskParams, Job } from '../../types/job.ts';
 import type { Machine } from '../../lib/types.ts';
 import type { SessionTemplate } from '../../types/template.ts';
 import { useTemplates } from '../../hooks/useTemplates.ts';
+import { useJobs } from '../../hooks/useJobs.ts';
 
 interface TaskEditorProps {
   task: Task | null;
@@ -13,7 +14,7 @@ interface TaskEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-type TaskType = 'claude' | 'shell';
+type TaskType = 'claude' | 'shell' | 'run_job';
 
 function parseSkipPermissions(value: string): number | null | undefined {
   if (value === '1') return 1;
@@ -21,13 +22,23 @@ function parseSkipPermissions(value: string): number | null | undefined {
   return undefined;
 }
 
+function collectJobParams(data: FormData): string | undefined {
+  const jobParams: Record<string, string> = {};
+  for (const [key, value] of data.entries()) {
+    if (key.startsWith('job_param_') && typeof value === 'string' && value !== '') {
+      jobParams[key.replace('job_param_', '')] = value;
+    }
+  }
+  return Object.keys(jobParams).length > 0 ? JSON.stringify(jobParams) : undefined;
+}
+
 function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateTaskParams {
   const data = new FormData(form);
   const base: UpdateTaskParams = {
     name: data.get('name') as string,
-    machine_id: data.get('machine_id') as string,
-    working_dir: data.get('working_dir') as string,
-    task_type: taskType === 'claude' ? 'claude_session' : 'shell',
+    machine_id: taskType === 'run_job' ? '' : (data.get('machine_id') as string),
+    working_dir: taskType === 'run_job' ? '' : (data.get('working_dir') as string),
+    task_type: taskType === 'claude' ? 'claude_session' : taskType,
     delay_seconds: Number(data.get('delay_seconds')) || 0,
     run_if: (data.get('run_if') as string) || undefined,
     max_retries: Number(data.get('max_retries')) || 0,
@@ -44,6 +55,20 @@ function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateTaskPar
       model: (data.get('model') as string) || undefined,
       skip_permissions: parseSkipPermissions(data.get('skip_permissions') as string),
       session_key: (data.get('session_key') as string) || undefined,
+    };
+  }
+
+  if (taskType === 'run_job') {
+    return {
+      ...base,
+      prompt: '',
+      command: '',
+      args: '',
+      model: undefined,
+      skip_permissions: undefined,
+      session_key: undefined,
+      target_job_id: (data.get('target_job_id') as string) || undefined,
+      job_params: collectJobParams(data) as unknown as Record<string, string> | undefined,
     };
   }
 
@@ -67,7 +92,20 @@ function skipPermissionsFormValue(task: Task): string {
 
 function resolveTaskType(task: Task): TaskType {
   if (task.task_type === 'shell') return 'shell';
+  if (task.task_type === 'run_job') return 'run_job';
   return 'claude';
+}
+
+function parseJobParameters(job: Job | undefined): Record<string, string> | null {
+  if (!job?.parameters) return null;
+  if (typeof job.parameters === 'string') {
+    try {
+      return JSON.parse(job.parameters as string) as Record<string, string>;
+    } catch {
+      return null;
+    }
+  }
+  return job.parameters;
 }
 
 function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean {
@@ -75,8 +113,8 @@ function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean
   const data = new FormData(form);
   const base =
     params.name !== task.name ||
-    params.machine_id !== task.machine_id ||
-    params.working_dir !== task.working_dir ||
+    (taskType !== 'run_job' && params.machine_id !== task.machine_id) ||
+    (taskType !== 'run_job' && params.working_dir !== task.working_dir) ||
     (Number(data.get('delay_seconds')) || 0) !== (task.delay_seconds ?? 0) ||
     taskType !== resolveTaskType(task) ||
     (data.get('run_if') as string || '') !== (task.run_if ?? '') ||
@@ -94,6 +132,13 @@ function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean
       (data.get('model') as string) !== (task.model ?? '') ||
       (data.get('skip_permissions') as string) !== skipPermissionsFormValue(task) ||
       (data.get('session_key') as string || '') !== (task.session_key ?? '')
+    );
+  }
+
+  if (taskType === 'run_job') {
+    return (
+      (data.get('target_job_id') as string || '') !== (task.target_job_id ?? '') ||
+      collectJobParams(data) !== (task.job_params ? JSON.stringify(task.job_params) : undefined)
     );
   }
 
@@ -259,22 +304,62 @@ function TemplateSelector({ templates, selectedId, taskId, onSelect }: TemplateS
   );
 }
 
+const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  claude: 'Claude Session',
+  shell: 'Shell',
+  run_job: 'Run Job',
+};
+
 export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: TaskEditorProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const lastDirty = useRef(false);
   const { data: templates } = useTemplates();
+  const { data: jobs } = useJobs();
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [taskType, setTaskType] = useState<TaskType>(() => task ? resolveTaskType(task) : 'claude');
   const [maxRetriesState, setMaxRetriesState] = useState(task?.max_retries ?? 0);
+  const [targetJobId, setTargetJobId] = useState(task?.target_job_id ?? '');
 
-  // Sync task type and max retries when selected task changes.
+  const currentJobId = task?.job_id;
+
+  // Filter out the current job from the available targets to prevent self-referencing.
+  const availableJobs = useMemo(
+    () => jobs?.filter((j) => j.job_id !== currentJobId) ?? [],
+    [jobs, currentJobId],
+  );
+
+  const selectedTargetJob = useMemo(
+    () => availableJobs.find((j) => j.job_id === targetJobId),
+    [availableJobs, targetJobId],
+  );
+
+  const targetJobParams = useMemo(
+    () => parseJobParameters(selectedTargetJob),
+    [selectedTargetJob],
+  );
+
+  // Existing job_params values from the task (for default values in param inputs).
+  const existingJobParams = useMemo(() => {
+    if (!task?.job_params) return {};
+    if (typeof task.job_params === 'string') {
+      try {
+        return JSON.parse(task.job_params as string) as Record<string, string>;
+      } catch {
+        return {};
+      }
+    }
+    return task.job_params;
+  }, [task]);
+
+  // Sync task type, max retries, and target job when selected task changes.
   useEffect(() => {
     if (task) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local form state on task selection change
       setTaskType(resolveTaskType(task));
       setMaxRetriesState(task.max_retries ?? 0);
+      setTargetJobId(task.target_job_id ?? '');
     }
-  }, [task]); // full task object — re-syncs on any server update
+  }, [task]); // full task object -- re-syncs on any server update
 
   const checkDirty = useCallback(() => {
     if (!formRef.current || !task || !onDirtyChange) return;
@@ -349,6 +434,12 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
     onDirtyChange?.(true);
   }
 
+  function handleTargetJobChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    setTargetJobId(e.target.value);
+    lastDirty.current = true;
+    onDirtyChange?.(true);
+  }
+
   return (
     <form
       ref={formRef}
@@ -362,32 +453,24 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
       <div>
         <label className="block text-xs text-text-secondary mb-1">Task Type</label>
         <div className="flex rounded-md overflow-hidden border border-border-primary">
-          <button
-            type="button"
-            onClick={() => handleTaskTypeChange('claude')}
-            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-              taskType === 'claude'
-                ? 'bg-accent-primary text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Claude Session
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTaskTypeChange('shell')}
-            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-              taskType === 'shell'
-                ? 'bg-accent-primary text-white'
-                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Shell
-          </button>
+          {(['claude', 'shell', 'run_job'] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => handleTaskTypeChange(type)}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                taskType === type
+                  ? 'bg-accent-primary text-white'
+                  : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {TASK_TYPE_LABELS[type]}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Template selector — only for Claude sessions */}
+      {/* Template selector -- only for Claude sessions */}
       {taskType === 'claude' && templates && templates.length > 0 && (
         <TemplateSelector
           templates={templates}
@@ -409,7 +492,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         />
       </div>
 
-      {/* Prompt — Claude only */}
+      {/* Prompt -- Claude only */}
       {taskType === 'claude' && (
         <div>
           <label htmlFor="task-prompt" className="block text-xs text-text-secondary mb-1">Prompt</label>
@@ -425,25 +508,70 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         </div>
       )}
 
-      <div>
-        <label htmlFor="task-machine" className="block text-xs text-text-secondary mb-1">Machine</label>
-        <select
-          id="task-machine"
-          name="machine_id"
-          defaultValue={task.machine_id}
-          key={task.step_id + '-machine'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
-        >
-          <option value="">Select machine...</option>
-          {machines.map((m) => (
-            <option key={m.machine_id} value={m.machine_id}>
-              {m.display_name || m.machine_id.slice(0, 8)}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Target Job -- run_job only */}
+      {taskType === 'run_job' && (
+        <>
+          <div>
+            <label htmlFor="task-target-job" className="block text-xs text-text-secondary mb-1">
+              Target Job <span className="text-red-400">*</span>
+            </label>
+            <select
+              id="task-target-job"
+              name="target_job_id"
+              value={targetJobId}
+              onChange={handleTargetJobChange}
+              required
+              className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+            >
+              <option value="">Select a job...</option>
+              {availableJobs.map((j) => (
+                <option key={j.job_id} value={j.job_id}>{j.name}</option>
+              ))}
+            </select>
+          </div>
 
-      {/* Model — Claude only */}
+          {/* Dynamic parameter fields based on selected job's parameters */}
+          {targetJobParams && Object.entries(targetJobParams).map(([key, defaultVal]) => (
+            <div key={key}>
+              <label htmlFor={`task-job-param-${key}`} className="block text-xs text-text-secondary mb-1">
+                {key}
+              </label>
+              <input
+                id={`task-job-param-${key}`}
+                name={`job_param_${key}`}
+                type="text"
+                defaultValue={existingJobParams[key] ?? ''}
+                key={task.step_id + '-job-param-' + key + '-' + targetJobId}
+                placeholder={defaultVal || `Value for ${key}`}
+                className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+              />
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Machine -- claude and shell only */}
+      {taskType !== 'run_job' && (
+        <div>
+          <label htmlFor="task-machine" className="block text-xs text-text-secondary mb-1">Machine</label>
+          <select
+            id="task-machine"
+            name="machine_id"
+            defaultValue={task.machine_id}
+            key={task.step_id + '-machine'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+          >
+            <option value="">Select machine...</option>
+            {machines.map((m) => (
+              <option key={m.machine_id} value={m.machine_id}>
+                {m.display_name || m.machine_id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Model -- Claude only */}
       {taskType === 'claude' && (
         <div>
           <label htmlFor="task-model" className="block text-xs text-text-secondary mb-1">Model</label>
@@ -462,7 +590,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         </div>
       )}
 
-      {/* Skip Permissions — Claude only */}
+      {/* Skip Permissions -- Claude only */}
       {taskType === 'claude' && (
         <div>
           <label htmlFor="task-skip-permissions" className="block text-xs text-text-secondary mb-1">Skip Permissions</label>
@@ -480,7 +608,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         </div>
       )}
 
-      {/* Session Key — Claude only */}
+      {/* Session Key -- Claude only */}
       {taskType === 'claude' && (
         <div>
           <label htmlFor="task-session-key" className="block text-xs text-text-secondary mb-1">Session Key</label>
@@ -491,7 +619,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
             defaultValue={task.session_key ?? ''}
             key={task.step_id + '-session-key'}
             className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
-            placeholder="Optional — tasks sharing a key reuse the same session"
+            placeholder="Optional -- tasks sharing a key reuse the same session"
           />
         </div>
       )}
@@ -511,49 +639,58 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         <p className="text-[10px] text-text-secondary/70 mt-0.5">Wait before starting this task (0-86400)</p>
       </div>
 
-      <div>
-        <label htmlFor="task-workdir" className="block text-xs text-text-secondary mb-1">Working Directory</label>
-        <input
-          id="task-workdir"
-          name="working_dir"
-          type="text"
-          defaultValue={task.working_dir}
-          key={task.step_id + '-workdir'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
-          placeholder="/home/user/project"
-        />
-      </div>
+      {/* Working Directory -- claude and shell only */}
+      {taskType !== 'run_job' && (
+        <div>
+          <label htmlFor="task-workdir" className="block text-xs text-text-secondary mb-1">Working Directory</label>
+          <input
+            id="task-workdir"
+            name="working_dir"
+            type="text"
+            defaultValue={task.working_dir}
+            key={task.step_id + '-workdir'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+            placeholder="/home/user/project"
+          />
+        </div>
+      )}
 
-      <div>
-        <label htmlFor="task-command" className="block text-xs text-text-secondary mb-1">
-          Command{taskType === 'shell' ? ' (required)' : ''}
-        </label>
-        <input
-          id="task-command"
-          name="command"
-          type="text"
-          defaultValue={taskType === 'claude' ? (task.command || 'claude') : (task.command || '')}
-          key={task.step_id + '-command-' + taskType}
-          required={taskType === 'shell'}
-          placeholder={taskType === 'shell' ? 'e.g., ./deploy.sh, python script.py' : undefined}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
-        />
-        {taskType === 'claude' && (
-          <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
-        )}
-      </div>
+      {/* Command -- claude and shell only */}
+      {taskType !== 'run_job' && (
+        <div>
+          <label htmlFor="task-command" className="block text-xs text-text-secondary mb-1">
+            Command{taskType === 'shell' ? ' (required)' : ''}
+          </label>
+          <input
+            id="task-command"
+            name="command"
+            type="text"
+            defaultValue={taskType === 'claude' ? (task.command || 'claude') : (task.command || '')}
+            key={task.step_id + '-command-' + taskType}
+            required={taskType === 'shell'}
+            placeholder={taskType === 'shell' ? 'e.g., ./deploy.sh, python script.py' : undefined}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+          />
+          {taskType === 'claude' && (
+            <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
+          )}
+        </div>
+      )}
 
-      <div>
-        <label htmlFor="task-args" className="block text-xs text-text-secondary mb-1">Args (one per line)</label>
-        <textarea
-          id="task-args"
-          name="args"
-          rows={2}
-          defaultValue={task.args ?? ''}
-          key={task.step_id + '-args'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
-        />
-      </div>
+      {/* Args -- claude and shell only */}
+      {taskType !== 'run_job' && (
+        <div>
+          <label htmlFor="task-args" className="block text-xs text-text-secondary mb-1">Args (one per line)</label>
+          <textarea
+            id="task-args"
+            name="args"
+            rows={2}
+            defaultValue={task.args ?? ''}
+            key={task.step_id + '-args'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
+          />
+        </div>
+      )}
 
       {/* Run If */}
       <div>
@@ -590,7 +727,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         />
       </div>
 
-      {/* Retry Delay — shown if max_retries > 0 */}
+      {/* Retry Delay -- shown if max_retries > 0 */}
       {maxRetriesState > 0 && (
         <div>
           <label htmlFor="task-retry-delay" className="block text-xs text-text-secondary mb-1">Retry Delay (seconds)</label>
