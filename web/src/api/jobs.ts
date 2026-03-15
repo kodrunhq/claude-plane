@@ -81,7 +81,7 @@ export const jobsApi = {
       { method: 'POST' },
     ),
   repairRun: (runId: string, params?: { parameters?: Record<string, string> }) =>
-    request<Run>(`/runs/${encodeURIComponent(runId)}/repair`, {
+    request<{ status: string }>(`/runs/${encodeURIComponent(runId)}/repair`, {
       method: 'POST',
       body: JSON.stringify(params ?? {}),
     }),

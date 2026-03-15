@@ -14,10 +14,8 @@ interface ParameterEditorProps {
   onChange: (parameters: Record<string, string>) => void;
 }
 
-let nextId = 1;
-
 function generateId(): string {
-  return `param-${nextId++}`;
+  return crypto.randomUUID();
 }
 
 function toEntries(params: Record<string, string>): ParameterEntry[] {
@@ -28,7 +26,16 @@ function toEntries(params: Record<string, string>): ParameterEntry[] {
   }));
 }
 
-function toRecord(entries: ParameterEntry[]): Record<string, string> {
+function toRecord(entries: ParameterEntry[]): Record<string, string> | null {
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (entry.key && seen.has(entry.key)) {
+      return null; // duplicate keys — don't emit
+    }
+    if (entry.key) {
+      seen.add(entry.key);
+    }
+  }
   const result: Record<string, string> = {};
   for (const entry of entries) {
     result[entry.key] = entry.value;
@@ -71,7 +78,10 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
   const emitChange = useCallback(
     (updated: ParameterEntry[]) => {
       setEntries(updated);
-      onChange(toRecord(updated));
+      const record = toRecord(updated);
+      if (record !== null) {
+        onChange(record);
+      }
     },
     [onChange],
   );

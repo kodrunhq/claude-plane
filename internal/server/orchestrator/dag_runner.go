@@ -254,6 +254,13 @@ func (d *DAGRunner) processDeferredSteps(toLaunch *[]store.RunStep) {
 		if rs == nil || rs.Status != store.StatusPending {
 			continue // already launched or skipped by another path
 		}
+		// Check if upstream failures should skip this step
+		if d.hasFailedUpstream[stepID] && rs.RunIfSnapshot != "all_done" {
+			rs.Status = store.StatusSkipped
+			d.updateRunStepInDB(rs.RunStepID, store.StatusSkipped, "", 0)
+			d.completed++
+			continue
+		}
 		if d.canLaunch(rs) {
 			d.claimSessionKey(rs)
 			rs.Status = store.StatusRunning
@@ -415,6 +422,8 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 				if rsCopy.SessionKeySnapshot != "" {
 					if !d.canLaunch(&rsCopy) {
 						// Can't acquire key — defer instead of launching.
+						// Reset to pending so processDeferredSteps will pick it up.
+						d.steps[rsCopy.StepID].Status = store.StatusPending
 						d.deferredSteps = append(d.deferredSteps, rsCopy.StepID)
 						d.mu.Unlock()
 						return

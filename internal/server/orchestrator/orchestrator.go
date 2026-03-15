@@ -165,6 +165,11 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		Name:        job.Job.Name,
 		RunID:       run.RunID,
 		TriggerType: triggerType,
+		StartTime:   run.CreatedAt.Format(time.RFC3339),
+	}
+	// Populate RunNumber by counting existing runs for this job.
+	if existingRuns, err := o.store.ListRuns(ctx, jobID); err == nil {
+		jobMeta.RunNumber = len(existingRuns)
 	}
 
 	runner := NewDAGRunner(run.RunID, jobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, resolvedParams, jobMeta, stepNameMap)
@@ -240,6 +245,9 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		if toReset[rs.StepID] && (rs.Status == store.StatusFailed || rs.Status == store.StatusSkipped || rs.Status == store.StatusCancelled) {
 			if err := o.store.UpdateRunStepStatus(ctx, rs.RunStepID, store.StatusPending, "", 0); err != nil {
 				return fmt.Errorf("reset step %s: %w", rs.StepID, err)
+			}
+			if err := o.store.UpdateRunStepAttempt(ctx, rs.RunStepID, 1); err != nil {
+				return fmt.Errorf("reset attempt for step %s: %w", rs.StepID, err)
 			}
 		}
 	}
@@ -362,9 +370,19 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 	jobMeta := JobMeta{
 		RunID:       runID,
 		TriggerType: detail.Run.TriggerType,
+		StartTime:   detail.Run.CreatedAt.Format(time.RFC3339),
 	}
 	if jobDetail, err := o.store.GetJob(ctx, detail.Run.JobID); err == nil {
 		jobMeta.Name = jobDetail.Job.Name
+	}
+	// Populate RunNumber by counting existing runs for this job.
+	if existingRuns, err := o.store.ListRuns(ctx, detail.Run.JobID); err == nil {
+		for i, r := range existingRuns {
+			if r.RunID == runID {
+				jobMeta.RunNumber = len(existingRuns) - i
+				break
+			}
+		}
 	}
 
 	runner := NewDAGRunner(runID, detail.Run.JobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, runParams, jobMeta, stepNames)
