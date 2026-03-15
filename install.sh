@@ -150,12 +150,11 @@ run_quickstart() {
   local data_dir="$HOME/.claude-plane"
   local ca_dir="${data_dir}/ca"
   local server_cert_dir="${data_dir}/server-cert"
-  local agent_cert_dir="${data_dir}/agent-cert"
   local config_file="${data_dir}/server.toml"
   local db_path="${data_dir}/claude-plane.db"
 
   info "Setting up claude-plane quickstart..."
-  mkdir -p "$data_dir" "$ca_dir" "$server_cert_dir" "$agent_cert_dir"
+  mkdir -p "$data_dir" "$ca_dir" "$server_cert_dir"
 
   info "Generating CA..."
   claude-plane-server ca init --out-dir "$ca_dir"
@@ -247,7 +246,7 @@ print_next_steps() {
     server)
       ok "claude-plane-server installed successfully!"
       echo "  Next: claude-plane-server serve --config server.toml"
-      echo "  Or:   install.sh quickstart  (for interactive setup)"
+      echo "  Or:   curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- quickstart"
       ;;
     agent)
       ok "claude-plane-agent installed successfully!"

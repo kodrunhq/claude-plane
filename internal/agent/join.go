@@ -45,7 +45,8 @@ func ExecuteJoin(serverURL, code, configDir string) error {
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(serverURL+"/api/v1/provision/join", "application/json", bytes.NewReader(body))
+	endpoint := strings.TrimRight(serverURL, "/") + "/api/v1/provision/join"
+	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("connect to server: %w", err)
 	}

@@ -107,7 +107,7 @@ func (s *Store) GetProvisioningTokenByCode(ctx context.Context, code string) (*P
 		&pt.ExpiresAt, &redeemedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("provisioning token by code: %w", ErrNotFound)
+		return nil, fmt.Errorf("get provisioning token by code: %w", ErrNotFound)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get provisioning token by code: %w", err)
