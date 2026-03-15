@@ -25,6 +25,7 @@ func main() {
 
 	rootCmd.AddCommand(
 		newRunCmd(),
+		newJoinCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -100,5 +101,56 @@ func newRunCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("config", "agent.toml", "Path to agent TOML config file")
+	return cmd
+}
+
+func newJoinCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "join CODE",
+		Short: "Join a server using a 6-character provisioning code",
+		Long:  "Redeems a short provisioning code to configure this agent with TLS certificates and server connection details.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			code := args[0]
+			serverFlag, _ := cmd.Flags().GetString("server")
+			configDir, _ := cmd.Flags().GetString("config-dir")
+			insecure, _ := cmd.Flags().GetBool("insecure")
+
+			serverURL, err := agent.ResolveServerURL(serverFlag)
+			if err != nil {
+				return err
+			}
+
+			// Enforce HTTPS unless --insecure is set
+			if !insecure && len(serverURL) >= 7 && serverURL[:7] == "http://" {
+				return fmt.Errorf("server URL must use HTTPS. Use --insecure to allow plain HTTP (not recommended for production)")
+			}
+			if insecure && len(serverURL) >= 7 && serverURL[:7] == "http://" {
+				fmt.Fprintln(os.Stderr, "WARNING: Using plain HTTP. Certificate material will be transmitted unencrypted. Use HTTPS in production.")
+			}
+
+			if err := agent.ExecuteJoin(serverURL, code, configDir); err != nil {
+				return err
+			}
+
+			configPath := configDir + "/agent.toml"
+			fmt.Printf("\nAgent configured for machine joining\n")
+			fmt.Printf("Certificates written to %s/certs/\n", configDir)
+			fmt.Printf("Config written to %s\n\n", configPath)
+			fmt.Printf("Start the agent:\n")
+			fmt.Printf("  claude-plane-agent run --config %s\n\n", configPath)
+			return nil
+		},
+	}
+
+	// Determine default config dir based on user
+	defaultConfigDir := os.Getenv("HOME") + "/.claude-plane"
+	if os.Getuid() == 0 {
+		defaultConfigDir = "/etc/claude-plane"
+	}
+
+	cmd.Flags().String("server", "", "Server HTTP URL (falls back to CLAUDE_PLANE_SERVER env var)")
+	cmd.Flags().String("config-dir", defaultConfigDir, "Directory for config and certificates")
+	cmd.Flags().Bool("insecure", false, "Allow plain HTTP server URL (prints warning)")
 	return cmd
 }

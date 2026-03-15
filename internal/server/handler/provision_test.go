@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -283,6 +284,91 @@ func TestServeScript_SingleUse(t *testing.T) {
 	router.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusGone {
 		t.Errorf("second request status = %d, want %d (token should be single-use)", w2.Code, http.StatusGone)
+	}
+}
+
+// --- JoinByCode tests ---
+
+func TestJoinHandler_ValidCode(t *testing.T) {
+	h, s := newProvisionHandlerFixture(t, &handler.UserClaims{UserID: "admin-id", Role: "admin"})
+	ctx := context.Background()
+
+	// Create a token with a short code
+	tok := store.ProvisioningToken{
+		Token:         "test-token-join",
+		ShortCode:     "A3X9K2",
+		MachineID:     "worker-join",
+		TargetOS:      "linux",
+		TargetArch:    "amd64",
+		CACertPEM:     "ca-data",
+		AgentCertPEM:  "cert-data",
+		AgentKeyPEM:   "key-data",
+		ServerAddress: "http://test.example.com",
+		GRPCAddress:   "test.example.com:9090",
+		CreatedBy:     "admin",
+		CreatedAt:     time.Now().UTC(),
+		ExpiresAt:     time.Now().UTC().Add(1 * time.Hour),
+	}
+	if err := s.CreateProvisioningToken(ctx, tok); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	body := `{"code":"A3X9K2"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision/join", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r := chi.NewRouter()
+	r.Post("/api/v1/provision/join", h.JoinByCode)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp["machine_id"] != "worker-join" {
+		t.Errorf("machine_id = %q, want %q", resp["machine_id"], "worker-join")
+	}
+	if resp["grpc_address"] != "test.example.com:9090" {
+		t.Errorf("grpc_address = %q, want %q", resp["grpc_address"], "test.example.com:9090")
+	}
+}
+
+func TestJoinHandler_InvalidCode(t *testing.T) {
+	h, _ := newProvisionHandlerFixture(t, &handler.UserClaims{UserID: "admin-id", Role: "admin"})
+
+	tests := []struct {
+		name string
+		body string
+		code int
+	}{
+		{"empty body", `{}`, http.StatusBadRequest},
+		{"missing code", `{"code":""}`, http.StatusBadRequest},
+		{"too short", `{"code":"A3X9K"}`, http.StatusBadRequest},
+		{"too long", `{"code":"A3X9K2B"}`, http.StatusBadRequest},
+		{"invalid chars", `{"code":"a3x9k2"}`, http.StatusBadRequest},
+		{"ambiguous O", `{"code":"A3XOK2"}`, http.StatusBadRequest},
+		{"not found", `{"code":"ZZZZZZ"}`, http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/provision/join", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			r := chi.NewRouter()
+			r.Post("/api/v1/provision/join", h.JoinByCode)
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.code {
+				t.Errorf("status = %d, want %d; body = %s", w.Code, tt.code, w.Body.String())
+			}
+		})
 	}
 }
 

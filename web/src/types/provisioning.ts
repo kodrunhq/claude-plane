@@ -2,6 +2,7 @@
 
 export interface ProvisioningToken {
   token: string;
+  short_code: string;
   machine_id: string;
   target_os: string;
   target_arch: string;
@@ -15,8 +16,10 @@ export interface ProvisioningToken {
 
 export interface ProvisionResult {
   token: string;
+  short_code: string;
   expires_at: string;
   curl_command: string;
+  join_command: string;
 }
 
 export interface CreateProvisionParams {

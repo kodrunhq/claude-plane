@@ -24,8 +24,10 @@ var ErrInvalidTTL = errors.New("invalid TTL")
 // ProvisionResult is the result returned after successfully creating a provisioning token.
 type ProvisionResult struct {
 	Token       string    `json:"token"`
+	ShortCode   string    `json:"short_code"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	CurlCommand string    `json:"curl_command"`
+	JoinCommand string    `json:"join_command"`
 }
 
 // Service creates and manages agent provisioning tokens.
@@ -98,8 +100,14 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	tokenID := uuid.New().String()
 	expiresAt := now.Add(ttl)
 
+	shortCode, err := GenerateShortCode()
+	if err != nil {
+		return nil, fmt.Errorf("generate short code: %w", err)
+	}
+
 	token := store.ProvisioningToken{
 		Token:         tokenID,
+		ShortCode:     shortCode,
 		MachineID:     machineID,
 		TargetOS:      targetOS,
 		TargetArch:    targetArch,
@@ -118,10 +126,13 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	}
 
 	curlCmd := fmt.Sprintf("curl -sfL %s/api/v1/provision/%s/script | sudo bash", svc.httpAddress, tokenID)
+	joinCmd := fmt.Sprintf("claude-plane-agent join %s --server %s", shortCode, svc.httpAddress)
 
 	return &ProvisionResult{
 		Token:       tokenID,
+		ShortCode:   shortCode,
 		ExpiresAt:   expiresAt,
 		CurlCommand: curlCmd,
+		JoinCommand: joinCmd,
 	}, nil
 }
