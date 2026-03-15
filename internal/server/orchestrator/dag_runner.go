@@ -443,17 +443,25 @@ func (d *DAGRunner) processReadyDependents(stepID string, stepFailed bool, toLau
 		queue = queue[1:]
 
 		for _, depID := range d.dependents[item.stepID] {
+			// Track failed upstream for run_if decisions
+			if item.failed {
+				d.hasFailedUpstream[depID] = true
+			}
+
 			d.inDegree[depID]--
 			if d.inDegree[depID] == 0 {
 				depRS := d.steps[depID]
 				if depRS != nil && depRS.Status == store.StatusPending {
-					if item.failed {
+					anyUpstreamFailed := d.hasFailedUpstream[depID]
+
+					if anyUpstreamFailed && depRS.RunIfSnapshot != "all_done" {
+						// all_success (default): skip when upstream failed
 						depRS.Status = store.StatusSkipped
 						d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
 						d.completed++
-						// Enqueue to propagate skip transitively
 						queue = append(queue, workItem{stepID: depID, failed: true})
 					} else {
+						// Either no upstream failed, or run_if=all_done (launch regardless)
 						depRS.Status = store.StatusRunning
 						d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
 						*toLaunch = append(*toLaunch, *depRS)

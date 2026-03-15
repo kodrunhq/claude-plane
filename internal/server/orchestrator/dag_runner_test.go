@@ -578,3 +578,143 @@ func TestValidateJobSteps_RetryLimits(t *testing.T) {
 		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
 	}
 }
+
+func TestDAGRunner_RunIfAllDone_UpstreamFailed(t *testing.T) {
+	// A → B(all_done): A fails, B still launches
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-1",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue", runIf: "all_done"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1) // fail
+
+	// B should still launch because run_if=all_done
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// B should have completed
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusCompleted {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusCompleted)
+	}
+}
+
+func TestDAGRunner_RunIfAllDone_MultipleUpstreams(t *testing.T) {
+	// A, B → C(all_done): A succeeds, B fails, C launches after both done
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-2",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue"},
+			{id: "c", onFailure: "continue", runIf: "all_done"},
+		},
+		[]store.StepDependency{
+			{StepID: "c", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.waitForStep("b")
+
+	mock.completeStep("a", 0)
+	mock.completeStep("b", 1) // fail
+
+	// C should still launch
+	mock.waitForStep("c")
+	mock.completeStep("c", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	rs := runner.dag.steps["c"]
+	if rs.Status != store.StatusCompleted {
+		t.Errorf("step c status = %q, want %q", rs.Status, store.StatusCompleted)
+	}
+}
+
+func TestDAGRunner_RunIfAllSuccess_Default(t *testing.T) {
+	// A → B(all_success, default): A fails, B skipped (unchanged behavior)
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-3",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue"}, // default run_if = all_success
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1) // fail
+
+	runner.waitForDone()
+
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusSkipped {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusSkipped)
+	}
+}
+
+func TestDAGRunner_RunIfAllDone_PropagatesSkipToAllSuccessDownstream(t *testing.T) {
+	// A → B(all_done) → C(all_success): A fails, B runs, C runs if B succeeds
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-4",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue", runIf: "all_done"},
+			{id: "c", onFailure: "continue"}, // all_success
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1) // fail
+
+	// B runs because all_done
+	mock.waitForStep("b")
+	mock.completeStep("b", 0) // B succeeds
+
+	// C should run because its direct upstream (B) succeeded
+	mock.waitForStep("c")
+	mock.completeStep("c", 0)
+
+	runner.waitForDone()
+
+	rs := runner.dag.steps["c"]
+	if rs.Status != store.StatusCompleted {
+		t.Errorf("step c status = %q, want %q", rs.Status, store.StatusCompleted)
+	}
+}

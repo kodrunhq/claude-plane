@@ -88,8 +88,10 @@ func (m *mockExecutor) isExecuting(stepID string) bool {
 // testStep defines a step for test setup.
 type testStep struct {
 	id           string
+	name         string
 	onFailure    string
 	delaySeconds int
+	runIf        string
 }
 
 // testRunner wraps a DAGRunner for testing with completion tracking.
@@ -103,7 +105,16 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 	t.Helper()
 
 	runSteps := make([]store.RunStep, len(steps))
+	stepNames := make(map[string]string, len(steps))
 	for i, s := range steps {
+		runIf := s.runIf
+		if runIf == "" {
+			runIf = "all_success"
+		}
+		name := s.name
+		if name == "" {
+			name = s.id
+		}
 		runSteps[i] = store.RunStep{
 			RunStepID:            "rs-" + s.id,
 			RunID:                runID,
@@ -111,7 +122,9 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 			Status:               "pending",
 			OnFailure:            s.onFailure,
 			DelaySecondsSnapshot: s.delaySeconds,
+			RunIfSnapshot:        runIf,
 		}
+		stepNames[s.id] = name
 	}
 
 	tr := &testRunner{
@@ -123,7 +136,7 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 		close(tr.done)
 	}
 
-	tr.dag = NewDAGRunner(runID, "", runSteps, deps, executor, nil, nil, onComplete, nil, JobMeta{}, nil)
+	tr.dag = NewDAGRunner(runID, "", runSteps, deps, executor, nil, nil, onComplete, nil, JobMeta{}, stepNames)
 	return tr
 }
 
