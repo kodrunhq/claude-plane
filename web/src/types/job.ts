@@ -10,6 +10,9 @@ export interface Job {
   last_run_status?: string;
   trigger_type?: string;    // 'manual' | 'cron' | 'event' | 'mixed'
   machine_ids?: string;     // comma-separated machine IDs from steps
+  parameters?: Record<string, string>;
+  timeout_seconds?: number;
+  max_concurrent_runs?: number;
 }
 
 export interface Step {
@@ -27,6 +30,12 @@ export interface Step {
   skip_permissions?: number | null;
   model?: string;
   delay_seconds?: number;
+  task_type?: string;
+  session_key?: string;
+  run_if?: string;
+  max_retries?: number;
+  retry_delay_seconds?: number;
+  parameters?: Record<string, string>;
 }
 
 export interface StepDependency {
@@ -51,6 +60,7 @@ export interface Run {
   completed_at?: string;
   created_at: string;
   machine_ids?: string;     // comma-separated machine IDs from run steps
+  parameters?: Record<string, string>;
 }
 
 export interface ListRunsParams {
@@ -70,6 +80,8 @@ export interface RunStep {
   started_at?: string;
   completed_at?: string;
   error?: string;
+  task_type_snapshot?: string;
+  attempt?: number;
 }
 
 export interface RunDetail {
@@ -80,6 +92,9 @@ export interface RunDetail {
 export interface CreateJobParams {
   name: string;
   description?: string;
+  parameters?: Record<string, string>;
+  timeout_seconds?: number;
+  max_concurrent_runs?: number;
 }
 
 export interface CreateStepParams {
@@ -92,6 +107,12 @@ export interface CreateStepParams {
   skip_permissions?: number | null;
   model?: string;
   delay_seconds?: number;
+  task_type?: string;
+  session_key?: string;
+  run_if?: string;
+  max_retries?: number;
+  retry_delay_seconds?: number;
+  on_failure?: string;
 }
 
 export interface UpdateStepParams {
@@ -104,4 +125,16 @@ export interface UpdateStepParams {
   skip_permissions?: number | null;
   model?: string;
   delay_seconds?: number;
+  task_type?: string;
+  session_key?: string;
+  run_if?: string;
+  max_retries?: number;
+  retry_delay_seconds?: number;
+  on_failure?: string;
+}
+
+export interface TriggerRunParams {
+  trigger_type?: string;
+  trigger_detail?: string;
+  parameters?: Record<string, string>;
 }
