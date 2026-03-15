@@ -2,13 +2,20 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// ErrMaxConcurrentRuns is returned when a job has reached its maximum number
+// of concurrent active runs.
+var ErrMaxConcurrentRuns = errors.New("max concurrent runs reached for this job")
 
 // Orchestrator manages active DAGRunners for job runs.
 type Orchestrator struct {
@@ -46,10 +53,38 @@ func NewOrchestrator(ctx context.Context, s store.JobStoreIface, executor StepEx
 	}
 }
 
+// countActiveRunsForJob counts how many active runners belong to a given job.
+// Must be called with o.mu held.
+func (o *Orchestrator) countActiveRunsForJob(jobID string) int {
+	count := 0
+	for _, runner := range o.activeRuns {
+		if runner.jobID == jobID {
+			count++
+		}
+	}
+	return count
+}
+
 // CreateRun validates the DAG, creates a run in the DB, snapshots steps
 // into run_steps, builds a DAGRunner, and starts execution.
+// params provides runtime parameter overrides (merged with job defaults).
 // An optional triggerDetail string provides extra context about what triggered the run.
-func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string, triggerDetail ...string) (*store.Run, error) {
+func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType string, params map[string]string, triggerDetail ...string) (*store.Run, error) {
+	// Get job to check max concurrent runs and parameters
+	job, err := o.store.GetJob(ctx, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("get job: %w", err)
+	}
+
+	// Check max concurrent runs
+	o.mu.Lock()
+	activeCount := o.countActiveRunsForJob(jobID)
+	if job.Job.MaxConcurrentRuns > 0 && activeCount >= job.Job.MaxConcurrentRuns {
+		o.mu.Unlock()
+		return nil, ErrMaxConcurrentRuns
+	}
+	o.mu.Unlock()
+
 	// Get steps and dependencies
 	steps, deps, err := o.store.GetStepsWithDeps(ctx, jobID)
 	if err != nil {
@@ -61,6 +96,13 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		return nil, fmt.Errorf("validate DAG: %w", err)
 	}
 
+	// Resolve parameters: merge job defaults with runtime overrides
+	resolvedParams := resolveParameters(job.Job.Parameters, params)
+	paramsJSON, err := json.Marshal(resolvedParams)
+	if err != nil {
+		return nil, fmt.Errorf("marshal parameters: %w", err)
+	}
+
 	// Create run in DB
 	detail0 := ""
 	if len(triggerDetail) > 0 {
@@ -70,6 +112,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		JobID:         jobID,
 		TriggerType:   triggerType,
 		TriggerDetail: detail0,
+		Parameters:    string(paramsJSON),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create run: %w", err)
@@ -86,8 +129,6 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	if err != nil {
 		return nil, fmt.Errorf("get run steps: %w", err)
 	}
-
-	// OnFailure is now populated from on_failure_snapshot by GetRunWithSteps.
 
 	// Build and start DAGRunner
 	capturedJobID := jobID
@@ -112,7 +153,13 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		stepNameMap[s.StepID] = s.Name
 	}
 
-	runner := NewDAGRunner(run.RunID, jobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, nil, JobMeta{}, stepNameMap)
+	jobMeta := JobMeta{
+		Name:        job.Job.Name,
+		RunID:       run.RunID,
+		TriggerType: triggerType,
+	}
+
+	runner := NewDAGRunner(run.RunID, jobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, resolvedParams, jobMeta, stepNameMap)
 
 	o.mu.Lock()
 	o.activeRuns[run.RunID] = runner
@@ -125,6 +172,22 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunStarted, run.RunID, jobID, store.StatusRunning, triggerType))
 
 	runner.Start(o.rootCtx)
+
+	// Job-level timeout
+	if job.Job.TimeoutSeconds > 0 {
+		timeout := time.Duration(job.Job.TimeoutSeconds) * time.Second
+		go func() {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				slog.Warn("job run timed out", "run_id", run.RunID, "timeout", timeout)
+				o.CancelRun(o.rootCtx, run.RunID)
+			case <-runner.Done():
+				// Run completed before timeout
+			}
+		}()
+	}
 
 	return run, nil
 }
@@ -184,8 +247,6 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 		return fmt.Errorf("re-read run: %w", err)
 	}
 
-	// OnFailure is now populated from on_failure_snapshot by GetRunWithSteps.
-
 	// Build new DAGRunner from current DB state
 	retryJobID := detail.Run.JobID
 	onComplete := func(runID string, status string) {
@@ -205,9 +266,8 @@ func (o *Orchestrator) RetryStep(ctx context.Context, runID string, stepID strin
 	// Build step name map for retry
 	retryStepNames := make(map[string]string)
 	for _, rs := range detail.RunSteps {
-		retryStepNames[rs.StepID] = rs.StepID // Use stepID as fallback; orchestrator tests don't need names
+		retryStepNames[rs.StepID] = rs.StepID
 	}
-	// Try to get real step names from job steps
 	if retrySteps, _, err := o.store.GetStepsWithDeps(ctx, detail.Run.JobID); err == nil {
 		for _, s := range retrySteps {
 			retryStepNames[s.StepID] = s.Name
@@ -282,7 +342,7 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 // CreateRunErr is a thin wrapper around CreateRun that discards the returned
 // *store.Run, satisfying the event.OrchestratorIface interface.
 func (o *Orchestrator) CreateRunErr(ctx context.Context, jobID string, triggerType string) error {
-	_, err := o.CreateRun(ctx, jobID, triggerType)
+	_, err := o.CreateRun(ctx, jobID, triggerType, nil)
 	return err
 }
 

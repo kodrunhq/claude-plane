@@ -138,7 +138,7 @@ func (m *mockJobStoreForSchedules) GetJob(_ context.Context, jobID string) (*sto
 	return jd, nil
 }
 
-func (m *mockJobStoreForSchedules) CreateJob(_ context.Context, name, description, userID string) (*store.Job, error) {
+func (m *mockJobStoreForSchedules) CreateJob(_ context.Context, p store.CreateJobParams) (*store.Job, error) {
 	panic("not implemented")
 }
 func (m *mockJobStoreForSchedules) ListJobs(_ context.Context) ([]store.Job, error) {
@@ -150,7 +150,7 @@ func (m *mockJobStoreForSchedules) ListJobsByUser(_ context.Context, userID stri
 func (m *mockJobStoreForSchedules) DeleteJob(_ context.Context, jobID string) error {
 	panic("not implemented")
 }
-func (m *mockJobStoreForSchedules) UpdateJob(_ context.Context, jobID, name, description string) (*store.Job, error) {
+func (m *mockJobStoreForSchedules) UpdateJob(_ context.Context, p store.UpdateJobParams) (*store.Job, error) {
 	panic("not implemented")
 }
 func (m *mockJobStoreForSchedules) CreateStep(_ context.Context, p store.CreateStepParams) (*store.Step, error) {
@@ -171,7 +171,7 @@ func (m *mockJobStoreForSchedules) RemoveDependency(_ context.Context, stepID, d
 func (m *mockJobStoreForSchedules) GetStepsWithDeps(_ context.Context, jobID string) ([]store.Step, []store.StepDependency, error) {
 	panic("not implemented")
 }
-func (m *mockJobStoreForSchedules) CreateRun(_ context.Context, jobID, triggerType string, triggerDetail ...string) (*store.Run, error) {
+func (m *mockJobStoreForSchedules) CreateRun(_ context.Context, p store.CreateRunParams) (*store.Run, error) {
 	panic("not implemented")
 }
 func (m *mockJobStoreForSchedules) InsertRunSteps(_ context.Context, runID string, steps []store.Step) error {
@@ -193,6 +193,24 @@ func (m *mockJobStoreForSchedules) ListAllRuns(_ context.Context, opts store.Lis
 	panic("not implemented")
 }
 func (m *mockJobStoreForSchedules) ListJobsWithStats(_ context.Context, userID string) ([]store.JobWithStats, error) {
+	panic("not implemented")
+}
+func (m *mockJobStoreForSchedules) UpdateRunParameters(_ context.Context, runID, parametersJSON string) error {
+	panic("not implemented")
+}
+func (m *mockJobStoreForSchedules) UpdateRunStepAttempt(_ context.Context, runStepID string, attempt int) error {
+	panic("not implemented")
+}
+func (m *mockJobStoreForSchedules) SetTaskValue(_ context.Context, runStepID, key, value string) error {
+	panic("not implemented")
+}
+func (m *mockJobStoreForSchedules) GetTaskValues(_ context.Context, runStepID string) ([]store.TaskValue, error) {
+	panic("not implemented")
+}
+func (m *mockJobStoreForSchedules) GetTaskValuesForSteps(_ context.Context, runStepIDs []string) ([]store.TaskValue, error) {
+	panic("not implemented")
+}
+func (m *mockJobStoreForSchedules) DeleteTaskValuesForStep(_ context.Context, runStepID string) error {
 	panic("not implemented")
 }
 
