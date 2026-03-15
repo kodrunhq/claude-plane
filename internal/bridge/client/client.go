@@ -61,9 +61,10 @@ type Session struct {
 
 // Template represents a session template resource.
 type Template struct {
-	TemplateID string `json:"template_id"`
-	Name       string `json:"name"`
-	MachineID  string `json:"machine_id,omitempty"`
+	TemplateID  string `json:"template_id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MachineID   string `json:"machine_id,omitempty"`
 }
 
 // Machine represents a connected agent machine.

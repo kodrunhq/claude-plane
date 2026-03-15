@@ -279,8 +279,11 @@ func (t *Telegram) handleCommand(ctx context.Context, text string) string {
 	case "status":
 		return "✅ Bridge is running\nConnector: telegram"
 
-	case "list":
-		return t.handleList(ctx)
+	case "list", "templates":
+		return t.handleTemplates(ctx)
+
+	case "sessions":
+		return t.handleSessions(ctx)
 
 	case "machines":
 		return t.handleMachines(ctx)
@@ -299,7 +302,34 @@ func (t *Telegram) handleCommand(ctx context.Context, text string) string {
 	}
 }
 
-func (t *Telegram) handleList(ctx context.Context) string {
+func (t *Telegram) handleTemplates(ctx context.Context) string {
+	templates, err := t.apiClient.ListTemplates(ctx)
+	if err != nil {
+		return fmt.Sprintf("❌ Failed to list templates: %s", escapeMarkdownV2(err.Error()))
+	}
+	if len(templates) == 0 {
+		return "No templates configured\\."
+	}
+	var sb strings.Builder
+	sb.WriteString("*Available templates:*\n")
+	for _, tmpl := range templates {
+		desc := tmpl.Description
+		if len(desc) > 60 {
+			desc = desc[:57] + "..."
+		}
+		machine := tmpl.MachineID
+		if machine == "" {
+			machine = "any"
+		}
+		sb.WriteString(fmt.Sprintf("• `%s` — %s \\(%s\\)\n",
+			escapeMarkdownV2(tmpl.Name),
+			escapeMarkdownV2(desc),
+			escapeMarkdownV2(machine)))
+	}
+	return sb.String()
+}
+
+func (t *Telegram) handleSessions(ctx context.Context) string {
 	sessions, err := t.apiClient.ListSessions(ctx)
 	if err != nil {
 		return fmt.Sprintf("❌ Failed to list sessions: %s", escapeMarkdownV2(err.Error()))
@@ -511,7 +541,9 @@ func helpText() string {
 	return `*claude\-plane bot commands*
 
 /start <template> \[machine\] \[| VAR\=val …\] — Start a session from a template
-/list — List active sessions
+/list — List available templates
+/templates — List available templates
+/sessions — List active sessions
 /machines — List connected machines
 /status — Bridge status
 /kill <session\_id> — Kill a session
