@@ -7,6 +7,19 @@ import (
 
 const maxCheckOutputLen = 4096
 
+// maxBodyLen caps user-controlled text fields (comment bodies, review bodies,
+// release notes) to mitigate prompt-injection risk when these values flow into
+// Claude session prompts.
+const maxBodyLen = 4096
+
+// truncateBody returns s truncated to maxBodyLen characters if it exceeds the limit.
+func truncateBody(s string) string {
+	if len(s) <= maxBodyLen {
+		return s
+	}
+	return s[:maxBodyLen] + "... [truncated]"
+}
+
 // PRData represents relevant fields from a GitHub Pull Request.
 type PRData struct {
 	Number    int    `json:"number"`
@@ -71,7 +84,7 @@ func ExtractPRVariables(pr PRData, repo string) map[string]string {
 	return map[string]string{
 		"PR_URL":         pr.HTMLURL,
 		"PR_TITLE":       pr.Title,
-		"PR_BODY":        pr.Body,
+		"PR_BODY":        truncateBody(pr.Body),
 		"PR_AUTHOR":      pr.User.Login,
 		"PR_BRANCH":      pr.Head.Ref,
 		"PR_BASE":        pr.Base.Ref,
@@ -160,7 +173,7 @@ type ReleaseData struct {
 // ExtractIssueCommentVariables returns template variables for an issue comment.
 func ExtractIssueCommentVariables(comment IssueCommentData, repo string, issueNumber int, issueTitle, issueURL string) map[string]string {
 	return map[string]string{
-		"COMMENT_BODY":   comment.Body,
+		"COMMENT_BODY":   truncateBody(comment.Body),
 		"COMMENT_AUTHOR": comment.User.Login,
 		"COMMENT_URL":    comment.HTMLURL,
 		"ISSUE_NUMBER":   strconv.Itoa(issueNumber),
@@ -173,7 +186,7 @@ func ExtractIssueCommentVariables(comment IssueCommentData, repo string, issueNu
 // ExtractPRCommentVariables returns template variables for a PR review comment.
 func ExtractPRCommentVariables(comment PRCommentData, repo string, prNumber int, prTitle, prURL string) map[string]string {
 	return map[string]string{
-		"COMMENT_BODY":   comment.Body,
+		"COMMENT_BODY":   truncateBody(comment.Body),
 		"COMMENT_AUTHOR": comment.User.Login,
 		"COMMENT_URL":    comment.HTMLURL,
 		"PR_NUMBER":      strconv.Itoa(prNumber),
@@ -188,7 +201,7 @@ func ExtractPRReviewVariables(review PRReviewData, repo string, prNumber int, pr
 	return map[string]string{
 		"REVIEW_STATE":   review.State,
 		"REVIEW_AUTHOR":  review.User.Login,
-		"REVIEW_BODY":    review.Body,
+		"REVIEW_BODY":    truncateBody(review.Body),
 		"REVIEW_URL":     review.HTMLURL,
 		"PR_NUMBER":      strconv.Itoa(prNumber),
 		"PR_URL":         prURL,
@@ -201,7 +214,7 @@ func ExtractReleaseVariables(release ReleaseData, repo string) map[string]string
 	return map[string]string{
 		"RELEASE_TAG":    release.TagName,
 		"RELEASE_NAME":   release.Name,
-		"RELEASE_BODY":   release.Body,
+		"RELEASE_BODY":   truncateBody(release.Body),
 		"RELEASE_URL":    release.HTMLURL,
 		"RELEASE_AUTHOR": release.Author.Login,
 		"REPO_FULL_NAME": repo,
