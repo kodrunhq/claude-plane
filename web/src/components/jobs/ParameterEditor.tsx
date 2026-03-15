@@ -1,11 +1,39 @@
-import { useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 const PARAM_KEY_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
+interface ParameterEntry {
+  id: string;
+  key: string;
+  value: string;
+}
+
 interface ParameterEditorProps {
   parameters: Record<string, string>;
   onChange: (parameters: Record<string, string>) => void;
+}
+
+let nextId = 1;
+
+function generateId(): string {
+  return `param-${nextId++}`;
+}
+
+function toEntries(params: Record<string, string>): ParameterEntry[] {
+  return Object.entries(params).map(([key, value]) => ({
+    id: generateId(),
+    key,
+    value,
+  }));
+}
+
+function toRecord(entries: ParameterEntry[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const entry of entries) {
+    result[entry.key] = entry.value;
+  }
+  return result;
 }
 
 function validateKey(key: string): string | null {
@@ -15,44 +43,66 @@ function validateKey(key: string): string | null {
 }
 
 export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) {
-  const entries = Object.entries(parameters);
+  const [entries, setEntries] = useState<ParameterEntry[]>(() => toEntries(parameters));
+
+  // Sync from parent when parameters change externally (e.g. server load).
+  // Compare serialized keys to avoid infinite loops.
+  const parentKeys = useMemo(() => JSON.stringify(parameters), [parameters]);
+  const [prevParentKeys, setPrevParentKeys] = useState(parentKeys);
+  if (parentKeys !== prevParentKeys) {
+    setPrevParentKeys(parentKeys);
+    setEntries(toEntries(parameters));
+  }
+
+  const duplicateKeys = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const entry of entries) {
+      if (entry.key) {
+        seen.set(entry.key, (seen.get(entry.key) ?? 0) + 1);
+      }
+    }
+    const dupes = new Set<string>();
+    for (const [key, count] of seen) {
+      if (count > 1) dupes.add(key);
+    }
+    return dupes;
+  }, [entries]);
+
+  const emitChange = useCallback(
+    (updated: ParameterEntry[]) => {
+      setEntries(updated);
+      onChange(toRecord(updated));
+    },
+    [onChange],
+  );
 
   const handleAdd = useCallback(() => {
-    const newKey = generateUniqueKey(parameters);
-    onChange({ ...parameters, [newKey]: '' });
-  }, [parameters, onChange]);
+    let i = 1;
+    const existingKeys = new Set(entries.map((e) => e.key));
+    while (existingKeys.has(`PARAM_${i}`)) i++;
+    const newEntry: ParameterEntry = { id: generateId(), key: `PARAM_${i}`, value: '' };
+    emitChange([...entries, newEntry]);
+  }, [entries, emitChange]);
 
   const handleRemove = useCallback(
-    (key: string) => {
-      const next = { ...parameters };
-      delete next[key];
-      onChange(next);
+    (id: string) => {
+      emitChange(entries.filter((e) => e.id !== id));
     },
-    [parameters, onChange],
+    [entries, emitChange],
   );
 
   const handleKeyChange = useCallback(
-    (oldKey: string, newKey: string) => {
-      if (oldKey === newKey) return;
-      // Build new object preserving order, replacing the old key
-      const next: Record<string, string> = {};
-      for (const [k, v] of Object.entries(parameters)) {
-        if (k === oldKey) {
-          next[newKey] = v;
-        } else {
-          next[k] = v;
-        }
-      }
-      onChange(next);
+    (id: string, newKey: string) => {
+      emitChange(entries.map((e) => (e.id === id ? { ...e, key: newKey } : e)));
     },
-    [parameters, onChange],
+    [entries, emitChange],
   );
 
   const handleValueChange = useCallback(
-    (key: string, value: string) => {
-      onChange({ ...parameters, [key]: value });
+    (id: string, value: string) => {
+      emitChange(entries.map((e) => (e.id === id ? { ...e, value } : e)));
     },
-    [parameters, onChange],
+    [entries, emitChange],
   );
 
   return (
@@ -75,17 +125,19 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
         </p>
       )}
 
-      {entries.map(([key, value]) => {
-        const error = key ? validateKey(key) : null;
+      {entries.map((entry) => {
+        const keyError = entry.key ? validateKey(entry.key) : null;
+        const duplicateError = duplicateKeys.has(entry.key) ? 'Duplicate key' : null;
+        const error = keyError ?? duplicateError;
         return (
           <ParameterRow
-            key={key}
-            paramKey={key}
-            paramValue={value}
+            key={entry.id}
+            paramKey={entry.key}
+            paramValue={entry.value}
             error={error}
-            onKeyChange={(newKey) => handleKeyChange(key, newKey)}
-            onValueChange={(newValue) => handleValueChange(key, newValue)}
-            onRemove={() => handleRemove(key)}
+            onKeyChange={(newKey) => handleKeyChange(entry.id, newKey)}
+            onValueChange={(newValue) => handleValueChange(entry.id, newValue)}
+            onRemove={() => handleRemove(entry.id)}
           />
         );
       })}
@@ -133,10 +185,4 @@ function ParameterRow({ paramKey, paramValue, error, onKeyChange, onValueChange,
       {error && <p className="text-[10px] text-red-400 pl-1">{error}</p>}
     </div>
   );
-}
-
-function generateUniqueKey(existing: Record<string, string>): string {
-  let i = 1;
-  while (`PARAM_${i}` in existing) i++;
-  return `PARAM_${i}`;
 }

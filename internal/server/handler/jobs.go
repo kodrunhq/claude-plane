@@ -138,9 +138,13 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "timeout_seconds must be >= 0")
 		return
 	}
-	if req.MaxConcurrentRuns < 0 || req.MaxConcurrentRuns > 100 {
-		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 0 and 100")
+	if req.MaxConcurrentRuns > 100 {
+		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 1 and 100")
 		return
+	}
+	// Default to 1 if not specified (0 value from JSON).
+	if req.MaxConcurrentRuns <= 0 {
+		req.MaxConcurrentRuns = 1
 	}
 	if len(req.Parameters) > 0 {
 		if err := validateJobParameters(req.Parameters); err != nil {
@@ -211,11 +215,11 @@ func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 
 // updateJobRequest is the JSON body for PUT /api/v1/jobs/{jobID}.
 type updateJobRequest struct {
-	Name              string            `json:"name"`
-	Description       string            `json:"description"`
-	Parameters        map[string]string `json:"parameters,omitempty"`
-	TimeoutSeconds    int               `json:"timeout_seconds"`
-	MaxConcurrentRuns int               `json:"max_concurrent_runs"`
+	Name              string             `json:"name"`
+	Description       string             `json:"description"`
+	Parameters        *map[string]string `json:"parameters,omitempty"`
+	TimeoutSeconds    *int               `json:"timeout_seconds,omitempty"`
+	MaxConcurrentRuns *int               `json:"max_concurrent_runs,omitempty"`
 }
 
 // UpdateJob handles PUT /api/v1/jobs/{jobID}.
@@ -229,29 +233,44 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.TimeoutSeconds < 0 {
+	if req.TimeoutSeconds != nil && *req.TimeoutSeconds < 0 {
 		writeError(w, http.StatusBadRequest, "timeout_seconds must be >= 0")
 		return
 	}
-	if req.MaxConcurrentRuns < 0 || req.MaxConcurrentRuns > 100 {
-		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 0 and 100")
+	if req.MaxConcurrentRuns != nil && (*req.MaxConcurrentRuns < 1 || *req.MaxConcurrentRuns > 100) {
+		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 1 and 100")
 		return
 	}
-	if len(req.Parameters) > 0 {
-		if err := validateJobParameters(req.Parameters); err != nil {
+	if req.Parameters != nil && len(*req.Parameters) > 0 {
+		if err := validateJobParameters(*req.Parameters); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 
-	var paramsJSON string
-	if len(req.Parameters) > 0 {
-		b, err := json.Marshal(req.Parameters)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
+	// Merge with current job values: only override fields that were provided.
+	current := detail.Job
+	paramsJSON := current.Parameters
+	if req.Parameters != nil {
+		if len(*req.Parameters) > 0 {
+			b, err := json.Marshal(*req.Parameters)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			paramsJSON = string(b)
+		} else {
+			paramsJSON = ""
 		}
-		paramsJSON = string(b)
+	}
+
+	timeout := current.TimeoutSeconds
+	if req.TimeoutSeconds != nil {
+		timeout = *req.TimeoutSeconds
+	}
+	maxConcurrent := current.MaxConcurrentRuns
+	if req.MaxConcurrentRuns != nil {
+		maxConcurrent = *req.MaxConcurrentRuns
 	}
 
 	job, err := h.store.UpdateJob(r.Context(), store.UpdateJobParams{
@@ -259,8 +278,8 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		Name:              req.Name,
 		Description:       req.Description,
 		Parameters:        paramsJSON,
-		TimeoutSeconds:    req.TimeoutSeconds,
-		MaxConcurrentRuns: req.MaxConcurrentRuns,
+		TimeoutSeconds:    timeout,
+		MaxConcurrentRuns: maxConcurrent,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

@@ -320,6 +320,7 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 
 	// Build new DAGRunner from current DB state
 	rebuildJobID := detail.Run.JobID
+	rebuildTriggerType := detail.Run.TriggerType
 	onComplete := func(runID string, status string) {
 		// Clean up shared sessions when the run finishes.
 		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
@@ -335,7 +336,7 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 		if status == store.StatusFailed {
 			evType = event.TypeRunFailed
 		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, "manual"))
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, rebuildTriggerType))
 	}
 
 	// Build step name map

@@ -58,7 +58,7 @@ export function JobEditor() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobParams, setJobParams] = useState<Record<string, string>>({});
   const [timeoutSeconds, setTimeoutSeconds] = useState(0);
-  const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(0);
+  const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(1);
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
   const [activeTab, setActiveTab] = useState<EditorTab>('tasks');
   const [showRunModal, setShowRunModal] = useState(false);
@@ -73,7 +73,7 @@ export function JobEditor() {
       setJobId(jobDetail.job.job_id);
       setJobParams(jobDetail.job.parameters ?? {});
       setTimeoutSeconds(jobDetail.job.timeout_seconds ?? 0);
-      setMaxConcurrentRuns(jobDetail.job.max_concurrent_runs ?? 0);
+      setMaxConcurrentRuns(jobDetail.job.max_concurrent_runs ?? 1);
     }
   }, [jobDetail]);
 
