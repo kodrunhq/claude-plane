@@ -5,12 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	"github.com/kodrunhq/claude-plane/internal/shared/tlsutil"
 )
+
+// isUniqueConstraintError checks if the error is a SQLite UNIQUE constraint violation.
+func isUniqueConstraintError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
 
 // ErrInvalidMachineID is returned when the machine ID fails validation.
 var ErrInvalidMachineID = errors.New("invalid machine ID")
@@ -100,29 +106,39 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	tokenID := uuid.New().String()
 	expiresAt := now.Add(ttl)
 
-	shortCode, err := GenerateShortCode()
-	if err != nil {
-		return nil, fmt.Errorf("generate short code: %w", err)
-	}
+	// Generate short code with retry on collision (UNIQUE constraint).
+	const maxRetries = 3
+	var shortCode string
+	for attempt := range maxRetries {
+		code, err := GenerateShortCode()
+		if err != nil {
+			return nil, fmt.Errorf("generate short code: %w", err)
+		}
 
-	token := store.ProvisioningToken{
-		Token:         tokenID,
-		ShortCode:     shortCode,
-		MachineID:     machineID,
-		TargetOS:      targetOS,
-		TargetArch:    targetArch,
-		CACertPEM:     string(caCertPEM),
-		AgentCertPEM:  string(certPEM),
-		AgentKeyPEM:   string(keyPEM),
-		ServerAddress: svc.httpAddress,
-		GRPCAddress:   svc.grpcAddress,
-		CreatedBy:     createdBy,
-		CreatedAt:     now,
-		ExpiresAt:     expiresAt,
-	}
+		token := store.ProvisioningToken{
+			Token:         tokenID,
+			ShortCode:     code,
+			MachineID:     machineID,
+			TargetOS:      targetOS,
+			TargetArch:    targetArch,
+			CACertPEM:     string(caCertPEM),
+			AgentCertPEM:  string(certPEM),
+			AgentKeyPEM:   string(keyPEM),
+			ServerAddress: svc.httpAddress,
+			GRPCAddress:   svc.grpcAddress,
+			CreatedBy:     createdBy,
+			CreatedAt:     now,
+			ExpiresAt:     expiresAt,
+		}
 
-	if err := svc.store.CreateProvisioningToken(ctx, token); err != nil {
-		return nil, fmt.Errorf("create token: %w", err)
+		if err := svc.store.CreateProvisioningToken(ctx, token); err != nil {
+			if attempt < maxRetries-1 && isUniqueConstraintError(err) {
+				continue // Retry with a new short code.
+			}
+			return nil, fmt.Errorf("create token: %w", err)
+		}
+		shortCode = code
+		break
 	}
 
 	curlCmd := fmt.Sprintf("curl -sfL %s/api/v1/provision/%s/script | sudo bash", svc.httpAddress, tokenID)

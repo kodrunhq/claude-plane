@@ -117,16 +117,24 @@ data_dir   = %q
 }
 
 // ValidateServerURL checks that the server URL uses HTTPS unless insecure mode is enabled.
+// Rejects URLs with empty or unsupported schemes.
 func ValidateServerURL(serverURL string, insecure bool) error {
 	parsed, err := url.Parse(serverURL)
 	if err != nil {
 		return fmt.Errorf("invalid server URL: %w", err)
 	}
-	if !insecure && strings.EqualFold(parsed.Scheme, "http") {
-		return fmt.Errorf("server URL must use HTTPS. Use --insecure to allow plain HTTP (not recommended for production)")
-	}
-	if insecure && strings.EqualFold(parsed.Scheme, "http") {
+
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "https":
+		// Always allowed.
+	case "http":
+		if !insecure {
+			return fmt.Errorf("server URL must use HTTPS. Use --insecure to allow plain HTTP (not recommended for production)")
+		}
 		fmt.Fprintln(os.Stderr, "WARNING: Using plain HTTP. Certificate material will be transmitted unencrypted. Use HTTPS in production.")
+	default:
+		return fmt.Errorf("invalid server URL scheme %q: must be https (or http with --insecure)", parsed.Scheme)
 	}
 	return nil
 }
