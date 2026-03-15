@@ -27,6 +27,7 @@ import (
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
+	"github.com/kodrunhq/claude-plane/internal/server/retention"
 	"github.com/kodrunhq/claude-plane/internal/server/executor"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/provision"
@@ -112,12 +113,18 @@ func newServeCmd() *cobra.Command {
 			contentIngestor := ingest.NewContentIngestor(s, slog.Default())
 			defer contentIngestor.Close()
 
+			// Session content retention cleaner
+			contentRetentionCleaner := retention.NewCleaner(s, connMgr, slog.Default(), cfg.Retention.GetRetentionDays())
+			contentRetentionCleaner.Start()
+			defer contentRetentionCleaner.Stop()
+
 			// gRPC server
 			grpcSrv := grpcserver.NewGRPCServer(tlsCfg, connMgr, slog.Default())
 			grpcSrv.SetRegistry(registry)
 			grpcSrv.SetSessionStore(s)
 			grpcSrv.SetTaskValueStore(s)
 			grpcSrv.SetContentIngestor(contentIngestor)
+			grpcSrv.SetCleanupStore(s)
 
 			grpcLis, err := net.Listen("tcp", cfg.GRPC.Listen)
 			if err != nil {
