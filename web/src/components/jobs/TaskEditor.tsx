@@ -532,11 +532,15 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
           id="task-command"
           name="command"
           type="text"
-          defaultValue={taskType === 'claude' ? (task.command || 'claude') : task.command}
+          defaultValue={taskType === 'claude' ? (task.command || 'claude') : (task.command || '')}
           key={task.step_id + '-command-' + taskType}
           required={taskType === 'shell'}
+          placeholder={taskType === 'shell' ? 'e.g., ./deploy.sh, python script.py' : undefined}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
         />
+        {taskType === 'claude' && (
+          <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
+        )}
       </div>
 
       <div>
