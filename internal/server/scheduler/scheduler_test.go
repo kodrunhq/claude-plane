@@ -5,13 +5,16 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/kodrunhq/claude-plane/internal/server/event"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // --- mock implementations ---
 
 type mockScheduleStore struct {
 	mu         sync.Mutex
-	schedules  []CronSchedule
+	schedules  []store.CronSchedule
 	err        error
 	timestamps []timestampUpdate
 }
@@ -22,13 +25,13 @@ type timestampUpdate struct {
 	nextRun       time.Time
 }
 
-func (m *mockScheduleStore) ListEnabledSchedules(_ context.Context) ([]CronSchedule, error) {
+func (m *mockScheduleStore) ListEnabledSchedules(_ context.Context) ([]store.CronSchedule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
 	}
-	var out []CronSchedule
+	var out []store.CronSchedule
 	for _, sc := range m.schedules {
 		if sc.Enabled {
 			out = append(out, sc)
@@ -37,7 +40,7 @@ func (m *mockScheduleStore) ListEnabledSchedules(_ context.Context) ([]CronSched
 	return out, nil
 }
 
-func (m *mockScheduleStore) GetSchedule(_ context.Context, scheduleID string) (*CronSchedule, error) {
+func (m *mockScheduleStore) GetSchedule(_ context.Context, scheduleID string) (*store.CronSchedule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -73,24 +76,24 @@ func (m *mockScheduleStore) getTimestamps() []timestampUpdate {
 
 type mockEventPublisher struct {
 	mu     sync.Mutex
-	events []Event
+	events []event.Event
 	err    error
 }
 
-func (m *mockEventPublisher) Publish(_ context.Context, event Event) error {
+func (m *mockEventPublisher) Publish(_ context.Context, ev event.Event) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
 		return m.err
 	}
-	m.events = append(m.events, event)
+	m.events = append(m.events, ev)
 	return nil
 }
 
-func (m *mockEventPublisher) getEvents() []Event {
+func (m *mockEventPublisher) getEvents() []event.Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]Event, len(m.events))
+	out := make([]event.Event, len(m.events))
 	copy(out, m.events)
 	return out
 }
@@ -119,7 +122,7 @@ func waitForCondition(t *testing.T, deadline time.Duration, fn func() bool) bool
 // publishes a trigger.cron event within 3 seconds.
 func TestScheduler_StartAndFire(t *testing.T) {
 	store := &mockScheduleStore{
-		schedules: []CronSchedule{
+		schedules: []store.CronSchedule{
 			{
 				ScheduleID: "sched-1",
 				JobID:      "job-1",
@@ -170,7 +173,7 @@ func TestScheduler_StartAndFire(t *testing.T) {
 // TestScheduler_ReloadSchedule verifies that a schedule added after Start fires
 // correctly when ReloadSchedule is called.
 func TestScheduler_ReloadSchedule(t *testing.T) {
-	newSched := CronSchedule{
+	newSched := store.CronSchedule{
 		ScheduleID: "sched-reload",
 		JobID:      "job-reload",
 		CronExpr:   "@every 1s",
@@ -216,7 +219,7 @@ func TestScheduler_ReloadSchedule(t *testing.T) {
 // TestScheduler_RemoveSchedule verifies that a removed schedule stops firing.
 func TestScheduler_RemoveSchedule(t *testing.T) {
 	store := &mockScheduleStore{
-		schedules: []CronSchedule{
+		schedules: []store.CronSchedule{
 			{
 				ScheduleID: "sched-remove",
 				JobID:      "job-remove",
@@ -263,7 +266,7 @@ func TestScheduler_RemoveSchedule(t *testing.T) {
 // on Start and never fires.
 func TestScheduler_DisabledSchedule(t *testing.T) {
 	store := &mockScheduleStore{
-		schedules: []CronSchedule{
+		schedules: []store.CronSchedule{
 			{
 				ScheduleID: "sched-disabled",
 				JobID:      "job-disabled",

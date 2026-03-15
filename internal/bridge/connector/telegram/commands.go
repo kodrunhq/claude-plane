@@ -7,13 +7,15 @@ import (
 
 // validCommands is the set of recognised command names.
 var validCommands = map[string]bool{
-	"start":    true,
-	"list":     true,
-	"status":   true,
-	"kill":     true,
-	"inject":   true,
-	"machines": true,
-	"help":     true,
+	"start":     true,
+	"list":      true,
+	"templates": true,
+	"sessions":  true,
+	"status":    true,
+	"kill":      true,
+	"inject":    true,
+	"machines":  true,
+	"help":      true,
 }
 
 // Command is a parsed Telegram slash command.

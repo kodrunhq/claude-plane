@@ -158,7 +158,7 @@ type notificationPrefs struct {
 // uiPrefs holds UI preferences.
 type uiPrefs struct {
 	Theme              string   `json:"theme"`
-	TerminalFontSize   int      `json:"terminal_font_size"`
+	TerminalFontSize   *int     `json:"terminal_font_size"`
 	AutoAttachSession  bool     `json:"auto_attach_session"`
 	CommandCenterCards []string `json:"command_center_cards"`
 }
@@ -209,7 +209,7 @@ func validatePreferences(raw json.RawMessage) error {
 		if !validThemes[p.UI.Theme] {
 			return fmt.Errorf("ui.theme must be one of: light, dark, system")
 		}
-		if p.UI.TerminalFontSize < 8 || p.UI.TerminalFontSize > 72 {
+		if p.UI.TerminalFontSize != nil && (*p.UI.TerminalFontSize < 8 || *p.UI.TerminalFontSize > 72) {
 			return fmt.Errorf("ui.terminal_font_size must be between 8 and 72")
 		}
 	}
