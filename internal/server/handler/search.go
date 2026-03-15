@@ -12,12 +12,13 @@ import (
 
 // SearchHandler handles REST endpoints for searching session content.
 type SearchHandler struct {
-	store *store.Store
+	store     *store.Store
+	getClaims ClaimsGetter
 }
 
 // NewSearchHandler creates a new SearchHandler.
-func NewSearchHandler(s *store.Store) *SearchHandler {
-	return &SearchHandler{store: s}
+func NewSearchHandler(s *store.Store, getClaims ClaimsGetter) *SearchHandler {
+	return &SearchHandler{store: s, getClaims: getClaims}
 }
 
 // RegisterSearchRoutes mounts all search routes on the given router.
@@ -47,7 +48,14 @@ func (h *SearchHandler) SearchSessions(w http.ResponseWriter, r *http.Request) {
 		offset = o
 	}
 
-	results, err := h.store.SearchContent(r.Context(), query, limit, offset)
+	// Scope search results to the current user unless they are an admin.
+	var userID string
+	claims := h.getClaims(r)
+	if claims != nil && claims.Role != "admin" {
+		userID = claims.UserID
+	}
+
+	results, err := h.store.SearchContent(r.Context(), query, limit, offset, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "fts5: syntax error") ||
 			strings.Contains(err.Error(), "no such column") {

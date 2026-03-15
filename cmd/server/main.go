@@ -320,7 +320,7 @@ func newServeCmd() *cobra.Command {
 
 			preferencesHandler := handler.NewPreferencesHandler(s, handlerClaimsGetter)
 
-			searchHandler := handler.NewSearchHandler(s)
+			searchHandler := handler.NewSearchHandler(s, handlerClaimsGetter)
 
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 

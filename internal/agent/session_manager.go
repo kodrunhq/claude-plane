@@ -10,6 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
+	"github.com/google/uuid"
 	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -362,7 +365,21 @@ func (sm *SessionManager) handleRequestScrollback(cmd *pb.RequestScrollbackCmd) 
 
 func (sm *SessionManager) handleCleanupScrollback(cmd *pb.CleanupScrollbackCmd) {
 	sessionID := cmd.GetSessionId()
+
+	// Validate session_id is a UUID to prevent path traversal.
+	if _, err := uuid.Parse(sessionID); err != nil {
+		sm.logger.Warn("cleanup: rejected invalid session_id", slog.String("session_id", sessionID))
+		return
+	}
+
 	castPath := filepath.Join(sm.dataDir, sessionID+".cast")
+
+	// Defense-in-depth: verify path stays within dataDir.
+	if !strings.HasPrefix(castPath, filepath.Clean(sm.dataDir)+string(os.PathSeparator)) {
+		sm.logger.Warn("cleanup: rejected path traversal", slog.String("path", castPath))
+		return
+	}
+
 	if err := os.Remove(castPath); err != nil {
 		if !os.IsNotExist(err) {
 			sm.logger.Warn("failed to delete scrollback file",

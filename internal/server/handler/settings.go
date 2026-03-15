@@ -35,8 +35,14 @@ func RegisterSettingsRoutes(r chi.Router, h *SettingsHandler) {
 	r.Put("/api/v1/settings", h.UpdateSettings)
 }
 
-// GetSettings returns all server settings.
+// GetSettings returns all server settings. Admin-only.
 func (h *SettingsHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	claims := h.getClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
 	settings, err := h.store.GetAllSettings(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load settings")
@@ -72,7 +78,7 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 		days, err := strconv.Atoi(val)
 		if err != nil || !validRetentionDays[days] {
 			writeError(w, http.StatusBadRequest,
-				fmt.Sprintf("retention_days must be one of: 7, 30, 90, 365, 0 (unlimited)"))
+				"retention_days must be one of: 7, 30, 90, 365, 0 (unlimited)")
 			return
 		}
 	}
