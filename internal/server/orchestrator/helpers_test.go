@@ -132,6 +132,11 @@ func (tr *testRunner) Start(t *testing.T) {
 	tr.dag.Start(context.Background())
 }
 
+func (tr *testRunner) StartWithContext(t *testing.T, ctx context.Context) {
+	t.Helper()
+	tr.dag.Start(ctx)
+}
+
 func (tr *testRunner) waitForDone() {
 	select {
 	case <-tr.done:

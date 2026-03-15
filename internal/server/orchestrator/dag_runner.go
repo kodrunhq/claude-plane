@@ -142,10 +142,12 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 			case <-timer.C:
 				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 			case <-ctx.Done():
-				// Step was marked running before delay started; signal completion
-				// with a non-error exit code so the DAG runner can treat this as
-				// a cancelled step rather than a failed execution.
-				d.OnStepCompleted(rs.StepID, 0)
+				// Context was cancelled (run cancelled or server shutdown).
+				// Do NOT call OnStepCompleted — CancelRun already handles marking
+				// pending/running steps as cancelled in the DB. Calling OnStepCompleted
+				// here would race with CancelRun's DB updates and could incorrectly
+				// mark the step as completed/failed or trigger dependent launches.
+				return
 			}
 		}()
 	} else {

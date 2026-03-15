@@ -18,7 +18,7 @@ export function JobDefaultsTab({ preferences, onSave, saving }: JobDefaultsTabPr
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const delayNum = stepDelay ? Number(stepDelay) : undefined;
-    if (delayNum !== undefined && (delayNum < 0 || delayNum > DEFAULT_STEP_DELAY_MAX_SECONDS)) {
+    if (delayNum !== undefined && (!Number.isFinite(delayNum) || delayNum < 0 || delayNum > DEFAULT_STEP_DELAY_MAX_SECONDS)) {
       toast.error(`Step delay must be between 0 and ${DEFAULT_STEP_DELAY_MAX_SECONDS} seconds`);
       return;
     }
