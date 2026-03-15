@@ -110,6 +110,7 @@ export function ConnectorDetailPage() {
 
   const lastServerConfig = useRef(connector?.config);
   const [localWatches, setLocalWatches] = useState<WatchData[] | null>(null);
+  const [dirtyState, setDirtyState] = useState(false);
 
   // When server data changes, clear local overrides
   if (connector?.config !== lastServerConfig.current) {
@@ -119,8 +120,6 @@ export function ConnectorDetailPage() {
   }
 
   const watches = localWatches ?? serverWatches;
-
-  const [dirtyState, setDirtyState] = useState(false);
   const dirty = dirtyState;
   const [configChanged, setConfigChanged] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
