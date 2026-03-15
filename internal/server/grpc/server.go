@@ -49,16 +49,23 @@ type TaskValueStore interface {
 	SetTaskValue(ctx context.Context, runStepID, key, value string) error
 }
 
+// StepIdleHandler handles StepIdleEvent from agents, signalling that a shared
+// session step has returned to the idle prompt.
+type StepIdleHandler interface {
+	OnStepIdle(sessionID string)
+}
+
 // agentService implements the AgentServiceServer interface.
 type agentService struct {
 	pb.UnimplementedAgentServiceServer
-	streams        *StreamRegistry
-	agentConnMgr   *connmgr.ConnectionManager
-	registry       *session.Registry
-	sessionStore   SessionStore
-	runStepLookup  RunStepLookup
-	taskValueStore TaskValueStore
-	logger         *slog.Logger
+	streams         *StreamRegistry
+	agentConnMgr    *connmgr.ConnectionManager
+	registry        *session.Registry
+	sessionStore    SessionStore
+	runStepLookup   RunStepLookup
+	taskValueStore  TaskValueStore
+	stepIdleHandler StepIdleHandler
+	logger          *slog.Logger
 }
 
 // NewGRPCServer creates a gRPC server configured with mTLS, keepalive, and auth interceptors.
@@ -121,6 +128,11 @@ func (s *GRPCServer) SetRunStepLookup(lookup RunStepLookup) {
 // SetTaskValueStore sets the store used to persist task values from agents.
 func (s *GRPCServer) SetTaskValueStore(store TaskValueStore) {
 	s.agentSvc.taskValueStore = store
+}
+
+// SetStepIdleHandler sets the handler for StepIdleEvent from agents.
+func (s *GRPCServer) SetStepIdleHandler(handler StepIdleHandler) {
+	s.agentSvc.stepIdleHandler = handler
 }
 
 // Serve starts the gRPC server on the given listener.
@@ -363,6 +375,13 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 							"session_id", tv.GetSessionId(),
 						)
 					}
+				}
+			}
+
+			// Handle step idle events from shared sessions — signal step completion.
+			if si := res.event.GetStepIdle(); si != nil {
+				if s.stepIdleHandler != nil {
+					s.stepIdleHandler.OnStepIdle(si.GetSessionId())
 				}
 			}
 		}
