@@ -19,6 +19,7 @@ import { CredentialsPage } from './views/CredentialsPage.tsx'
 import { TemplatesPage } from './views/TemplatesPage.tsx'
 import { ApiKeysPage } from './views/ApiKeysPage.tsx'
 import { ConnectorsPage } from './views/ConnectorsPage.tsx'
+import { ConnectorDetailPage } from './views/ConnectorDetailPage.tsx'
 import { SearchPage } from './views/SearchPage.tsx'
 import { SettingsPage } from './views/SettingsPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
@@ -98,6 +99,7 @@ function App() {
             <Route path="/credentials" element={<CredentialsPage />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />
             <Route path="/connectors" element={<ConnectorsPage />} />
+            <Route path="/connectors/:connectorId" element={<ConnectorDetailPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
