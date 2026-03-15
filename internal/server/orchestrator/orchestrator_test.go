@@ -199,29 +199,30 @@ func TestOrchestrator_OnStepCompleted_ExternalAPI(t *testing.T) {
 	})
 }
 
-// waitForRunStatus polls the orchestrator until the run reaches the expected status,
-// then verifies the persisted status in the database matches.
+// waitForRunStatus polls the database until the run reaches the expected status.
+// This is more reliable than checking activeRuns because there is a window between
+// a runner being removed from activeRuns and the DB status being updated.
 func waitForRunStatus(t *testing.T, orch *Orchestrator, runID, expectedStatus string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		orch.mu.Lock()
-		_, active := orch.activeRuns[runID]
-		orch.mu.Unlock()
-
-		if !active && expectedStatus != "running" {
-			break
+		detail, err := orch.store.GetRunWithSteps(context.Background(), runID)
+		if err != nil {
+			t.Fatalf("GetRunWithSteps: %v", err)
 		}
-		time.Sleep(10 * time.Millisecond)
+		if detail.Run.Status == expectedStatus {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 
-	// Verify the persisted status matches
+	// Final check with error message
 	detail, err := orch.store.GetRunWithSteps(context.Background(), runID)
 	if err != nil {
 		t.Fatalf("GetRunWithSteps: %v", err)
 	}
 	if detail.Run.Status != expectedStatus {
-		t.Fatalf("run %s: persisted status = %q, want %q", runID, detail.Run.Status, expectedStatus)
+		t.Fatalf("run %s: persisted status = %q, want %q (after %v)", runID, detail.Run.Status, expectedStatus, timeout)
 	}
 }
 
@@ -316,8 +317,9 @@ func TestOrchestrator_JobTimeout(t *testing.T) {
 		mock.waitForStep(rs.StepID)
 	}
 
-	// Wait for timeout to cancel the run
-	waitForRunStatus(t, orch, run.RunID, "cancelled", 5*time.Second)
+	// Wait for timeout to cancel the run (generous timeout to avoid flakiness
+	// under race detector or heavy CI load)
+	waitForRunStatus(t, orch, run.RunID, "cancelled", 10*time.Second)
 }
 
 func TestOrchestrator_ParameterResolution(t *testing.T) {
