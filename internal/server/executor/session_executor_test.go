@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
@@ -529,5 +530,203 @@ func TestNewSessionStepExecutor_NilLogger(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 	if exec.logger == nil {
 		t.Error("expected non-nil logger when nil passed")
+	}
+}
+
+// --- Shell task tests ---
+
+func makeShellRunStep(machineID string) store.RunStep {
+	return store.RunStep{
+		RunStepID:          "rs-shell-1",
+		RunID:              "run-1",
+		StepID:             "step-shell-1",
+		MachineIDSnapshot:  machineID,
+		CommandSnapshot:    "/bin/bash",
+		ArgsSnapshot:       `["-c","echo hello"]`,
+		WorkingDirSnapshot: "/tmp/work",
+		TaskTypeSnapshot:   "shell",
+	}
+}
+
+func TestShellTask_Success(t *testing.T) {
+	cm := newTestConnMgr()
+	registerMockAgent(t, cm, "m1")
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	ch := make(chan int, 1)
+	exec.ExecuteStep(context.Background(), makeShellRunStep("m1"), nil, func(stepID string, exitCode int) {
+		if stepID != "step-shell-1" {
+			t.Errorf("stepID = %q, want %q", stepID, "step-shell-1")
+		}
+		ch <- exitCode
+	})
+
+	waitForSession(t, ms, 2*time.Second)
+	ms.setAllSessionStatus(store.StatusCompleted)
+
+	code := waitForCompletion(t, ch, 5*time.Second)
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+}
+
+func TestShellTask_Failure(t *testing.T) {
+	cm := newTestConnMgr()
+	registerMockAgent(t, cm, "m1")
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	ch := make(chan int, 1)
+	exec.ExecuteStep(context.Background(), makeShellRunStep("m1"), nil, func(_ string, exitCode int) {
+		ch <- exitCode
+	})
+
+	waitForSession(t, ms, 2*time.Second)
+	ms.setAllSessionStatus(store.StatusFailed)
+
+	code := waitForCompletion(t, ch, 5*time.Second)
+	if code != failureExitCode {
+		t.Errorf("expected exit code %d, got %d", failureExitCode, code)
+	}
+}
+
+func TestShellTask_NoIdleDetectorFields(t *testing.T) {
+	cm := newTestConnMgr()
+	sent := registerMockAgent(t, cm, "m1")
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	ch := make(chan int, 1)
+	exec.ExecuteStep(context.Background(), makeShellRunStep("m1"), nil, func(_ string, exitCode int) {
+		ch <- exitCode
+	})
+
+	waitForSession(t, ms, 2*time.Second)
+	ms.setAllSessionStatus(store.StatusCompleted)
+	waitForCompletion(t, ch, 5*time.Second)
+
+	if len(*sent) == 0 {
+		t.Fatal("no commands sent to agent")
+	}
+	cs := (*sent)[0].GetCreateSession()
+	if cs == nil {
+		t.Fatal("expected CreateSession command")
+	}
+	if cs.TaskType != "shell" {
+		t.Errorf("task_type = %q, want %q", cs.TaskType, "shell")
+	}
+	if cs.InitialPrompt != "" {
+		t.Errorf("initial_prompt = %q, want empty for shell tasks", cs.InitialPrompt)
+	}
+	// Shell tasks must NOT have --dangerously-skip-permissions or --model injected.
+	for _, a := range cs.Args {
+		if a == "--dangerously-skip-permissions" {
+			t.Error("shell task should not have --dangerously-skip-permissions")
+		}
+		if a == "--model" {
+			t.Error("shell task should not have --model injected")
+		}
+	}
+}
+
+func TestShellTask_EmptyCommand(t *testing.T) {
+	cm := newTestConnMgr()
+	registerMockAgent(t, cm, "m1")
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	rs := makeShellRunStep("m1")
+	rs.CommandSnapshot = "" // empty command → should fail
+
+	ch := make(chan int, 1)
+	exec.ExecuteStep(context.Background(), rs, nil, func(_ string, exitCode int) {
+		ch <- exitCode
+	})
+
+	code := waitForCompletion(t, ch, 2*time.Second)
+	if code != failureExitCode {
+		t.Errorf("expected exit code %d for empty shell command, got %d", failureExitCode, code)
+	}
+	// Should NOT create a session in the store.
+	if ms.hasSession() {
+		t.Error("expected no session to be created for empty shell command")
+	}
+}
+
+func TestShellTask_ResolvedArgs(t *testing.T) {
+	cm := newTestConnMgr()
+	sent := registerMockAgent(t, cm, "m1")
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	rs := makeShellRunStep("m1")
+	rs.CommandSnapshot = "${CMD}"
+	rs.ArgsSnapshot = `["-c","${SCRIPT}"]`
+
+	resolveCtx := &orchestrator.ResolveContext{
+		RunParams: map[string]string{
+			"CMD":    "/usr/bin/python3",
+			"SCRIPT": "print('hello')",
+		},
+	}
+
+	ch := make(chan int, 1)
+	exec.ExecuteStep(context.Background(), rs, resolveCtx, func(_ string, exitCode int) {
+		ch <- exitCode
+	})
+
+	waitForSession(t, ms, 2*time.Second)
+	ms.setAllSessionStatus(store.StatusCompleted)
+	waitForCompletion(t, ch, 5*time.Second)
+
+	if len(*sent) == 0 {
+		t.Fatal("no commands sent to agent")
+	}
+	cs := (*sent)[0].GetCreateSession()
+	if cs == nil {
+		t.Fatal("expected CreateSession command")
+	}
+	if cs.Command != "/usr/bin/python3" {
+		t.Errorf("command = %q, want %q", cs.Command, "/usr/bin/python3")
+	}
+	wantArgs := []string{"-c", "print('hello')"}
+	if len(cs.Args) != len(wantArgs) {
+		t.Errorf("args = %v, want %v", cs.Args, wantArgs)
+	} else {
+		for i, a := range wantArgs {
+			if cs.Args[i] != a {
+				t.Errorf("args[%d] = %q, want %q", i, cs.Args[i], a)
+			}
+		}
+	}
+}
+
+func TestRunStepIDForSession(t *testing.T) {
+	cm := newTestConnMgr()
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	// Not found
+	_, found := exec.RunStepIDForSession("nonexistent")
+	if found {
+		t.Error("expected not found for nonexistent session")
+	}
+
+	// Register a tracking entry manually
+	exec.mu.Lock()
+	exec.sessionToStep["sess-1"] = &stepTracking{
+		runID:     "run-1",
+		runStepID: "rs-1",
+		stepID:    "step-1",
+	}
+	exec.mu.Unlock()
+
+	id, found := exec.RunStepIDForSession("sess-1")
+	if !found {
+		t.Fatal("expected session to be found")
+	}
+	if id != "rs-1" {
+		t.Errorf("runStepID = %q, want %q", id, "rs-1")
 	}
 }
