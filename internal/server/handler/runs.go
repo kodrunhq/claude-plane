@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -304,9 +305,14 @@ func (h *RunHandler) RepairRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req repairRunRequest
-	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid request body")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	for k := range req.Parameters {
+		if !runParamKeyRe.MatchString(k) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid parameter key %q: must match [a-zA-Z_][a-zA-Z0-9_]*", k))
 			return
 		}
 	}

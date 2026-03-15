@@ -661,12 +661,13 @@ func TestShellTask_ResolvedArgs(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	rs := makeShellRunStep("m1")
-	rs.CommandSnapshot = "${CMD}"
+	// Command uses a template reference — but shell task commands must NOT be
+	// resolved (security: prevents parameter-injection into the binary path).
+	rs.CommandSnapshot = "/usr/bin/python3"
 	rs.ArgsSnapshot = `["-c","${SCRIPT}"]`
 
 	resolveCtx := &orchestrator.ResolveContext{
 		RunParams: map[string]string{
-			"CMD":    "/usr/bin/python3",
 			"SCRIPT": "print('hello')",
 		},
 	}
@@ -687,6 +688,7 @@ func TestShellTask_ResolvedArgs(t *testing.T) {
 	if cs == nil {
 		t.Fatal("expected CreateSession command")
 	}
+	// Command must be the static string, never resolved from templates.
 	if cs.Command != "/usr/bin/python3" {
 		t.Errorf("command = %q, want %q", cs.Command, "/usr/bin/python3")
 	}

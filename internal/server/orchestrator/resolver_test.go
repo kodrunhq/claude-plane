@@ -132,17 +132,31 @@ func TestResolveParameters_MergesDefaults(t *testing.T) {
 }
 
 func TestResolveParameters_EmptyDefaults(t *testing.T) {
+	// When job defines no parameters, all overrides are dropped.
 	result := resolveParameters("", map[string]string{"KEY": "val"})
-	if result["KEY"] != "val" {
-		t.Errorf("KEY = %q, want %q", result["KEY"], "val")
+	if _, exists := result["KEY"]; exists {
+		t.Errorf("KEY should be dropped when job has no defaults, got %q", result["KEY"])
 	}
 }
 
 func TestResolveParameters_InvalidJSON(t *testing.T) {
-	// Should not panic, just return overrides
+	// Invalid JSON means no defaults parsed, so overrides are dropped.
 	result := resolveParameters("{invalid", map[string]string{"K": "V"})
-	if result["K"] != "V" {
-		t.Errorf("K = %q, want %q", result["K"], "V")
+	if _, exists := result["K"]; exists {
+		t.Errorf("K should be dropped when defaults JSON is invalid, got %q", result["K"])
+	}
+}
+
+func TestResolveParameters_UnknownKeysDropped(t *testing.T) {
+	defaults := `{"ENV":"staging"}`
+	overrides := map[string]string{"ENV": "production", "UNKNOWN": "injected"}
+	result := resolveParameters(defaults, overrides)
+
+	if result["ENV"] != "production" {
+		t.Errorf("ENV = %q, want %q", result["ENV"], "production")
+	}
+	if _, exists := result["UNKNOWN"]; exists {
+		t.Errorf("UNKNOWN should be dropped, got %q", result["UNKNOWN"])
 	}
 }
 

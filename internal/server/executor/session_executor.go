@@ -278,8 +278,10 @@ func (e *SessionStepExecutor) executeShellTask(
 
 	sessionID := uuid.New().String()
 
-	// Resolve template references in command and args.
-	resolvedCommand := resolveField(runStep.CommandSnapshot, resolveCtx)
+	// Security: do NOT resolve templates in CommandSnapshot. The command binary
+	// must be a static string to prevent parameter-injection attacks (e.g. a
+	// malicious parameter value replacing the command with an arbitrary binary).
+	// Only Args are resolved, which limits the blast radius to argument values.
 	resolvedArgsJSON := resolveField(runStep.ArgsSnapshot, resolveCtx)
 	args := parseArgs(resolvedArgsJSON)
 
@@ -288,7 +290,7 @@ func (e *SessionStepExecutor) executeShellTask(
 	sess := &store.Session{
 		SessionID:  sessionID,
 		MachineID:  runStep.MachineIDSnapshot,
-		Command:    resolvedCommand,
+		Command:    runStep.CommandSnapshot,
 		WorkingDir: workingDir,
 		Status:     store.StatusCreated,
 	}
@@ -306,7 +308,7 @@ func (e *SessionStepExecutor) executeShellTask(
 		Command: &pb.ServerCommand_CreateSession{
 			CreateSession: &pb.CreateSessionCmd{
 				SessionId:  sessionID,
-				Command:    resolvedCommand,
+				Command:    runStep.CommandSnapshot,
 				Args:       args,
 				WorkingDir: workingDir,
 				TerminalSize: &pb.TerminalSize{
