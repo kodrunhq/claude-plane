@@ -274,7 +274,9 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						return
 					}
 				}
-				_ = s.cleanupStore.DeletePendingCleanups(context.Background(), machineID)
+				if err := s.cleanupStore.DeletePendingCleanups(context.Background(), machineID); err != nil {
+					s.logger.Warn("failed to delete pending cleanups", "error", err, "machine_id", machineID)
+				}
 				s.logger.Info("sent pending cleanups to agent", "machine_id", machineID, "count", len(cleanups))
 			}()
 		}

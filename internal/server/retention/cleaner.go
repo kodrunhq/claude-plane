@@ -3,6 +3,7 @@ package retention
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
@@ -65,7 +66,7 @@ func (c *Cleaner) sweep() {
 	// Determine retention period
 	days := c.defaultDays
 	if val, err := c.store.GetSetting(ctx, "retention_days"); err == nil && val != "" {
-		if d := parseInt(val); d > 0 {
+		if d, err := strconv.Atoi(val); err == nil && d > 0 {
 			days = d
 		} else if val == "0" {
 			return // unlimited retention
@@ -105,11 +106,15 @@ func (c *Cleaner) sweep() {
 				c.logger.Warn("retention sweep: failed to send cleanup to agent",
 					"error", err, "machine_id", s.MachineID, "session_id", s.SessionID)
 				// Queue for later
-				_ = c.store.AddPendingCleanup(ctx, s.SessionID, s.MachineID)
+				if err := c.store.AddPendingCleanup(ctx, s.SessionID, s.MachineID); err != nil {
+				c.logger.Warn("failed to queue pending cleanup", "error", err, "session_id", s.SessionID)
+			}
 			}
 		} else {
 			// Agent offline — queue for reconnect
-			_ = c.store.AddPendingCleanup(ctx, s.SessionID, s.MachineID)
+			if err := c.store.AddPendingCleanup(ctx, s.SessionID, s.MachineID); err != nil {
+				c.logger.Warn("failed to queue pending cleanup", "error", err, "session_id", s.SessionID)
+			}
 		}
 	}
 
@@ -119,13 +124,3 @@ func (c *Cleaner) sweep() {
 	}
 }
 
-func parseInt(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n
-}

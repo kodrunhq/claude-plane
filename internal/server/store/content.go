@@ -76,7 +76,7 @@ func (s *Store) SearchContent(ctx context.Context, query string, limit, offset i
 		 FROM session_content sc
 		 JOIN session_lines sl ON sc.rowid = sl.rowid
 		 JOIN sessions s ON sl.session_id = s.session_id
-		 WHERE session_content MATCH ?
+		 WHERE sc MATCH ?
 		 ORDER BY sc.rank
 		 LIMIT ? OFFSET ?`,
 		query, limit, offset)
@@ -107,8 +107,8 @@ func (s *Store) SearchContent(ctx context.Context, query string, limit, offset i
 // FetchContextLines retrieves lines around a match for context display.
 func (s *Store) FetchContextLines(ctx context.Context, sessionID string, lineNumber, before, after int) (contextBefore, contextAfter string, err error) {
 	startLine := lineNumber - before
-	if startLine < 0 {
-		startLine = 0
+	if startLine < 1 {
+		startLine = 1
 	}
 	endLine := lineNumber + after
 

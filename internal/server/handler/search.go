@@ -32,6 +32,10 @@ func (h *SearchHandler) SearchSessions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "q parameter is required")
 		return
 	}
+	if len(query) > 500 {
+		writeError(w, http.StatusBadRequest, "search query too long (max 500 characters)")
+		return
+	}
 
 	limit := 50
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {

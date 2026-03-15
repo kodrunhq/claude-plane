@@ -11,6 +11,9 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
+// validSettingKeys is the allowlist of accepted setting keys.
+var validSettingKeys = map[string]bool{"retention_days": true}
+
 // validRetentionDays are the allowed values for the retention_days setting.
 // 0 means unlimited.
 var validRetentionDays = map[int]bool{7: true, 30: true, 90: true, 365: true, 0: true}
@@ -54,6 +57,14 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	// Reject unknown setting keys
+	for k := range body {
+		if !validSettingKeys[k] {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown setting key: %s", k))
+			return
+		}
 	}
 
 	// Validate known settings

@@ -56,7 +56,6 @@ type lineBuffer struct {
 	lineCount int
 	partial   []byte              // incomplete line waiting for newline
 	batch     []store.ContentLine // buffered complete lines pending flush
-	flushing  bool                // set during FlushSession to block ticker
 	sessionID string
 }
 
@@ -93,7 +92,9 @@ func (ci *ContentIngestor) Ingest(sessionID string, data []byte) {
 	defer buf.mu.Unlock()
 
 	// Combine partial line with new data
-	combined := append(buf.partial, stripped...)
+	combined := make([]byte, len(buf.partial)+len(stripped))
+	copy(combined, buf.partial)
+	copy(combined[len(buf.partial):], stripped)
 	buf.partial = nil
 
 	// Split on newlines
@@ -142,7 +143,6 @@ func (ci *ContentIngestor) FlushSession(sessionID string) {
 	buf := val.(*lineBuffer)
 
 	buf.mu.Lock()
-	buf.flushing = true
 
 	// Flush any remaining partial line
 	if len(buf.partial) > 0 {
@@ -201,7 +201,7 @@ func (ci *ContentIngestor) flushLoop() {
 			ci.buffers.Range(func(key, val any) bool {
 				buf := val.(*lineBuffer)
 				buf.mu.Lock()
-				if !buf.flushing && len(buf.batch) > 0 {
+				if len(buf.batch) > 0 {
 					ci.flushBuffer(buf)
 				}
 				buf.mu.Unlock()
