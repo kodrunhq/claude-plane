@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -454,5 +455,49 @@ func TestDAGRunner_SkipCascade(t *testing.T) {
 		if rs.Status != store.StatusSkipped {
 			t.Errorf("step %s status = %q, want %q", stepID, rs.Status, store.StatusSkipped)
 		}
+	}
+}
+
+func TestDAGRunner_DelayedStepCancellation(t *testing.T) {
+	// A delayed step that is cancelled during its wait should NOT call
+	// OnStepCompleted (CancelRun handles DB cleanup), and its dependent
+	// should never be launched.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-delay-cancel",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", delaySeconds: 60}, // long delay
+			{id: "b", onFailure: "fail_run"},                   // depends on a
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner.StartWithContext(t, ctx)
+
+	// A is a root step with a 60s delay — executor should NOT have been called yet
+	time.Sleep(100 * time.Millisecond)
+	if mock.isExecuting("a") {
+		t.Error("step A should not have started executing during delay")
+	}
+
+	// Cancel the run
+	cancel()
+
+	// Give goroutine time to process ctx.Done()
+	time.Sleep(100 * time.Millisecond)
+
+	// B should never have been launched
+	if mock.isExecuting("b") {
+		t.Error("step B should not have been launched after cancellation")
+	}
+
+	// Step A's in-memory status should still be running (CancelRun handles DB transition).
+	// The key assertion: no OnStepCompleted was called, so no dependents triggered.
+	rs := runner.dag.steps["a"]
+	if rs.Status == store.StatusCompleted {
+		t.Error("step A should NOT be marked completed after cancellation")
 	}
 }
