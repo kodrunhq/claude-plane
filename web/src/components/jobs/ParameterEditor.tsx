@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 const PARAM_KEY_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -38,7 +38,9 @@ function toRecord(entries: ParameterEntry[]): Record<string, string> | null {
   }
   const result: Record<string, string> = {};
   for (const entry of entries) {
-    result[entry.key] = entry.value;
+    if (entry.key) {
+      result[entry.key] = entry.value;
+    }
   }
   return result;
 }
@@ -53,13 +55,14 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
   const [entries, setEntries] = useState<ParameterEntry[]>(() => toEntries(parameters));
 
   // Sync from parent when parameters change externally (e.g. server load).
-  // Compare serialized keys to avoid infinite loops.
-  const parentKeys = useMemo(() => JSON.stringify(parameters), [parameters]);
-  const [prevParentKeys, setPrevParentKeys] = useState(parentKeys);
-  if (parentKeys !== prevParentKeys) {
-    setPrevParentKeys(parentKeys);
-    setEntries(toEntries(parameters));
-  }
+  const serializedParams = useMemo(() => JSON.stringify(parameters), [parameters]);
+  const prevSerializedRef = useRef(serializedParams);
+  useEffect(() => {
+    if (serializedParams !== prevSerializedRef.current) {
+      prevSerializedRef.current = serializedParams;
+      setEntries(toEntries(parameters));
+    }
+  }, [serializedParams, parameters]);
 
   const duplicateKeys = useMemo(() => {
     const seen = new Map<string, number>();
@@ -78,6 +81,8 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
   const emitChange = useCallback(
     (updated: ParameterEntry[]) => {
       setEntries(updated);
+      const hasEmptyKey = updated.some((e) => !e.key);
+      if (hasEmptyKey) return;
       const record = toRecord(updated);
       if (record !== null) {
         onChange(record);
@@ -136,7 +141,7 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
       )}
 
       {entries.map((entry) => {
-        const keyError = entry.key ? validateKey(entry.key) : null;
+        const keyError = entry.key ? validateKey(entry.key) : 'Key required';
         const duplicateError = duplicateKeys.has(entry.key) ? 'Duplicate key' : null;
         const error = keyError ?? duplicateError;
         return (
