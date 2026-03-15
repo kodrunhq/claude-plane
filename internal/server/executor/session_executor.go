@@ -28,6 +28,20 @@ const (
 	maxNotFoundRetries  = 5
 )
 
+// RunStarter creates a new run for a job. Used by run_job tasks to trigger
+// child job runs in a fire-and-forget manner.
+type RunStarter interface {
+	StartRun(ctx context.Context, jobID string, params map[string]string) error
+}
+
+// RunStarterFunc adapts a function to the RunStarter interface.
+type RunStarterFunc func(ctx context.Context, jobID string, params map[string]string) error
+
+// StartRun calls the underlying function.
+func (f RunStarterFunc) StartRun(ctx context.Context, jobID string, params map[string]string) error {
+	return f(ctx, jobID, params)
+}
+
 // sessionStore is the subset of store.Store methods needed by SessionStepExecutor.
 // Defined as an interface for testability.
 type sessionStore interface {
@@ -73,9 +87,10 @@ type sharedSessionEntry struct {
 // SessionStepExecutor creates real PTY-backed sessions on agents
 // and monitors for completion by polling session status.
 type SessionStepExecutor struct {
-	connMgr *connmgr.ConnectionManager
-	store   storeIface
-	logger  *slog.Logger
+	connMgr    *connmgr.ConnectionManager
+	store      storeIface
+	logger     *slog.Logger
+	runStarter RunStarter // for run_job tasks
 
 	mu            sync.RWMutex
 	sessionToStep map[string]*stepTracking
@@ -84,6 +99,14 @@ type SessionStepExecutor struct {
 	// Sessions remain alive until the run completes or is cancelled.
 	sharedSessionsMu sync.Mutex
 	sharedSessions   map[sessionKeyEntry]*sharedSessionEntry
+}
+
+// SetRunStarter sets the RunStarter used by run_job tasks. This is separate
+// from the constructor to break the circular dependency between the executor
+// and the orchestrator (executor needs orchestrator to start runs, orchestrator
+// needs executor to execute steps).
+func (e *SessionStepExecutor) SetRunStarter(rs RunStarter) {
+	e.runStarter = rs
 }
 
 // NewSessionStepExecutor creates a new SessionStepExecutor.
@@ -117,6 +140,8 @@ func (e *SessionStepExecutor) ExecuteStep(
 	switch runStep.TaskTypeSnapshot {
 	case "shell":
 		e.executeShellTask(ctx, runStep, resolveCtx, onComplete)
+	case "run_job":
+		e.executeRunJob(ctx, runStep, resolveCtx, onComplete)
 	default:
 		e.executeClaudeSession(ctx, runStep, resolveCtx, onComplete)
 	}
@@ -140,6 +165,73 @@ func resolveField(value string, rc *orchestrator.ResolveContext) string {
 		return value
 	}
 	return orchestrator.ResolveReferences(value, rc.RunParams, rc.JobMeta, rc.StepValues, rc.StepResults)
+}
+
+// executeRunJob triggers a child job run and immediately completes.
+// The child run is fire-and-forget: the parent step marks as completed
+// regardless of whether the child run succeeds.
+func (e *SessionStepExecutor) executeRunJob(
+	ctx context.Context,
+	runStep store.RunStep,
+	resolveCtx *orchestrator.ResolveContext,
+	onComplete func(stepID string, exitCode int),
+) {
+	targetJobID := resolveField(runStep.TargetJobIDSnapshot, resolveCtx)
+	if targetJobID == "" {
+		e.logger.Error("run_job task has no target_job_id", "step_id", runStep.StepID)
+		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
+		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	if e.runStarter == nil {
+		e.logger.Error("run_job task cannot execute: no RunStarter configured", "step_id", runStep.StepID)
+		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
+		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	// Parse job params from snapshot
+	params := make(map[string]string)
+	if runStep.JobParamsSnapshot != "" {
+		if err := json.Unmarshal([]byte(runStep.JobParamsSnapshot), &params); err != nil {
+			e.logger.Error("failed to parse job_params", "error", err, "step_id", runStep.StepID)
+			_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
+			_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+			onComplete(runStep.StepID, failureExitCode)
+			return
+		}
+	}
+
+	// Resolve template expressions in param values
+	if resolveCtx != nil {
+		resolved := make(map[string]string, len(params))
+		for k, v := range params {
+			resolved[k] = resolveField(v, resolveCtx)
+		}
+		params = resolved
+	}
+
+	// Mark step as running
+	_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, "", 0)
+
+	// Fire and forget: start the child run
+	if err := e.runStarter.StartRun(ctx, targetJobID, params); err != nil {
+		e.logger.Error("failed to start child job run",
+			"error", err,
+			"target_job_id", targetJobID,
+			"step_id", runStep.StepID,
+		)
+		_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusFailed, "", failureExitCode)
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	// Immediately mark as completed
+	_ = e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusCompleted, "", 0)
+	onComplete(runStep.StepID, 0)
 }
 
 // executeClaudeSession handles the default Claude CLI session execution path.
