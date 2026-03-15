@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
-import { Settings, Terminal, Workflow, Bell, Monitor, Server, AlertCircle, RefreshCw } from 'lucide-react';
+import { Settings, Terminal, Workflow, Bell, Monitor, Server, Database, AlertCircle, RefreshCw } from 'lucide-react';
 import { usePreferences, useUpdatePreferences } from '../hooks/usePreferences.ts';
+import { useServerSettings, useUpdateServerSettings } from '../hooks/useSettings.ts';
 import { SessionDefaultsTab } from '../components/settings/SessionDefaultsTab.tsx';
 import { JobDefaultsTab } from '../components/settings/JobDefaultsTab.tsx';
 import { NotificationsTab } from '../components/settings/NotificationsTab.tsx';
@@ -14,9 +15,67 @@ const TABS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'ui', label: 'UI Preferences', icon: Monitor },
   { id: 'machines', label: 'Machines', icon: Server },
+  { id: 'retention', label: 'Data Retention', icon: Database },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
+
+const RETENTION_OPTIONS = [
+  { value: '7', label: '7 days' },
+  { value: '30', label: '30 days' },
+  { value: '90', label: '90 days' },
+  { value: '365', label: '1 year' },
+  { value: '0', label: 'Unlimited' },
+];
+
+function DataRetentionTab() {
+  const { data: settings, isLoading } = useServerSettings();
+  const updateSettings = useUpdateServerSettings();
+  const currentValue = settings?.retention_days ?? '30';
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 bg-bg-tertiary rounded animate-pulse" />
+        <div className="h-10 w-64 bg-bg-tertiary rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-text-primary mb-1">Data Retention</h2>
+        <p className="text-sm text-text-secondary">
+          Configure how long terminal output is stored on the server and agent machines.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="retention-days" className="block text-sm font-medium text-text-primary">
+          Retention Period
+        </label>
+        <select
+          id="retention-days"
+          value={currentValue}
+          onChange={(e) => updateSettings.mutateAsync({ retention_days: e.target.value })}
+          disabled={updateSettings.isPending}
+          className="block w-64 px-3 py-2 text-sm rounded-md border border-border-primary bg-bg-primary text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/50 disabled:opacity-50"
+        >
+          {RETENTION_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-text-tertiary mt-1">
+          Terminal output older than this is deleted from the server and agent machines.
+          Running sessions are never affected.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('sessions');
@@ -129,6 +188,7 @@ export function SettingsPage() {
             saving={updatePreferences.isPending}
           />
         )}
+        {activeTab === 'retention' && <DataRetentionTab />}
       </div>
     </div>
   );
