@@ -34,20 +34,25 @@ type SessionManager struct {
 	relayCancel context.CancelFunc
 	relayWg     sync.WaitGroup
 	sendCh      chan<- *pb.AgentEvent
+
+	// Idle detector options passed to each session's IdleDetector.
+	idleDetectorOpts []IdleDetectorOption
 }
 
 // NewSessionManager creates a new session manager.
 // dataDir is the directory for scrollback files.
-func NewSessionManager(cliPath, dataDir string, logger *slog.Logger) *SessionManager {
+// Optional IdleDetectorOption values configure prompt detection for all sessions.
+func NewSessionManager(cliPath, dataDir string, logger *slog.Logger, idleOpts ...IdleDetectorOption) *SessionManager {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &SessionManager{
-		sessions: make(map[string]*Session),
-		attached: make(map[string]bool),
-		logger:   logger,
-		cliPath:  cliPath,
-		dataDir:  dataDir,
+		sessions:         make(map[string]*Session),
+		attached:         make(map[string]bool),
+		logger:           logger,
+		cliPath:          cliPath,
+		dataDir:          dataDir,
+		idleDetectorOpts: idleOpts,
 	}
 }
 
@@ -182,7 +187,9 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 					)
 				}
 			},
+			sm.idleDetectorOpts...,
 		)
+		detector.Start()
 		sess.SetOutputObserver(detector.Feed)
 	}
 
