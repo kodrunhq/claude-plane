@@ -34,7 +34,7 @@ func (m *mockExecutor) getOrCreateChans(stepID string) (chan struct{}, chan int)
 	return m.started[stepID], m.complete[stepID]
 }
 
-func (m *mockExecutor) ExecuteStep(ctx context.Context, runStep store.RunStep, onComplete func(stepID string, exitCode int)) {
+func (m *mockExecutor) ExecuteStep(ctx context.Context, runStep store.RunStep, resolveCtx *ResolveContext, onComplete func(stepID string, exitCode int)) {
 	startCh, completeCh := m.getOrCreateChans(runStep.StepID)
 
 	// Signal that step has started
@@ -123,7 +123,7 @@ func buildTestRunner(t *testing.T, runID string, steps []testStep, deps []store.
 		close(tr.done)
 	}
 
-	tr.dag = NewDAGRunner(runID, runSteps, deps, executor, nil, nil, onComplete)
+	tr.dag = NewDAGRunner(runID, "", runSteps, deps, executor, nil, nil, onComplete, nil, JobMeta{}, nil)
 	return tr
 }
 

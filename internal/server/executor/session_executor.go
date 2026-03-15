@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
@@ -88,6 +89,7 @@ func NewSessionStepExecutor(
 func (e *SessionStepExecutor) ExecuteStep(
 	ctx context.Context,
 	runStep store.RunStep,
+	_ *orchestrator.ResolveContext,
 	onComplete func(stepID string, exitCode int),
 ) {
 	agent := e.connMgr.GetAgent(runStep.MachineIDSnapshot)
