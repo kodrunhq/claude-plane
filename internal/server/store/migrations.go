@@ -438,31 +438,31 @@ ALTER TABLE run_steps ADD COLUMN job_params_snapshot TEXT;
 		Version:     12,
 		Description: "session content search index, server settings, and pending cleanups",
 		SQL: `
-CREATE TABLE session_lines (
+CREATE TABLE IF NOT EXISTS session_lines (
     rowid       INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id  TEXT NOT NULL,
     line_number INTEGER NOT NULL,
     content     TEXT NOT NULL
 );
 
-CREATE INDEX idx_session_lines_session ON session_lines(session_id, line_number);
+CREATE INDEX IF NOT EXISTS idx_session_lines_session ON session_lines(session_id, line_number);
 
-CREATE VIRTUAL TABLE session_content USING fts5(
+CREATE VIRTUAL TABLE IF NOT EXISTS session_content USING fts5(
     content,
     content='session_lines',
     content_rowid='rowid',
     tokenize='unicode61'
 );
 
-CREATE TRIGGER session_lines_ai AFTER INSERT ON session_lines BEGIN
+CREATE TRIGGER IF NOT EXISTS session_lines_ai AFTER INSERT ON session_lines BEGIN
     INSERT INTO session_content(rowid, content) VALUES (new.rowid, new.content);
 END;
 
-CREATE TRIGGER session_lines_ad AFTER DELETE ON session_lines BEGIN
+CREATE TRIGGER IF NOT EXISTS session_lines_ad AFTER DELETE ON session_lines BEGIN
     INSERT INTO session_content(session_content, rowid, content) VALUES('delete', old.rowid, old.content);
 END;
 
-CREATE TABLE session_content_meta (
+CREATE TABLE IF NOT EXISTS session_content_meta (
     session_id  TEXT PRIMARY KEY REFERENCES sessions(session_id) ON DELETE CASCADE,
     line_count  INTEGER NOT NULL DEFAULT 0,
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -474,14 +474,14 @@ CREATE TABLE IF NOT EXISTS server_settings (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE pending_cleanups (
+CREATE TABLE IF NOT EXISTS pending_cleanups (
     cleanup_id  TEXT PRIMARY KEY,
     session_id  TEXT NOT NULL,
     machine_id  TEXT NOT NULL,
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_pending_cleanups_machine ON pending_cleanups(machine_id);
+CREATE INDEX IF NOT EXISTS idx_pending_cleanups_machine ON pending_cleanups(machine_id);
 `,
 	},
 }
