@@ -8,6 +8,9 @@ import { StepEditor } from '../components/jobs/StepEditor.tsx';
 import { SchedulePanel } from '../components/jobs/SchedulePanel.tsx';
 import { TriggerPanel } from '../components/jobs/TriggerPanel.tsx';
 import { JobMetaForm } from '../components/jobs/JobMetaForm.tsx';
+import { ParameterEditor } from '../components/jobs/ParameterEditor.tsx';
+import { JobSettingsPanel } from '../components/jobs/JobSettingsPanel.tsx';
+import { RunNowModal } from '../components/jobs/RunNowModal.tsx';
 import {
   useJob,
   useCreateJob,
@@ -21,6 +24,16 @@ import {
 import { useMachines } from '../hooks/useMachines.ts';
 import { useJobEditorStore } from '../stores/jobs.ts';
 import type { UpdateStepParams } from '../types/job.ts';
+
+type EditorTab = 'details' | 'tasks' | 'triggers' | 'schedule' | 'settings';
+
+const TABS: { key: EditorTab; label: string }[] = [
+  { key: 'details', label: 'Details' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'triggers', label: 'Triggers' },
+  { key: 'schedule', label: 'Schedule' },
+  { key: 'settings', label: 'Settings' },
+];
 
 export function JobEditor() {
   const { id } = useParams<{ id: string }>();
@@ -43,8 +56,12 @@ export function JobEditor() {
   const [jobName, setJobName] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
+  const [jobParams, setJobParams] = useState<Record<string, string>>({});
+  const [timeoutSeconds, setTimeoutSeconds] = useState(0);
+  const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(1);
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
-  const [rightTab, setRightTab] = useState<'steps' | 'schedules' | 'triggers'>('steps');
+  const [activeTab, setActiveTab] = useState<EditorTab>('tasks');
+  const [showRunModal, setShowRunModal] = useState(false);
   const stepDirtyRef = useRef(false);
 
   // Sync job data when loaded
@@ -54,6 +71,9 @@ export function JobEditor() {
       setJobName(jobDetail.job.name);
       setJobDescription(jobDetail.job.description);
       setJobId(jobDetail.job.job_id);
+      setJobParams(jobDetail.job.parameters ?? {});
+      setTimeoutSeconds(jobDetail.job.timeout_seconds ?? 0);
+      setMaxConcurrentRuns(jobDetail.job.max_concurrent_runs ?? 1);
     }
   }, [jobDetail]);
 
@@ -85,6 +105,16 @@ export function JobEditor() {
     [selectedStepId, selectStep],
   );
 
+  function buildJobParams() {
+    return {
+      name: jobName,
+      description: jobDescription,
+      parameters: Object.keys(jobParams).length > 0 ? jobParams : undefined,
+      timeout_seconds: timeoutSeconds || undefined,
+      max_concurrent_runs: maxConcurrentRuns || undefined,
+    };
+  }
+
   async function ensureJobCreated(): Promise<string | null> {
     if (effectiveJobId) return effectiveJobId;
     if (!jobName.trim()) {
@@ -92,7 +122,7 @@ export function JobEditor() {
       return null;
     }
     try {
-      const job = await createJob.mutateAsync({ name: jobName, description: jobDescription });
+      const job = await createJob.mutateAsync(buildJobParams());
       setJobId(job.job_id);
       return job.job_id;
     } catch (err) {
@@ -117,6 +147,7 @@ export function JobEditor() {
         },
       });
       selectStep(step.step_id);
+      setActiveTab('tasks');
       if (isNew) {
         navigate(`/jobs/${jid}`, { replace: true });
       }
@@ -150,7 +181,7 @@ export function JobEditor() {
     try {
       await updateJob.mutateAsync({
         id: effectiveJobId,
-        params: { name: jobName, description: jobDescription },
+        params: buildJobParams(),
       });
       toast.success('Job saved');
     } catch (err) {
@@ -158,7 +189,7 @@ export function JobEditor() {
     }
   }
 
-  async function handleRun() {
+  function handleRunClick() {
     if (!effectiveJobId) {
       toast.error('Save the job first');
       return;
@@ -167,8 +198,23 @@ export function JobEditor() {
       toast.error('Save your step changes before running');
       return;
     }
+    // If job has parameters, show the modal for overrides
+    if (Object.keys(jobParams).length > 0) {
+      setShowRunModal(true);
+    } else {
+      executeRun({});
+    }
+  }
+
+  async function executeRun(parameters: Record<string, string>) {
+    if (!effectiveJobId) return;
+    setShowRunModal(false);
     try {
-      const run = await triggerRun.mutateAsync(effectiveJobId);
+      const hasParams = Object.keys(parameters).length > 0;
+      const run = await triggerRun.mutateAsync({
+        jobId: effectiveJobId,
+        params: hasParams ? { parameters } : undefined,
+      });
       toast.success('Run started');
       navigate(`/runs/${run.run_id}`);
     } catch (err) {
@@ -249,7 +295,7 @@ export function JobEditor() {
           Save
         </button>
         <button
-          onClick={handleRun}
+          onClick={handleRunClick}
           disabled={!effectiveJobId || steps.length === 0}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600 hover:bg-green-600/80 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -258,96 +304,123 @@ export function JobEditor() {
         </button>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex border-b border-border-primary bg-bg-secondary px-4 shrink-0">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => {
+              if (!confirmIfDirty()) return;
+              setActiveTab(tab.key);
+            }}
+            className={`px-4 py-2 text-xs font-medium transition-colors ${
+              activeTab === tab.key
+                ? 'text-text-primary border-b-2 border-accent-primary'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Main content */}
       <div className="flex flex-col flex-1 min-h-0">
-        {/* DAG + Step Editor row */}
-        <div className="flex flex-1 min-h-0">
-          {/* DAG Canvas (left) */}
-          <div className="flex-1 min-w-0">
-            {steps.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
-                <p>No steps yet. Click "Add Step" to begin.</p>
-                {isNew && !jobId && (
-                  <div className="mt-4 w-64">
-                    <JobMetaForm
-                      name={jobName}
-                      description={jobDescription}
-                      onChange={handleMetaChange}
-                    />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <DAGCanvas
-                steps={steps}
-                dependencies={dependencies}
-                editable
-                selectedStepId={selectedStepId}
-                onNodeClick={handleNodeClick}
-                onConnect={handleConnect}
-              />
-            )}
+        {/* Details tab */}
+        {activeTab === 'details' && (
+          <div className="flex-1 overflow-y-auto p-6 max-w-2xl space-y-6">
+            <JobMetaForm
+              name={jobName}
+              description={jobDescription}
+              onChange={handleMetaChange}
+            />
+            <ParameterEditor
+              parameters={jobParams}
+              onChange={setJobParams}
+            />
           </div>
+        )}
 
-          {/* Right panel */}
-          <div className="w-80 border-l border-border-primary bg-bg-secondary shrink-0 flex flex-col">
-            {effectiveJobId ? (
-              <>
-                {/* Tab bar */}
-                <div className="flex border-b border-border-primary shrink-0">
-                  <button
-                    onClick={() => setRightTab('steps')}
-                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                      rightTab === 'steps'
-                        ? 'text-text-primary border-b-2 border-accent-primary'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Steps
-                  </button>
-                  <button
-                    onClick={() => setRightTab('schedules')}
-                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                      rightTab === 'schedules'
-                        ? 'text-text-primary border-b-2 border-accent-primary'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Schedules
-                  </button>
-                  <button
-                    onClick={() => setRightTab('triggers')}
-                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
-                      rightTab === 'triggers'
-                        ? 'text-text-primary border-b-2 border-accent-primary'
-                        : 'text-text-secondary hover:text-text-primary'
-                    }`}
-                  >
-                    Triggers
-                  </button>
+        {/* Tasks tab — preserves the original DAG + StepEditor layout */}
+        {activeTab === 'tasks' && (
+          <div className="flex flex-1 min-h-0">
+            {/* DAG Canvas (left) */}
+            <div className="flex-1 min-w-0">
+              {steps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
+                  <p>No steps yet. Click "Add Step" to begin.</p>
+                  {isNew && !jobId && (
+                    <div className="mt-4 w-64">
+                      <JobMetaForm
+                        name={jobName}
+                        description={jobDescription}
+                        onChange={handleMetaChange}
+                      />
+                    </div>
+                  )}
                 </div>
-                {rightTab === 'steps' && (
-                  <StepEditor
-                    step={selectedStep}
-                    machines={machines ?? []}
-                    onSave={handleStepSave}
-                    onDelete={handleStepDelete}
-                    onDirtyChange={handleStepDirtyChange}
-                  />
-                )}
-                {rightTab === 'schedules' && <SchedulePanel jobId={effectiveJobId} />}
-                {rightTab === 'triggers' && <TriggerPanel jobId={effectiveJobId} />}
-              </>
-            ) : (
+              ) : (
+                <DAGCanvas
+                  steps={steps}
+                  dependencies={dependencies}
+                  editable
+                  selectedStepId={selectedStepId}
+                  onNodeClick={handleNodeClick}
+                  onConnect={handleConnect}
+                />
+              )}
+            </div>
+
+            {/* Step Editor sidebar (right) */}
+            <div className="w-80 border-l border-border-primary bg-bg-secondary shrink-0 flex flex-col">
               <StepEditor
                 step={selectedStep}
                 machines={machines ?? []}
                 onSave={handleStepSave}
                 onDelete={handleStepDelete}
+                onDirtyChange={handleStepDirtyChange}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Triggers tab — full width */}
+        {activeTab === 'triggers' && (
+          <div className="flex-1 overflow-y-auto">
+            {effectiveJobId ? (
+              <TriggerPanel jobId={effectiveJobId} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+                Save the job first to configure triggers
+              </div>
             )}
           </div>
-        </div>
+        )}
+
+        {/* Schedule tab — full width */}
+        {activeTab === 'schedule' && (
+          <div className="flex-1 overflow-y-auto">
+            {effectiveJobId ? (
+              <SchedulePanel jobId={effectiveJobId} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+                Save the job first to configure schedules
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Settings tab */}
+        {activeTab === 'settings' && (
+          <div className="flex-1 overflow-y-auto">
+            <JobSettingsPanel
+              timeoutSeconds={timeoutSeconds}
+              maxConcurrentRuns={maxConcurrentRuns}
+              onTimeoutChange={setTimeoutSeconds}
+              onMaxConcurrentChange={setMaxConcurrentRuns}
+            />
+          </div>
+        )}
 
         {/* Run History (collapsible, only for existing jobs) */}
         {effectiveJobId && (
@@ -370,6 +443,15 @@ export function JobEditor() {
           </div>
         )}
       </div>
+
+      {/* Run Now Modal */}
+      {showRunModal && (
+        <RunNowModal
+          defaultParameters={jobParams}
+          onRun={executeRun}
+          onClose={() => setShowRunModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -279,12 +279,16 @@ func TestDAGRunner_DeepLinearChainSkipPropagation(t *testing.T) {
 func TestDAGRunner_CancelBeforeStart(t *testing.T) {
 	runner := NewDAGRunner(
 		"run-1",
+		"",
 		[]store.RunStep{{RunStepID: "rs-1", StepID: "s-1", Status: store.StatusPending}},
 		nil,
 		nil,
 		nil,
 		nil,
 		func(runID, status string) {},
+		nil,
+		JobMeta{},
+		nil,
 	)
 
 	// Should not panic
@@ -499,5 +503,477 @@ func TestDAGRunner_DelayedStepCancellation(t *testing.T) {
 	rs := runner.dag.steps["a"]
 	if rs.Status == store.StatusCompleted {
 		t.Error("step A should NOT be marked completed after cancellation")
+	}
+}
+
+func TestValidateJobSteps_ValidJob(t *testing.T) {
+	steps := []store.Step{
+		{Name: "build", TaskType: "claude_session", RunIf: "all_success", MaxRetries: 2, RetryDelaySeconds: 30},
+		{Name: "test", TaskType: "shell", Command: "go test", RunIf: "all_success", MaxRetries: 0, RetryDelaySeconds: 0},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+func TestValidateJobSteps_InvalidTaskType(t *testing.T) {
+	steps := []store.Step{
+		{Name: "bad", TaskType: "unknown", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_ShellWithSessionKey(t *testing.T) {
+	steps := []store.Step{
+		{Name: "sh", TaskType: "shell", Command: "echo hi", SessionKey: "shared", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_ShellEmptyCommand(t *testing.T) {
+	steps := []store.Step{
+		{Name: "sh", TaskType: "shell", Command: "", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_CrossMachineSessionKey(t *testing.T) {
+	steps := []store.Step{
+		{Name: "a", TaskType: "claude_session", SessionKey: "shared", MachineID: "m1", RunIf: "all_success"},
+		{Name: "b", TaskType: "claude_session", SessionKey: "shared", MachineID: "m2", RunIf: "all_success"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_InvalidRunIf(t *testing.T) {
+	steps := []store.Step{
+		{Name: "bad", TaskType: "claude_session", RunIf: "never"},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestValidateJobSteps_RetryLimits(t *testing.T) {
+	steps := []store.Step{
+		{Name: "too_many", TaskType: "claude_session", RunIf: "all_success", MaxRetries: 10},
+		{Name: "bad_delay", TaskType: "claude_session", RunIf: "all_success", RetryDelaySeconds: 5000},
+	}
+	errs := ValidateJobSteps(steps)
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestDAGRunner_RunIfAllDone_UpstreamFailed(t *testing.T) {
+	// A → B(all_done): A fails, B still launches
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-1",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue", runIf: "all_done"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1) // fail
+
+	// B should still launch because run_if=all_done
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// B should have completed
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusCompleted {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusCompleted)
+	}
+}
+
+func TestDAGRunner_RunIfAllDone_MultipleUpstreams(t *testing.T) {
+	// A, B → C(all_done): A succeeds, B fails, C launches after both done
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-2",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue"},
+			{id: "c", onFailure: "continue", runIf: "all_done"},
+		},
+		[]store.StepDependency{
+			{StepID: "c", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.waitForStep("b")
+
+	mock.completeStep("a", 0)
+	mock.completeStep("b", 1) // fail
+
+	// C should still launch
+	mock.waitForStep("c")
+	mock.completeStep("c", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	rs := runner.dag.steps["c"]
+	if rs.Status != store.StatusCompleted {
+		t.Errorf("step c status = %q, want %q", rs.Status, store.StatusCompleted)
+	}
+}
+
+func TestDAGRunner_RunIfAllSuccess_Default(t *testing.T) {
+	// A → B(all_success, default): A fails, B skipped (unchanged behavior)
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-3",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue"}, // default run_if = all_success
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1) // fail
+
+	runner.waitForDone()
+
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusSkipped {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusSkipped)
+	}
+}
+
+func TestDAGRunner_RunIfAllDone_PropagatesSkipToAllSuccessDownstream(t *testing.T) {
+	// A → B(all_done) → C(all_success): A fails, B runs, C runs if B succeeds
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-runif-4",
+		[]testStep{
+			{id: "a", onFailure: "continue"},
+			{id: "b", onFailure: "continue", runIf: "all_done"},
+			{id: "c", onFailure: "continue"}, // all_success
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 1) // fail
+
+	// B runs because all_done
+	mock.waitForStep("b")
+	mock.completeStep("b", 0) // B succeeds
+
+	// C should run because its direct upstream (B) succeeded
+	mock.waitForStep("c")
+	mock.completeStep("c", 0)
+
+	runner.waitForDone()
+
+	rs := runner.dag.steps["c"]
+	if rs.Status != store.StatusCompleted {
+		t.Errorf("step c status = %q, want %q", rs.Status, store.StatusCompleted)
+	}
+}
+
+func TestDAGRunner_SessionKeySerialization(t *testing.T) {
+	// A → B, both share session key "shared". A must complete before B starts.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-1",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "b", onFailure: "fail_run", sessionKey: "shared"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	// B depends on A and shares the key — should not be executing
+	if mock.isExecuting("b") {
+		t.Error("B should not execute while A holds the session key")
+	}
+
+	mock.completeStep("a", 0)
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_SessionKeyParallel(t *testing.T) {
+	// A(k1) and B(k2) are roots with different keys — should run in parallel.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-parallel",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "k1"},
+			{id: "b", onFailure: "fail_run", sessionKey: "k2"},
+		},
+		nil,
+		mock,
+	)
+
+	runner.Start(t)
+
+	// Both should start since they have different keys
+	mock.waitForStep("a")
+	mock.waitForStep("b")
+
+	mock.completeStep("a", 0)
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_SessionKeyBlocksLaunch(t *testing.T) {
+	// A(shared), B(shared), C(no key): all roots.
+	// Exactly one of A or B claims "shared" and starts; the other is deferred.
+	// C (no key) always starts. The deferred step launches after the holder completes.
+	// Because Go map iteration is non-deterministic, the test must handle either
+	// A or B being the initial holder.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-blocks",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "b", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "c", onFailure: "fail_run"},
+		},
+		nil,
+		mock,
+	)
+
+	runner.Start(t)
+
+	// C always starts (no session key).
+	mock.waitForStep("c")
+
+	// Exactly one of A or B should start (whoever claims "shared" first).
+	// Determine which one by polling both.
+	var holder, deferred string
+	deadline := time.Now().Add(10 * time.Second)
+	for holder == "" && time.Now().Before(deadline) {
+		if mock.isExecuting("a") {
+			holder, deferred = "a", "b"
+		} else if mock.isExecuting("b") {
+			holder, deferred = "b", "a"
+		} else {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if holder == "" {
+		t.Fatal("neither A nor B started within timeout")
+	}
+
+	// The deferred step should not be executing
+	time.Sleep(100 * time.Millisecond)
+	if mock.isExecuting(deferred) {
+		t.Errorf("%s should be deferred while %s holds session key 'shared'", deferred, holder)
+	}
+
+	// Complete C first — deferred step still can't launch (holder has the key)
+	mock.completeStep("c", 0)
+	time.Sleep(100 * time.Millisecond)
+	if mock.isExecuting(deferred) {
+		t.Errorf("%s should still be deferred after C completes", deferred)
+	}
+
+	// Complete the holder — deferred step should now launch
+	mock.completeStep(holder, 0)
+	mock.waitForStep(deferred)
+	mock.completeStep(deferred, 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_SessionKeyReleasedOnComplete(t *testing.T) {
+	// A(shared) → B, B → C(shared). A completes, B runs, then C should launch
+	// since A released the key.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-sk-release",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", sessionKey: "shared"},
+			{id: "b", onFailure: "fail_run"},
+			{id: "c", onFailure: "fail_run", sessionKey: "shared"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+			{StepID: "c", DependsOn: "b"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	mock.waitForStep("a")
+	mock.completeStep("a", 0) // releases "shared"
+
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	// C should launch — session key was released when A completed
+	mock.waitForStep("c")
+	mock.completeStep("c", 0)
+
+	runner.waitForDone()
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_RetryOnFailure(t *testing.T) {
+	// A(max_retries=2) → B: A fails on first attempt, succeeds on retry, B launches.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-retry-1",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", maxRetries: 2},
+			{id: "b", onFailure: "fail_run"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	// First attempt: A starts, fails
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retry: A should be re-executed
+	mock.waitForStep("a")
+	mock.completeStep("a", 0) // succeeds on retry
+
+	// B should now launch
+	mock.waitForStep("b")
+	mock.completeStep("b", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, "completed")
+	}
+}
+
+func TestDAGRunner_RetryExhausted(t *testing.T) {
+	// A(max_retries=1) fails twice → failure propagates, B skipped.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-retry-exhaust",
+		[]testStep{
+			{id: "a", onFailure: "fail_run", maxRetries: 1},
+			{id: "b", onFailure: "fail_run"},
+		},
+		[]store.StepDependency{
+			{StepID: "b", DependsOn: "a"},
+		},
+		mock,
+	)
+
+	runner.Start(t)
+
+	// First attempt: fails
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retry (attempt 2): fails again
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retries exhausted — run should fail
+	runner.waitForDone()
+
+	if runner.finalStatus != store.StatusFailed {
+		t.Errorf("final status = %q, want %q", runner.finalStatus, store.StatusFailed)
+	}
+
+	// B should be skipped (fail_run on A)
+	rs := runner.dag.steps["b"]
+	if rs.Status != store.StatusSkipped {
+		t.Errorf("step b status = %q, want %q", rs.Status, store.StatusSkipped)
+	}
+}
+
+func TestDAGRunner_RetryDoesNotSetFailedPrematurely(t *testing.T) {
+	// A(max_retries=2) fails once, retries, succeeds → run marked completed (not failed).
+	// This verifies d.failed is NOT set before retries are exhausted.
+	mock := newMockExecutor()
+	runner := buildTestRunner(t, "run-retry-nofail",
+		[]testStep{
+			{id: "a", onFailure: "continue", maxRetries: 2},
+		},
+		nil,
+		mock,
+	)
+
+	runner.Start(t)
+
+	// First attempt: fails
+	mock.waitForStep("a")
+	mock.completeStep("a", 1)
+
+	// Retry: succeeds
+	mock.waitForStep("a")
+	mock.completeStep("a", 0)
+
+	runner.waitForDone()
+
+	if runner.finalStatus != "completed" {
+		t.Errorf("final status = %q, want %q — d.failed was set prematurely", runner.finalStatus, "completed")
 	}
 }

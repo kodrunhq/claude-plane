@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { jobsApi } from '../api/jobs.ts';
-import type { CreateJobParams, CreateStepParams, UpdateStepParams } from '../types/job.ts';
+import type { CreateJobParams, CreateStepParams, UpdateStepParams, TriggerRunParams } from '../types/job.ts';
 
 export function useJobs() {
   return useQuery({
@@ -93,7 +93,8 @@ export function useRemoveDependency() {
 export function useTriggerRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (jobId: string) => jobsApi.triggerRun(jobId),
+    mutationFn: ({ jobId, params }: { jobId: string; params?: TriggerRunParams }) =>
+      jobsApi.triggerRun(jobId, params),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runs'] }),
   });
 }

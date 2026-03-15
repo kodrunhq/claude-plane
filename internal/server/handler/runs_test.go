@@ -32,7 +32,7 @@ func newMockExecutor() *mockExecutor {
 	return &mockExecutor{results: make(chan stepResult, 100)}
 }
 
-func (m *mockExecutor) ExecuteStep(ctx context.Context, rs store.RunStep, onComplete func(stepID string, exitCode int)) {
+func (m *mockExecutor) ExecuteStep(ctx context.Context, rs store.RunStep, _ *orchestrator.ResolveContext, onComplete func(stepID string, exitCode int)) {
 	m.mu.Lock()
 	m.executed = append(m.executed, rs)
 	m.mu.Unlock()

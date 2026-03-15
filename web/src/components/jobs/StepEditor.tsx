@@ -13,24 +13,49 @@ interface StepEditorProps {
   onDirtyChange?: (dirty: boolean) => void;
 }
 
+type TaskType = 'claude' | 'shell';
+
 function parseSkipPermissions(value: string): number | null | undefined {
   if (value === '1') return 1;
   if (value === '0') return 0;
   return undefined;
 }
 
-function getFormParams(form: HTMLFormElement): UpdateStepParams {
+function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateStepParams {
   const data = new FormData(form);
-  return {
+  const base: UpdateStepParams = {
     name: data.get('name') as string,
-    prompt: data.get('prompt') as string,
     machine_id: data.get('machine_id') as string,
     working_dir: data.get('working_dir') as string,
-    command: (data.get('command') as string) || 'claude',
-    args: data.get('args') as string,
-    model: (data.get('model') as string) || undefined,
-    skip_permissions: parseSkipPermissions(data.get('skip_permissions') as string),
+    task_type: taskType === 'claude' ? 'claude_session' : 'shell',
     delay_seconds: Number(data.get('delay_seconds')) || 0,
+    run_if: (data.get('run_if') as string) || undefined,
+    max_retries: Number(data.get('max_retries')) || 0,
+    retry_delay_seconds: Number(data.get('retry_delay_seconds')) || 0,
+    on_failure: (data.get('on_failure') as string) || undefined,
+  };
+
+  if (taskType === 'claude') {
+    return {
+      ...base,
+      prompt: data.get('prompt') as string,
+      command: (data.get('command') as string) || 'claude',
+      args: data.get('args') as string,
+      model: (data.get('model') as string) || undefined,
+      skip_permissions: parseSkipPermissions(data.get('skip_permissions') as string),
+      session_key: (data.get('session_key') as string) || undefined,
+    };
+  }
+
+  // Shell task
+  return {
+    ...base,
+    prompt: '',
+    command: data.get('command') as string,
+    args: data.get('args') as string,
+    model: undefined,
+    skip_permissions: undefined,
+    session_key: undefined,
   };
 }
 
@@ -40,19 +65,42 @@ function skipPermissionsFormValue(step: Step): string {
   return '';
 }
 
-function isDirty(form: HTMLFormElement, step: Step): boolean {
-  const params = getFormParams(form);
+function resolveTaskType(step: Step): TaskType {
+  if (step.task_type === 'shell') return 'shell';
+  return 'claude';
+}
+
+function isDirty(form: HTMLFormElement, step: Step, taskType: TaskType): boolean {
+  const params = getFormParams(form, taskType);
   const data = new FormData(form);
-  return (
+  const base =
     params.name !== step.name ||
-    params.prompt !== step.prompt ||
     params.machine_id !== step.machine_id ||
     params.working_dir !== step.working_dir ||
-    params.command !== (step.command || 'claude') ||
-    params.args !== (step.args ?? '') ||
-    (data.get('model') as string) !== (step.model ?? '') ||
-    (data.get('skip_permissions') as string) !== skipPermissionsFormValue(step) ||
-    (Number(data.get('delay_seconds')) || 0) !== (step.delay_seconds ?? 0)
+    (Number(data.get('delay_seconds')) || 0) !== (step.delay_seconds ?? 0) ||
+    taskType !== resolveTaskType(step) ||
+    (data.get('run_if') as string || '') !== (step.run_if ?? '') ||
+    (Number(data.get('max_retries')) || 0) !== (step.max_retries ?? 0) ||
+    (Number(data.get('retry_delay_seconds')) || 0) !== (step.retry_delay_seconds ?? 0) ||
+    (data.get('on_failure') as string || '') !== (step.on_failure ?? '');
+
+  if (base) return true;
+
+  if (taskType === 'claude') {
+    return (
+      params.prompt !== step.prompt ||
+      params.command !== (step.command || 'claude') ||
+      params.args !== (step.args ?? '') ||
+      (data.get('model') as string) !== (step.model ?? '') ||
+      (data.get('skip_permissions') as string) !== skipPermissionsFormValue(step) ||
+      (data.get('session_key') as string || '') !== (step.session_key ?? '')
+    );
+  }
+
+  // Shell
+  return (
+    (data.get('command') as string) !== (step.command || '') ||
+    (data.get('args') as string) !== (step.args ?? '')
   );
 }
 
@@ -216,17 +264,28 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
   const lastDirty = useRef(false);
   const { data: templates } = useTemplates();
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [taskType, setTaskType] = useState<TaskType>(() => step ? resolveTaskType(step) : 'claude');
+  const [maxRetriesState, setMaxRetriesState] = useState(step?.max_retries ?? 0);
+
+  // Sync task type and max retries when selected step changes.
+  useEffect(() => {
+    if (step) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local form state on step selection change
+      setTaskType(resolveTaskType(step));
+      setMaxRetriesState(step.max_retries ?? 0);
+    }
+  }, [step]); // full step object — re-syncs on any server update
 
   const checkDirty = useCallback(() => {
     if (!formRef.current || !step || !onDirtyChange) return;
-    const dirty = isDirty(formRef.current, step);
+    const dirty = isDirty(formRef.current, step, taskType);
     if (dirty !== lastDirty.current) {
       lastDirty.current = dirty;
       onDirtyChange(dirty);
     }
-  }, [step, onDirtyChange]);
+  }, [step, onDirtyChange, taskType]);
 
-  // Reset state when step changes
+  // Reset dirty state and template selection when step changes.
   useEffect(() => {
     lastDirty.current = false;
     onDirtyChange?.(false);
@@ -269,7 +328,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!step) return;
-    const params = getFormParams(e.currentTarget);
+    const params = getFormParams(e.currentTarget, taskType);
     onSave(step.step_id, params);
     lastDirty.current = false;
     onDirtyChange?.(false);
@@ -284,6 +343,12 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
     applyTemplate(template);
   }
 
+  function handleTaskTypeChange(type: TaskType) {
+    setTaskType(type);
+    lastDirty.current = true;
+    onDirtyChange?.(true);
+  }
+
   return (
     <form
       ref={formRef}
@@ -293,7 +358,37 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
     >
       <h3 className="text-sm font-medium text-text-primary">Step Configuration</h3>
 
-      {templates && templates.length > 0 && (
+      {/* Task Type Toggle */}
+      <div>
+        <label className="block text-xs text-text-secondary mb-1">Task Type</label>
+        <div className="flex rounded-md overflow-hidden border border-border-primary">
+          <button
+            type="button"
+            onClick={() => handleTaskTypeChange('claude')}
+            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+              taskType === 'claude'
+                ? 'bg-accent-primary text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            Claude Session
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTaskTypeChange('shell')}
+            className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+              taskType === 'shell'
+                ? 'bg-accent-primary text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            Shell
+          </button>
+        </div>
+      </div>
+
+      {/* Template selector — only for Claude sessions */}
+      {taskType === 'claude' && templates && templates.length > 0 && (
         <TemplateSelector
           templates={templates}
           selectedId={selectedTemplateId}
@@ -314,18 +409,21 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
         />
       </div>
 
-      <div>
-        <label htmlFor="step-prompt" className="block text-xs text-text-secondary mb-1">Prompt</label>
-        <textarea
-          id="step-prompt"
-          name="prompt"
-          rows={4}
-          defaultValue={step.prompt}
-          key={step.step_id + '-prompt'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
-          placeholder="Enter the prompt for Claude..."
-        />
-      </div>
+      {/* Prompt — Claude only */}
+      {taskType === 'claude' && (
+        <div>
+          <label htmlFor="step-prompt" className="block text-xs text-text-secondary mb-1">Prompt</label>
+          <textarea
+            id="step-prompt"
+            name="prompt"
+            rows={4}
+            defaultValue={step.prompt}
+            key={step.step_id + '-prompt'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
+            placeholder="Enter the prompt for Claude..."
+          />
+        </div>
+      )}
 
       <div>
         <label htmlFor="step-machine" className="block text-xs text-text-secondary mb-1">Machine</label>
@@ -345,36 +443,58 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
         </select>
       </div>
 
-      <div>
-        <label htmlFor="step-model" className="block text-xs text-text-secondary mb-1">Model</label>
-        <select
-          id="step-model"
-          name="model"
-          defaultValue={step.model ?? ''}
-          key={step.step_id + '-model'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
-        >
-          <option value="">Default</option>
-          <option value="opus">Opus</option>
-          <option value="sonnet">Sonnet</option>
-          <option value="haiku">Haiku</option>
-        </select>
-      </div>
+      {/* Model — Claude only */}
+      {taskType === 'claude' && (
+        <div>
+          <label htmlFor="step-model" className="block text-xs text-text-secondary mb-1">Model</label>
+          <select
+            id="step-model"
+            name="model"
+            defaultValue={step.model ?? ''}
+            key={step.step_id + '-model'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+          >
+            <option value="">Default</option>
+            <option value="opus">Opus</option>
+            <option value="sonnet">Sonnet</option>
+            <option value="haiku">Haiku</option>
+          </select>
+        </div>
+      )}
 
-      <div>
-        <label htmlFor="step-skip-permissions" className="block text-xs text-text-secondary mb-1">Skip Permissions</label>
-        <select
-          id="step-skip-permissions"
-          name="skip_permissions"
-          defaultValue={skipPermissionsFormValue(step)}
-          key={step.step_id + '-skip-permissions'}
-          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
-        >
-          <option value="">Default (from settings)</option>
-          <option value="1">On</option>
-          <option value="0">Off</option>
-        </select>
-      </div>
+      {/* Skip Permissions — Claude only */}
+      {taskType === 'claude' && (
+        <div>
+          <label htmlFor="step-skip-permissions" className="block text-xs text-text-secondary mb-1">Skip Permissions</label>
+          <select
+            id="step-skip-permissions"
+            name="skip_permissions"
+            defaultValue={skipPermissionsFormValue(step)}
+            key={step.step_id + '-skip-permissions'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+          >
+            <option value="">Default (from settings)</option>
+            <option value="1">On</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+      )}
+
+      {/* Session Key — Claude only */}
+      {taskType === 'claude' && (
+        <div>
+          <label htmlFor="step-session-key" className="block text-xs text-text-secondary mb-1">Session Key</label>
+          <input
+            id="step-session-key"
+            name="session_key"
+            type="text"
+            defaultValue={step.session_key ?? ''}
+            key={step.step_id + '-session-key'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+            placeholder="Optional — steps sharing a key reuse the same session"
+          />
+        </div>
+      )}
 
       <div>
         <label htmlFor="step-delay" className="block text-xs text-text-secondary mb-1">Delay (seconds)</label>
@@ -388,7 +508,7 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           key={step.step_id + '-delay'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
         />
-        <p className="text-[10px] text-text-secondary/70 mt-0.5">Wait before starting this step (0–86400)</p>
+        <p className="text-[10px] text-text-secondary/70 mt-0.5">Wait before starting this step (0-86400)</p>
       </div>
 
       <div>
@@ -405,13 +525,16 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
       </div>
 
       <div>
-        <label htmlFor="step-command" className="block text-xs text-text-secondary mb-1">Command</label>
+        <label htmlFor="step-command" className="block text-xs text-text-secondary mb-1">
+          Command{taskType === 'shell' ? ' (required)' : ''}
+        </label>
         <input
           id="step-command"
           name="command"
           type="text"
-          defaultValue={step.command || 'claude'}
-          key={step.step_id + '-command'}
+          defaultValue={taskType === 'claude' ? (step.command || 'claude') : step.command}
+          key={step.step_id + '-command-' + taskType}
+          required={taskType === 'shell'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
         />
       </div>
@@ -426,6 +549,74 @@ export function StepEditor({ step, machines, onSave, onDelete, onDirtyChange }: 
           key={step.step_id + '-args'}
           className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary resize-none font-mono"
         />
+      </div>
+
+      {/* Run If */}
+      <div>
+        <label htmlFor="step-run-if" className="block text-xs text-text-secondary mb-1">Run If</label>
+        <select
+          id="step-run-if"
+          name="run_if"
+          defaultValue={step.run_if ?? ''}
+          key={step.step_id + '-run-if'}
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+        >
+          <option value="">Default (all success)</option>
+          <option value="all_success">All dependencies succeeded</option>
+          <option value="all_done">All dependencies completed (any status)</option>
+        </select>
+      </div>
+
+      {/* Max Retries */}
+      <div>
+        <label htmlFor="step-max-retries" className="block text-xs text-text-secondary mb-1">Max Retries</label>
+        <input
+          id="step-max-retries"
+          name="max_retries"
+          type="number"
+          min={0}
+          max={5}
+          defaultValue={step.max_retries ?? 0}
+          key={step.step_id + '-max-retries'}
+          onChange={(e) => {
+            setMaxRetriesState(Number(e.target.value) || 0);
+            checkDirty();
+          }}
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+        />
+      </div>
+
+      {/* Retry Delay — shown if max_retries > 0 */}
+      {maxRetriesState > 0 && (
+        <div>
+          <label htmlFor="step-retry-delay" className="block text-xs text-text-secondary mb-1">Retry Delay (seconds)</label>
+          <input
+            id="step-retry-delay"
+            name="retry_delay_seconds"
+            type="number"
+            min={0}
+            max={3600}
+            defaultValue={step.retry_delay_seconds ?? 0}
+            key={step.step_id + '-retry-delay'}
+            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+          />
+        </div>
+      )}
+
+      {/* On Failure */}
+      <div>
+        <label htmlFor="step-on-failure" className="block text-xs text-text-secondary mb-1">On Failure</label>
+        <select
+          id="step-on-failure"
+          name="on_failure"
+          defaultValue={step.on_failure ?? ''}
+          key={step.step_id + '-on-failure'}
+          className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
+        >
+          <option value="">Fail Run (default)</option>
+          <option value="fail_run">Fail Run</option>
+          <option value="continue">Continue</option>
+        </select>
       </div>
 
       <div className="flex gap-2 pt-2">

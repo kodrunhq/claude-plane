@@ -3,7 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -11,6 +14,9 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// runParamKeyRe validates run parameter key names.
+var runParamKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 const (
 	defaultListRunsLimit = 50
@@ -35,6 +41,7 @@ func RegisterRunRoutes(r chi.Router, h *RunHandler) {
 	r.Get("/api/v1/runs", h.ListRuns)
 	r.Get("/api/v1/runs/{runID}", h.GetRun)
 	r.Post("/api/v1/runs/{runID}/cancel", h.CancelRun)
+	r.Post("/api/v1/runs/{runID}/repair", h.RepairRun)
 	r.Post("/api/v1/runs/{runID}/steps/{stepID}/retry", h.RetryStep)
 }
 
@@ -90,8 +97,9 @@ func (h *RunHandler) authorizeRunAccess(w http.ResponseWriter, r *http.Request, 
 
 // triggerRunRequest is the JSON body for POST /api/v1/jobs/{jobID}/runs.
 type triggerRunRequest struct {
-	TriggerType   string `json:"trigger_type"`
-	TriggerDetail string `json:"trigger_detail,omitempty"`
+	TriggerType   string            `json:"trigger_type"`
+	TriggerDetail string            `json:"trigger_detail,omitempty"`
+	Parameters    map[string]string `json:"parameters,omitempty"`
 }
 
 // TriggerRun handles POST /api/v1/jobs/{jobID}/runs.
@@ -111,10 +119,21 @@ func (h *RunHandler) TriggerRun(w http.ResponseWriter, r *http.Request) {
 		req.TriggerType = "manual"
 	}
 
-	run, err := h.orch.CreateRun(r.Context(), jobID, req.TriggerType, req.TriggerDetail)
+	for k := range req.Parameters {
+		if !runParamKeyRe.MatchString(k) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid parameter key %q: must match [a-zA-Z_][a-zA-Z0-9_]*", k))
+			return
+		}
+	}
+
+	run, err := h.orch.CreateRun(r.Context(), jobID, req.TriggerType, req.Parameters, req.TriggerDetail)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
+			return
+		}
+		if errors.Is(err, orchestrator.ErrMaxConcurrentRuns) {
+			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -260,4 +279,51 @@ func (h *RunHandler) RetryStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "retrying"})
+}
+
+// repairRunRequest is the optional JSON body for POST /api/v1/runs/{runID}/repair.
+type repairRunRequest struct {
+	Parameters map[string]string `json:"parameters,omitempty"`
+}
+
+// RepairRun handles POST /api/v1/runs/{runID}/repair.
+// Resets all failed/skipped steps to pending and restarts the DAG.
+func (h *RunHandler) RepairRun(w http.ResponseWriter, r *http.Request) {
+	runID := chi.URLParam(r, "runID")
+
+	detail, err := h.store.GetRunWithSteps(r.Context(), runID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "run not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if !h.authorizeRunAccess(w, r, detail) {
+		return
+	}
+
+	var req repairRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	for k := range req.Parameters {
+		if !runParamKeyRe.MatchString(k) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid parameter key %q: must match [a-zA-Z_][a-zA-Z0-9_]*", k))
+			return
+		}
+	}
+
+	if err := h.orch.RepairRun(r.Context(), runID, req.Parameters); err != nil {
+		if errors.Is(err, orchestrator.ErrInvalidRunState) {
+			writeError(w, http.StatusBadRequest, "can only repair failed or cancelled runs")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "repairing"})
 }

@@ -13,7 +13,44 @@ import (
 
 // StepExecutor launches a step and calls onComplete when it finishes.
 type StepExecutor interface {
-	ExecuteStep(ctx context.Context, runStep store.RunStep, onComplete func(stepID string, exitCode int))
+	ExecuteStep(ctx context.Context, runStep store.RunStep, resolveCtx *ResolveContext, onComplete func(stepID string, exitCode int))
+}
+
+// ValidateJobSteps checks step configuration for common errors.
+// Returns a slice of errors (empty if all steps are valid).
+func ValidateJobSteps(steps []store.Step) []error {
+	var errs []error
+	sessionKeyMachines := make(map[string]string)
+	for _, s := range steps {
+		if s.TaskType != "claude_session" && s.TaskType != "shell" {
+			errs = append(errs, fmt.Errorf("step %q: task_type must be 'claude_session' or 'shell'", s.Name))
+		}
+		if s.TaskType == "shell" && s.SessionKey != "" {
+			errs = append(errs, fmt.Errorf("step %q: shell tasks cannot share sessions", s.Name))
+		}
+		if s.TaskType == "shell" && s.Command == "" {
+			errs = append(errs, fmt.Errorf("step %q: shell tasks require a command", s.Name))
+		}
+		if s.SessionKey != "" {
+			if existing, ok := sessionKeyMachines[s.SessionKey]; ok {
+				if existing != s.MachineID {
+					errs = append(errs, fmt.Errorf("steps sharing session key %q must target the same machine", s.SessionKey))
+				}
+			} else {
+				sessionKeyMachines[s.SessionKey] = s.MachineID
+			}
+		}
+		if s.RunIf != "all_success" && s.RunIf != "all_done" {
+			errs = append(errs, fmt.Errorf("step %q: run_if must be 'all_success' or 'all_done'", s.Name))
+		}
+		if s.MaxRetries < 0 || s.MaxRetries > 5 {
+			errs = append(errs, fmt.Errorf("step %q: max_retries must be between 0 and 5", s.Name))
+		}
+		if s.RetryDelaySeconds < 0 || s.RetryDelaySeconds > 3600 {
+			errs = append(errs, fmt.Errorf("step %q: retry_delay_seconds must be between 0 and 3600", s.Name))
+		}
+	}
+	return errs
 }
 
 // ValidateDAG checks for cycles in step dependencies using Kahn's algorithm.
@@ -62,7 +99,9 @@ type DAGRunner struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	runID         string
+	jobID         string
 	steps         map[string]*store.RunStep  // step_id -> run step
+	stepNames     map[string]string          // step_id -> step name (for reference resolution)
 	dependents    map[string][]string        // step_id -> step_ids that depend on it
 	inDegree      map[string]int             // step_id -> remaining dependency count
 	executor      StepExecutor
@@ -72,10 +111,36 @@ type DAGRunner struct {
 	completed     int
 	total         int
 	failed        bool
+	done          chan struct{}              // closed when run completes
+
+	// Template resolution state
+	runParams   map[string]string
+	jobMeta     JobMeta
+	stepValues  map[string]map[string]string // stepName -> key -> value
+	stepResults map[string]StepResult        // stepName -> result
+
+	// Session key serialization
+	activeSessionKeys map[string]bool   // session_key -> in-use
+	deferredSteps     []string          // step_ids waiting for session key release
+
+	// run_if tracking
+	hasFailedUpstream map[string]bool   // stepID -> any upstream failed
 }
 
 // NewDAGRunner creates a DAGRunner for a specific run.
-func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDependency, executor StepExecutor, jobStore store.JobStoreIface, publisher event.Publisher, onComplete func(string, string)) *DAGRunner {
+func NewDAGRunner(
+	runID string,
+	jobID string,
+	runSteps []store.RunStep,
+	deps []store.StepDependency,
+	executor StepExecutor,
+	jobStore store.JobStoreIface,
+	publisher event.Publisher,
+	onComplete func(string, string),
+	runParams map[string]string,
+	jobMeta JobMeta,
+	stepNames map[string]string,
+) *DAGRunner {
 	steps := make(map[string]*store.RunStep, len(runSteps))
 	dependents := make(map[string][]string)
 	inDegree := make(map[string]int)
@@ -91,16 +156,130 @@ func NewDAGRunner(runID string, runSteps []store.RunStep, deps []store.StepDepen
 		inDegree[d.StepID]++
 	}
 
+	if stepNames == nil {
+		stepNames = make(map[string]string)
+	}
+
 	return &DAGRunner{
-		runID:         runID,
-		steps:         steps,
-		dependents:    dependents,
-		inDegree:      inDegree,
-		executor:      executor,
-		store:         jobStore,
-		publisher:     publisher,
-		onRunComplete: onComplete,
-		total:         len(runSteps),
+		runID:             runID,
+		jobID:             jobID,
+		steps:             steps,
+		stepNames:         stepNames,
+		dependents:        dependents,
+		inDegree:          inDegree,
+		executor:          executor,
+		store:             jobStore,
+		publisher:         publisher,
+		onRunComplete:     onComplete,
+		total:             len(runSteps),
+		done:              make(chan struct{}),
+		runParams:         runParams,
+		jobMeta:           jobMeta,
+		stepValues:        make(map[string]map[string]string),
+		stepResults:       make(map[string]StepResult),
+		activeSessionKeys: make(map[string]bool),
+		hasFailedUpstream: make(map[string]bool),
+	}
+}
+
+// Done returns a channel that is closed when the run completes (or is cancelled).
+func (d *DAGRunner) Done() <-chan struct{} {
+	return d.done
+}
+
+// SetStepValues records task values produced by a step, keyed by step name.
+// Called externally (e.g., by the gRPC layer) after task value extraction.
+func (d *DAGRunner) SetStepValues(stepName string, values map[string]string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.stepValues[stepName] = values
+}
+
+// copyStepValues returns a snapshot of step values for safe use outside the lock.
+func (d *DAGRunner) copyStepValues() map[string]map[string]string {
+	cp := make(map[string]map[string]string, len(d.stepValues))
+	for k, v := range d.stepValues {
+		inner := make(map[string]string, len(v))
+		for ik, iv := range v {
+			inner[ik] = iv
+		}
+		cp[k] = inner
+	}
+	return cp
+}
+
+// copyStepResults returns a snapshot of step results for safe use outside the lock.
+func (d *DAGRunner) copyStepResults() map[string]StepResult {
+	cp := make(map[string]StepResult, len(d.stepResults))
+	for k, v := range d.stepResults {
+		cp[k] = v
+	}
+	return cp
+}
+
+// canLaunch checks whether a step can be launched given session key constraints.
+// A step with no session key can always launch. A step with a session key can
+// only launch if no other step is currently using that key.
+// Must be called with d.mu held.
+func (d *DAGRunner) canLaunch(rs *store.RunStep) bool {
+	if rs.SessionKeySnapshot == "" {
+		return true
+	}
+	return !d.activeSessionKeys[rs.SessionKeySnapshot]
+}
+
+// claimSessionKey marks a session key as active for the given step.
+// Must be called with d.mu held.
+func (d *DAGRunner) claimSessionKey(rs *store.RunStep) {
+	if rs.SessionKeySnapshot != "" {
+		d.activeSessionKeys[rs.SessionKeySnapshot] = true
+	}
+}
+
+// releaseSessionKey marks a session key as no longer active.
+// Must be called with d.mu held.
+func (d *DAGRunner) releaseSessionKey(rs *store.RunStep) {
+	if rs.SessionKeySnapshot != "" {
+		delete(d.activeSessionKeys, rs.SessionKeySnapshot)
+	}
+}
+
+// processDeferredSteps re-evaluates deferred steps after a session key is released.
+// Steps that can now launch are started; others remain deferred.
+// Must be called with d.mu held.
+func (d *DAGRunner) processDeferredSteps(toLaunch *[]store.RunStep) {
+	remaining := make([]string, 0, len(d.deferredSteps))
+	for _, stepID := range d.deferredSteps {
+		rs := d.steps[stepID]
+		if rs == nil || rs.Status != store.StatusPending {
+			continue // already launched or skipped by another path
+		}
+		// Check if upstream failures should skip this step
+		if d.hasFailedUpstream[stepID] && rs.RunIfSnapshot != "all_done" {
+			rs.Status = store.StatusSkipped
+			d.updateRunStepInDB(rs.RunStepID, store.StatusSkipped, "", 0)
+			d.completed++
+			continue
+		}
+		if d.canLaunch(rs) {
+			d.claimSessionKey(rs)
+			rs.Status = store.StatusRunning
+			d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
+			*toLaunch = append(*toLaunch, *rs)
+		} else {
+			remaining = append(remaining, stepID)
+		}
+	}
+	d.deferredSteps = remaining
+}
+
+// closeDone safely closes the done channel (idempotent).
+func (d *DAGRunner) closeDone() {
+	select {
+	case <-d.done:
+		// Already closed
+	default:
+		close(d.done)
 	}
 }
 
@@ -115,9 +294,14 @@ func (d *DAGRunner) Start(parentCtx context.Context) {
 		if deg == 0 {
 			rs := d.steps[stepID]
 			if rs.Status == store.StatusPending {
-				rs.Status = store.StatusRunning
-				d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
-				toLaunch = append(toLaunch, *rs)
+				if d.canLaunch(rs) {
+					d.claimSessionKey(rs)
+					rs.Status = store.StatusRunning
+					d.updateRunStepInDB(rs.RunStepID, store.StatusRunning, "", 0)
+					toLaunch = append(toLaunch, *rs)
+				} else {
+					d.deferredSteps = append(d.deferredSteps, stepID)
+				}
 			}
 		}
 	}
@@ -133,6 +317,11 @@ func (d *DAGRunner) Start(parentCtx context.Context) {
 // If DelaySecondsSnapshot > 0, the step waits in a goroutine before calling
 // ExecuteStep, respecting context cancellation during the wait.
 func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
+	// Build ResolveContext snapshot under lock
+	d.mu.Lock()
+	resolveCtx := d.buildResolveContext()
+	d.mu.Unlock()
+
 	delay := time.Duration(rs.DelaySecondsSnapshot) * time.Second
 	if delay > 0 {
 		go func() {
@@ -140,7 +329,7 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 			defer timer.Stop()
 			select {
 			case <-timer.C:
-				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
+				d.executor.ExecuteStep(ctx, rs, resolveCtx, d.OnStepCompleted)
 			case <-ctx.Done():
 				// Context was cancelled (run cancelled or server shutdown).
 				// Do NOT call OnStepCompleted — CancelRun already handles marking
@@ -151,7 +340,7 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 			}
 		}()
 	} else {
-		go d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
+		go d.executor.ExecuteStep(ctx, rs, resolveCtx, d.OnStepCompleted)
 	}
 }
 
@@ -160,6 +349,15 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 // Executor calls are made outside the lock to prevent deadlocks.
 func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	d.mu.Lock()
+
+	// If the context was already cancelled (e.g., by CancelRun or job timeout),
+	// skip processing. CancelRun handles marking steps as cancelled in the DB.
+	// Without this check, the onRunComplete callback races with CancelRun's DB
+	// updates, potentially overwriting "cancelled" with "failed".
+	if d.ctx != nil && d.ctx.Err() != nil {
+		d.mu.Unlock()
+		return
+	}
 
 	rs, ok := d.steps[stepID]
 	if !ok {
@@ -174,12 +372,76 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	capturedRunStepID := rs.RunStepID
 	capturedStepID := stepID
 
+	// Record step result for template resolution
+	stepName := d.stepNames[stepID]
+	if stepName != "" {
+		status := store.StatusCompleted
+		if exitCode != 0 {
+			status = store.StatusFailed
+		}
+		d.stepResults[stepName] = StepResult{Status: status, ExitCode: exitCode}
+	}
+
+	// Release session key — allows deferred steps using the same key to proceed.
+	d.releaseSessionKey(rs)
+
 	if exitCode != 0 {
 		rs.Status = store.StatusFailed
 		ec := exitCode
 		rs.ExitCode = &ec
-		d.failed = true
 		d.updateRunStepInDB(rs.RunStepID, store.StatusFailed, "", exitCode)
+
+		// Check retries BEFORE setting d.failed
+		if rs.MaxRetriesSnapshot > 0 && rs.Attempt <= rs.MaxRetriesSnapshot {
+			rs.Attempt++
+			d.updateRunStepAttempt(rs.RunStepID, rs.Attempt)
+			// Session key already released above
+			ctx := d.ctx
+			rsCopy := *rs
+			d.mu.Unlock()
+			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
+
+			// Schedule retry with delay
+			delay := time.Duration(rsCopy.RetryDelaySecondsSnapshot) * time.Second
+			go func() {
+				if delay > 0 {
+					timer := time.NewTimer(delay)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+					case <-ctx.Done():
+						return
+					}
+				}
+				d.mu.Lock()
+				if ctx.Err() != nil {
+					d.mu.Unlock()
+					return
+				}
+				// Re-acquire session key if needed before retrying.
+				if rsCopy.SessionKeySnapshot != "" {
+					if !d.canLaunch(&rsCopy) {
+						// Can't acquire key — defer instead of launching.
+						// Reset to pending so processDeferredSteps will pick it up.
+						d.steps[rsCopy.StepID].Status = store.StatusPending
+						d.deferredSteps = append(d.deferredSteps, rsCopy.StepID)
+						d.mu.Unlock()
+						return
+					}
+					d.claimSessionKey(&rsCopy)
+				}
+				rsCopy.Status = store.StatusRunning
+				d.steps[rsCopy.StepID].Status = store.StatusRunning
+				d.updateRunStepInDB(rsCopy.RunStepID, store.StatusRunning, "", 0)
+				resolveCtx := d.buildResolveContext()
+				d.mu.Unlock()
+				d.executor.ExecuteStep(ctx, rsCopy, resolveCtx, d.OnStepCompleted)
+			}()
+			return
+		}
+
+		// Retries exhausted (or no retries) — NOW set d.failed
+		d.failed = true
 
 		if rs.OnFailure == "fail_run" {
 			// Mark remaining pending steps as skipped
@@ -196,6 +458,7 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 				runID := d.runID
 				runComplete = func() { cb(runID, store.StatusFailed) }
 			}
+			d.closeDone()
 			d.mu.Unlock()
 			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
 			if runComplete != nil {
@@ -220,6 +483,9 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 	ctx := d.ctx
 	d.processReadyDependents(stepID, stepFailed, &toLaunch)
 
+	// Re-evaluate deferred steps now that a session key may have been released.
+	d.processDeferredSteps(&toLaunch)
+
 	// Check if all steps are done (after processing dependents/skips)
 	if d.completed == d.total {
 		status := store.StatusCompleted
@@ -232,6 +498,7 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 			s := status
 			runComplete = func() { cb(runID, s) }
 		}
+		d.closeDone()
 		d.mu.Unlock()
 		if stepFailed {
 			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
@@ -262,13 +529,52 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 func (d *DAGRunner) Cancel() {
 	d.mu.Lock()
 	cancel := d.cancel
+	d.closeDone()
 	d.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
 }
 
+// copyRunParams returns a snapshot of run parameters for safe use outside the lock.
+func (d *DAGRunner) copyRunParams() map[string]string {
+	out := make(map[string]string, len(d.runParams))
+	for k, v := range d.runParams {
+		out[k] = v
+	}
+	return out
+}
+
+// buildResolveContext creates a ResolveContext snapshot. Must be called with d.mu held.
+func (d *DAGRunner) buildResolveContext() *ResolveContext {
+	return &ResolveContext{
+		RunParams:   d.copyRunParams(),
+		JobMeta:     d.jobMeta,
+		StepValues:  d.copyStepValues(),
+		StepResults: d.copyStepResults(),
+	}
+}
+
+// updateRunStepAttempt persists a run step attempt counter change. No-op if store is nil (unit tests).
+func (d *DAGRunner) updateRunStepAttempt(runStepID string, attempt int) {
+	if d.store == nil {
+		return
+	}
+	if err := d.store.UpdateRunStepAttempt(d.ctx, runStepID, attempt); err != nil {
+		slog.Warn("failed to update run step attempt", "error", err, "run_step_id", runStepID, "attempt", attempt)
+	}
+}
+
 // updateRunStepInDB persists run step status changes. No-op if store is nil (unit tests).
+func (d *DAGRunner) updateRunStepInDB(runStepID, status, sessionID string, exitCode int) {
+	if d.store == nil {
+		return
+	}
+	if err := d.store.UpdateRunStepStatus(d.ctx, runStepID, status, sessionID, exitCode); err != nil {
+		slog.Warn("failed to update run step status", "error", err, "run_step_id", runStepID, "status", status)
+	}
+}
+
 // processReadyDependents decrements in-degree for dependents of stepID.
 // If stepFailed, skips ready dependents and propagates transitively.
 // Uses an iterative work queue instead of recursion to avoid stack overflow on deep
@@ -288,33 +594,36 @@ func (d *DAGRunner) processReadyDependents(stepID string, stepFailed bool, toLau
 		queue = queue[1:]
 
 		for _, depID := range d.dependents[item.stepID] {
+			// Track failed upstream for run_if decisions
+			if item.failed {
+				d.hasFailedUpstream[depID] = true
+			}
+
 			d.inDegree[depID]--
 			if d.inDegree[depID] == 0 {
 				depRS := d.steps[depID]
 				if depRS != nil && depRS.Status == store.StatusPending {
-					if item.failed {
+					anyUpstreamFailed := d.hasFailedUpstream[depID]
+
+					if anyUpstreamFailed && depRS.RunIfSnapshot != "all_done" {
+						// all_success (default): skip when upstream failed
 						depRS.Status = store.StatusSkipped
 						d.updateRunStepInDB(depRS.RunStepID, store.StatusSkipped, "", 0)
 						d.completed++
-						// Enqueue to propagate skip transitively
 						queue = append(queue, workItem{stepID: depID, failed: true})
-					} else {
+					} else if d.canLaunch(depRS) {
+						// Either no upstream failed, or run_if=all_done (launch regardless)
+						d.claimSessionKey(depRS)
 						depRS.Status = store.StatusRunning
 						d.updateRunStepInDB(depRS.RunStepID, store.StatusRunning, "", 0)
 						*toLaunch = append(*toLaunch, *depRS)
+					} else {
+						// Session key is in use — defer this step
+						d.deferredSteps = append(d.deferredSteps, depID)
 					}
 				}
 			}
 		}
-	}
-}
-
-func (d *DAGRunner) updateRunStepInDB(runStepID, status, sessionID string, exitCode int) {
-	if d.store == nil {
-		return
-	}
-	if err := d.store.UpdateRunStepStatus(d.ctx, runStepID, status, sessionID, exitCode); err != nil {
-		slog.Warn("failed to update run step status", "error", err, "run_step_id", runStepID, "status", status)
 	}
 }
 

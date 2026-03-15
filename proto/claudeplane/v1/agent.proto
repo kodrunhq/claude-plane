@@ -69,6 +69,8 @@ message CreateSessionCmd {
   repeated string args = 5;
   string initial_prompt = 6;
   TerminalSize terminal_size = 7;
+  string task_type = 8;     // "claude_session" or "shell"
+  bool keep_alive = 9;      // true for shared sessions (don't exit on idle)
 }
 
 message AttachSessionCmd {
@@ -112,7 +114,18 @@ message AgentEvent {
     HealthEvent health = 3;
     ScrollbackChunkEvent scrollback_chunk = 4;
     SessionExitEvent session_exit = 5;
+    TaskValuesEvent task_values = 6;
+    StepIdleEvent step_idle = 7;
   }
+}
+
+message TaskValuesEvent {
+  string session_id = 1;
+  map<string, string> values = 2;
+}
+
+message StepIdleEvent {
+  string session_id = 1;
 }
 
 message SessionOutputEvent {

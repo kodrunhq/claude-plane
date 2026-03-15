@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +16,10 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// paramKeyRe validates parameter key names: starts with letter or underscore,
+// followed by letters, digits, or underscores.
+var paramKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // JobHandler handles REST endpoints for job and step CRUD.
 type JobHandler struct {
@@ -100,8 +106,21 @@ func writeError(w http.ResponseWriter, status int, message string) {
 
 // createJobRequest is the JSON body for POST /api/v1/jobs.
 type createJobRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	Parameters        map[string]string `json:"parameters,omitempty"`
+	TimeoutSeconds    int               `json:"timeout_seconds"`
+	MaxConcurrentRuns int               `json:"max_concurrent_runs"`
+}
+
+// validateJobParameters checks that all parameter keys match the allowed pattern.
+func validateJobParameters(params map[string]string) error {
+	for k := range params {
+		if !paramKeyRe.MatchString(k) {
+			return fmt.Errorf("invalid parameter key %q: must match [a-zA-Z_][a-zA-Z0-9_]*", k)
+		}
+	}
+	return nil
 }
 
 // CreateJob handles POST /api/v1/jobs.
@@ -115,13 +134,48 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if req.TimeoutSeconds < 0 {
+		writeError(w, http.StatusBadRequest, "timeout_seconds must be >= 0")
+		return
+	}
+	if req.MaxConcurrentRuns < 0 || req.MaxConcurrentRuns > 100 {
+		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 1 and 100")
+		return
+	}
+	// Default to 1 if not specified (0 value from JSON).
+	if req.MaxConcurrentRuns == 0 {
+		req.MaxConcurrentRuns = 1
+	}
+	if len(req.Parameters) > 0 {
+		if err := validateJobParameters(req.Parameters); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	var paramsJSON string
+	if len(req.Parameters) > 0 {
+		b, err := json.Marshal(req.Parameters)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		paramsJSON = string(b)
+	}
 
 	userID := ""
 	if c := h.claims(r); c != nil {
 		userID = c.UserID
 	}
 
-	job, err := h.store.CreateJob(r.Context(), req.Name, req.Description, userID)
+	job, err := h.store.CreateJob(r.Context(), store.CreateJobParams{
+		Name:              req.Name,
+		Description:       req.Description,
+		UserID:            userID,
+		Parameters:        paramsJSON,
+		TimeoutSeconds:    req.TimeoutSeconds,
+		MaxConcurrentRuns: req.MaxConcurrentRuns,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
@@ -161,8 +215,11 @@ func (h *JobHandler) GetJob(w http.ResponseWriter, r *http.Request) {
 
 // updateJobRequest is the JSON body for PUT /api/v1/jobs/{jobID}.
 type updateJobRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name              string             `json:"name"`
+	Description       string             `json:"description"`
+	Parameters        *map[string]string `json:"parameters,omitempty"`
+	TimeoutSeconds    *int               `json:"timeout_seconds,omitempty"`
+	MaxConcurrentRuns *int               `json:"max_concurrent_runs,omitempty"`
 }
 
 // UpdateJob handles PUT /api/v1/jobs/{jobID}.
@@ -176,8 +233,54 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if req.TimeoutSeconds != nil && *req.TimeoutSeconds < 0 {
+		writeError(w, http.StatusBadRequest, "timeout_seconds must be >= 0")
+		return
+	}
+	if req.MaxConcurrentRuns != nil && (*req.MaxConcurrentRuns < 1 || *req.MaxConcurrentRuns > 100) {
+		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 1 and 100")
+		return
+	}
+	if req.Parameters != nil && len(*req.Parameters) > 0 {
+		if err := validateJobParameters(*req.Parameters); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 
-	job, err := h.store.UpdateJob(r.Context(), detail.Job.JobID, req.Name, req.Description)
+	// Merge with current job values: only override fields that were provided.
+	current := detail.Job
+	paramsJSON := current.Parameters
+	if req.Parameters != nil {
+		if len(*req.Parameters) > 0 {
+			b, err := json.Marshal(*req.Parameters)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			paramsJSON = string(b)
+		} else {
+			paramsJSON = ""
+		}
+	}
+
+	timeout := current.TimeoutSeconds
+	if req.TimeoutSeconds != nil {
+		timeout = *req.TimeoutSeconds
+	}
+	maxConcurrent := current.MaxConcurrentRuns
+	if req.MaxConcurrentRuns != nil {
+		maxConcurrent = *req.MaxConcurrentRuns
+	}
+
+	job, err := h.store.UpdateJob(r.Context(), store.UpdateJobParams{
+		JobID:             detail.Job.JobID,
+		Name:              req.Name,
+		Description:       req.Description,
+		Parameters:        paramsJSON,
+		TimeoutSeconds:    timeout,
+		MaxConcurrentRuns: maxConcurrent,
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "job not found")
@@ -209,18 +312,23 @@ func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 
 // addStepRequest is the JSON body for POST /api/v1/jobs/{jobID}/steps.
 type addStepRequest struct {
-	Name            string `json:"name"`
-	Prompt          string `json:"prompt"`
-	MachineID       string `json:"machine_id"`
-	WorkingDir      string `json:"working_dir"`
-	Command         string `json:"command"`
-	Args            string `json:"args"`
-	TimeoutSeconds  int    `json:"timeout_seconds"`
-	SortOrder       int    `json:"sort_order"`
-	OnFailure       string `json:"on_failure"`
-	SkipPermissions *int   `json:"skip_permissions"`
-	Model           string `json:"model"`
-	DelaySeconds    int    `json:"delay_seconds"`
+	Name              string `json:"name"`
+	Prompt            string `json:"prompt"`
+	MachineID         string `json:"machine_id"`
+	WorkingDir        string `json:"working_dir"`
+	Command           string `json:"command"`
+	Args              string `json:"args"`
+	TimeoutSeconds    int    `json:"timeout_seconds"`
+	SortOrder         int    `json:"sort_order"`
+	OnFailure         string `json:"on_failure"`
+	SkipPermissions   *int   `json:"skip_permissions"`
+	Model             string `json:"model"`
+	DelaySeconds      int    `json:"delay_seconds"`
+	TaskType          string `json:"task_type"`
+	SessionKey        string `json:"session_key"`
+	RunIf             string `json:"run_if"`
+	MaxRetries        int    `json:"max_retries"`
+	RetryDelaySeconds int    `json:"retry_delay_seconds"`
 }
 
 // AddStep handles POST /api/v1/jobs/{jobID}/steps.
@@ -238,8 +346,19 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 	if req.OnFailure == "" {
 		req.OnFailure = "fail_run"
 	}
-	if req.Command == "" {
+	if req.TaskType == "" {
+		req.TaskType = "claude_session"
+	}
+	if req.RunIf == "" {
+		req.RunIf = "all_success"
+	}
+	if req.Command == "" && req.TaskType == "claude_session" {
 		req.Command = "claude"
+	}
+
+	// For shell tasks, clear prompt.
+	if req.TaskType == "shell" {
+		req.Prompt = ""
 	}
 
 	// Default step name from current step count when empty.
@@ -259,6 +378,36 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default retry delay to 30s when retries are configured (matches DB migration default).
+	if req.RetryDelaySeconds == 0 && req.MaxRetries > 0 {
+		req.RetryDelaySeconds = 30
+	}
+
+	// Build prospective step for validation.
+	newStep := store.Step{
+		Name:              req.Name,
+		TaskType:          req.TaskType,
+		SessionKey:        req.SessionKey,
+		MachineID:         req.MachineID,
+		Command:           req.Command,
+		RunIf:             req.RunIf,
+		MaxRetries:        req.MaxRetries,
+		RetryDelaySeconds: req.RetryDelaySeconds,
+	}
+
+	// Validate the new step together with existing steps.
+	allSteps := make([]store.Step, len(detail.Steps), len(detail.Steps)+1)
+	copy(allSteps, detail.Steps)
+	allSteps = append(allSteps, newStep)
+	if errs := orchestrator.ValidateJobSteps(allSteps); len(errs) > 0 {
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = e.Error()
+		}
+		writeError(w, http.StatusBadRequest, strings.Join(msgs, "; "))
+		return
+	}
+
 	step, err := h.store.CreateStep(r.Context(), store.CreateStepParams{
 		JobID: detail.Job.JobID, Name: req.Name, Prompt: req.Prompt,
 		MachineID: req.MachineID, WorkingDir: req.WorkingDir,
@@ -266,7 +415,12 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: req.TimeoutSeconds, SortOrder: req.SortOrder,
 		OnFailure: req.OnFailure,
 		SkipPermissions: req.SkipPermissions, Model: req.Model,
-		DelaySeconds: req.DelaySeconds,
+		DelaySeconds:      req.DelaySeconds,
+		TaskType:          req.TaskType,
+		SessionKey:        req.SessionKey,
+		RunIf:             req.RunIf,
+		MaxRetries:        req.MaxRetries,
+		RetryDelaySeconds: req.RetryDelaySeconds,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -277,18 +431,23 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 
 // updateStepRequest is the JSON body for PUT /api/v1/jobs/{jobID}/steps/{stepID}.
 type updateStepRequest struct {
-	Name            string `json:"name"`
-	Prompt          string `json:"prompt"`
-	MachineID       string `json:"machine_id"`
-	WorkingDir      string `json:"working_dir"`
-	Command         string `json:"command"`
-	Args            string `json:"args"`
-	TimeoutSeconds  int    `json:"timeout_seconds"`
-	SortOrder       int    `json:"sort_order"`
-	OnFailure       string `json:"on_failure"`
-	SkipPermissions *int   `json:"skip_permissions"`
-	Model           string `json:"model"`
-	DelaySeconds    int    `json:"delay_seconds"`
+	Name              string `json:"name"`
+	Prompt            string `json:"prompt"`
+	MachineID         string `json:"machine_id"`
+	WorkingDir        string `json:"working_dir"`
+	Command           string `json:"command"`
+	Args              string `json:"args"`
+	TimeoutSeconds    int    `json:"timeout_seconds"`
+	SortOrder         int    `json:"sort_order"`
+	OnFailure         string `json:"on_failure"`
+	SkipPermissions   *int   `json:"skip_permissions"`
+	Model             string `json:"model"`
+	DelaySeconds      int    `json:"delay_seconds"`
+	TaskType          string `json:"task_type"`
+	SessionKey        string `json:"session_key"`
+	RunIf             string `json:"run_if"`
+	MaxRetries        int    `json:"max_retries"`
+	RetryDelaySeconds int    `json:"retry_delay_seconds"`
 }
 
 // UpdateStep handles PUT /api/v1/jobs/{jobID}/steps/{stepID}.
@@ -311,8 +470,19 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	if req.OnFailure == "" {
 		req.OnFailure = "fail_run"
 	}
-	if req.Command == "" {
+	if req.TaskType == "" {
+		req.TaskType = "claude_session"
+	}
+	if req.RunIf == "" {
+		req.RunIf = "all_success"
+	}
+	if req.Command == "" && req.TaskType == "claude_session" {
 		req.Command = "claude"
+	}
+
+	// For shell tasks, clear prompt.
+	if req.TaskType == "shell" {
+		req.Prompt = ""
 	}
 
 	// Validate model.
@@ -327,6 +497,42 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default retry delay to 30s when retries are configured (matches DB migration default).
+	if req.RetryDelaySeconds == 0 && req.MaxRetries > 0 {
+		req.RetryDelaySeconds = 30
+	}
+
+	// Build prospective updated step for validation.
+	updatedStep := store.Step{
+		StepID:            stepID,
+		Name:              req.Name,
+		TaskType:          req.TaskType,
+		SessionKey:        req.SessionKey,
+		MachineID:         req.MachineID,
+		Command:           req.Command,
+		RunIf:             req.RunIf,
+		MaxRetries:        req.MaxRetries,
+		RetryDelaySeconds: req.RetryDelaySeconds,
+	}
+
+	// Build full steps list with the updated step replacing the original.
+	allSteps := make([]store.Step, 0, len(detail.Steps))
+	for _, s := range detail.Steps {
+		if s.StepID == stepID {
+			allSteps = append(allSteps, updatedStep)
+		} else {
+			allSteps = append(allSteps, s)
+		}
+	}
+	if errs := orchestrator.ValidateJobSteps(allSteps); len(errs) > 0 {
+		msgs := make([]string, len(errs))
+		for i, e := range errs {
+			msgs[i] = e.Error()
+		}
+		writeError(w, http.StatusBadRequest, strings.Join(msgs, "; "))
+		return
+	}
+
 	err := h.store.UpdateStep(r.Context(), store.UpdateStepParams{
 		StepID: stepID, Name: req.Name, Prompt: req.Prompt,
 		MachineID: req.MachineID, WorkingDir: req.WorkingDir,
@@ -334,7 +540,12 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: req.TimeoutSeconds, SortOrder: req.SortOrder,
 		OnFailure: req.OnFailure,
 		SkipPermissions: req.SkipPermissions, Model: req.Model,
-		DelaySeconds: req.DelaySeconds,
+		DelaySeconds:      req.DelaySeconds,
+		TaskType:          req.TaskType,
+		SessionKey:        req.SessionKey,
+		RunIf:             req.RunIf,
+		MaxRetries:        req.MaxRetries,
+		RetryDelaySeconds: req.RetryDelaySeconds,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
