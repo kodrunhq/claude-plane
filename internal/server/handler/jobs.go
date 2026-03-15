@@ -138,12 +138,12 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "timeout_seconds must be >= 0")
 		return
 	}
-	if req.MaxConcurrentRuns > 100 {
+	if req.MaxConcurrentRuns < 0 || req.MaxConcurrentRuns > 100 {
 		writeError(w, http.StatusBadRequest, "max_concurrent_runs must be between 1 and 100")
 		return
 	}
 	// Default to 1 if not specified (0 value from JSON).
-	if req.MaxConcurrentRuns <= 0 {
+	if req.MaxConcurrentRuns == 0 {
 		req.MaxConcurrentRuns = 1
 	}
 	if len(req.Parameters) > 0 {
@@ -378,6 +378,11 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default retry delay to 30s when retries are configured (matches DB migration default).
+	if req.RetryDelaySeconds == 0 && req.MaxRetries > 0 {
+		req.RetryDelaySeconds = 30
+	}
+
 	// Build prospective step for validation.
 	newStep := store.Step{
 		Name:              req.Name,
@@ -490,6 +495,11 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	if req.DelaySeconds < 0 || req.DelaySeconds > 86400 {
 		writeError(w, http.StatusBadRequest, "delay_seconds must be between 0 and 86400")
 		return
+	}
+
+	// Default retry delay to 30s when retries are configured (matches DB migration default).
+	if req.RetryDelaySeconds == 0 && req.MaxRetries > 0 {
+		req.RetryDelaySeconds = 30
 	}
 
 	// Build prospective updated step for validation.
