@@ -28,6 +28,10 @@ type SessionManager struct {
 	attachedMu sync.RWMutex
 	attached   map[string]bool
 
+	// Task type tracking: remembers each session's task type for exit handling.
+	taskTypeMu sync.RWMutex
+	taskTypes  map[string]string // session_id -> "shell" | "claude_session"
+
 	// Relay state.
 	relayMu     sync.Mutex
 	relayCtx    context.Context
@@ -49,6 +53,7 @@ func NewSessionManager(cliPath, dataDir string, logger *slog.Logger, idleOpts ..
 	return &SessionManager{
 		sessions:         make(map[string]*Session),
 		attached:         make(map[string]bool),
+		taskTypes:        make(map[string]string),
 		logger:           logger,
 		cliPath:          cliPath,
 		dataDir:          dataDir,
@@ -150,13 +155,22 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 	sm.attached[cmd.GetSessionId()] = true
 	sm.attachedMu.Unlock()
 
-	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command)
+	// Track task type for exit-time handling (task value extraction).
+	taskType := cmd.GetTaskType()
+	if taskType == "" {
+		taskType = "claude_session"
+	}
+	sm.taskTypeMu.Lock()
+	sm.taskTypes[cmd.GetSessionId()] = taskType
+	sm.taskTypeMu.Unlock()
 
-	// If the command includes an initial prompt (from a job step), set up an
-	// IdleDetector that watches for Claude CLI's startup prompt (❯) to submit
-	// the prompt at exactly the right time, then watches for the completion
-	// prompt to send /exit and gracefully terminate the session.
-	if prompt := cmd.GetInitialPrompt(); prompt != "" {
+	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command, "task_type", taskType)
+
+	// For Claude sessions with an initial prompt, set up an IdleDetector that
+	// watches for Claude CLI's startup prompt (❯) to submit the prompt at
+	// exactly the right time, then watches for the completion prompt to send
+	// /exit and gracefully terminate the session. Shell tasks skip this entirely.
+	if prompt := cmd.GetInitialPrompt(); taskType != "shell" && prompt != "" {
 		sessionID := cmd.GetSessionId()
 
 		detector := NewIdleDetector(
@@ -377,7 +391,7 @@ func (sm *SessionManager) getSession(id string) *Session {
 	return sm.sessions[id]
 }
 
-// removeSession deletes a session from both the sessions and attached maps.
+// removeSession deletes a session from the sessions, attached, and taskTypes maps.
 func (sm *SessionManager) removeSession(sessionID string) {
 	sm.mu.Lock()
 	delete(sm.sessions, sessionID)
@@ -386,6 +400,10 @@ func (sm *SessionManager) removeSession(sessionID string) {
 	sm.attachedMu.Lock()
 	delete(sm.attached, sessionID)
 	sm.attachedMu.Unlock()
+
+	sm.taskTypeMu.Lock()
+	delete(sm.taskTypes, sessionID)
+	sm.taskTypeMu.Unlock()
 }
 
 // StartRelay begins sending session output events to sendCh.
@@ -404,6 +422,10 @@ func (sm *SessionManager) StartRelay(sendCh chan<- *pb.AgentEvent) {
 	sm.mu.RUnlock()
 }
 
+// maxOutputCapture is the maximum amount of raw output to retain in memory
+// for task value extraction on session exit.
+const maxOutputCapture = 64 * 1024
+
 // startSessionRelay starts a goroutine that reads from the session's output channel
 // and forwards to the gRPC send channel. Must be called with relayMu held.
 func (sm *SessionManager) startSessionRelay(sess *Session) {
@@ -411,6 +433,9 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 	go func() {
 		defer sm.relayWg.Done()
 		sessionID := sess.SessionID()
+
+		// Collect the tail of raw output for task value extraction on exit.
+		var outputBuf []byte
 
 		for {
 			select {
@@ -427,6 +452,10 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 							},
 						},
 					})
+
+					// Extract and send task values before exit event.
+					sm.extractAndSendTaskValues(sessionID, outputBuf)
+
 					// Send exit event with exit code so the server can persist the final status.
 					sm.sendEvent(&pb.AgentEvent{
 						Event: &pb.AgentEvent_SessionExit{
@@ -441,6 +470,10 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 					sm.removeSession(sessionID)
 					return
 				}
+
+				// Accumulate output for task value extraction (keep last maxOutputCapture bytes).
+				outputBuf = appendCapped(outputBuf, data, maxOutputCapture)
+
 				// Only relay live output if session is attached.
 				if sm.isAttached(sessionID) {
 					sm.sendEvent(&pb.AgentEvent{
@@ -456,6 +489,62 @@ func (sm *SessionManager) startSessionRelay(sess *Session) {
 			}
 		}
 	}()
+}
+
+// appendCapped appends data to buf, keeping only the last maxSize bytes.
+func appendCapped(buf, data []byte, maxSize int) []byte {
+	buf = append(buf, data...)
+	if len(buf) > maxSize {
+		buf = buf[len(buf)-maxSize:]
+	}
+	return buf
+}
+
+// extractAndSendTaskValues parses task value markers from session output and
+// sends a TaskValuesEvent if any values were found. For shell tasks, the last
+// 32 KB of stdout is also captured as an automatic "stdout" value.
+func (sm *SessionManager) extractAndSendTaskValues(sessionID string, outputBuf []byte) {
+	if len(outputBuf) == 0 {
+		return
+	}
+
+	outputStr := string(outputBuf)
+	vals := ParseTaskValues(outputStr)
+
+	// For shell tasks, capture stdout as an automatic value.
+	sm.taskTypeMu.RLock()
+	taskType := sm.taskTypes[sessionID]
+	sm.taskTypeMu.RUnlock()
+
+	if taskType == "shell" {
+		stdout := outputStr
+		if len(stdout) > maxTaskValueSize {
+			stdout = stdout[len(stdout)-maxTaskValueSize:]
+		}
+		if vals == nil {
+			vals = make(map[string]string)
+		}
+		vals["stdout"] = stdout
+	}
+
+	if len(vals) == 0 {
+		return
+	}
+
+	sm.logger.Info("extracted task values",
+		"session_id", sessionID,
+		"count", len(vals),
+		"task_type", taskType,
+	)
+
+	sm.sendEvent(&pb.AgentEvent{
+		Event: &pb.AgentEvent_TaskValues{
+			TaskValues: &pb.TaskValuesEvent{
+				SessionId: sessionID,
+				Values:    vals,
+			},
+		},
+	})
 }
 
 // sendEvent sends an event to the send channel if relay is active.
