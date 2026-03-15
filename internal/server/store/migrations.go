@@ -384,6 +384,46 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 );
 `,
 	},
+	{
+		Version:     10,
+		Description: "job system redesign: parameters, task types, shared sessions, retries, task values",
+		SQL: `
+-- Job-level enhancements
+ALTER TABLE jobs ADD COLUMN parameters TEXT;
+ALTER TABLE jobs ADD COLUMN timeout_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN max_concurrent_runs INTEGER NOT NULL DEFAULT 1;
+
+-- Step enhancements
+ALTER TABLE steps ADD COLUMN task_type TEXT NOT NULL DEFAULT 'claude_session';
+ALTER TABLE steps ADD COLUMN session_key TEXT;
+ALTER TABLE steps ADD COLUMN run_if TEXT NOT NULL DEFAULT 'all_success';
+ALTER TABLE steps ADD COLUMN max_retries INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE steps ADD COLUMN retry_delay_seconds INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE steps ADD COLUMN parameters TEXT;
+
+-- Run enhancements
+ALTER TABLE runs ADD COLUMN parameters TEXT;
+
+-- Run step snapshots
+ALTER TABLE run_steps ADD COLUMN task_type_snapshot TEXT NOT NULL DEFAULT 'claude_session';
+ALTER TABLE run_steps ADD COLUMN session_key_snapshot TEXT;
+ALTER TABLE run_steps ADD COLUMN run_if_snapshot TEXT NOT NULL DEFAULT 'all_success';
+ALTER TABLE run_steps ADD COLUMN max_retries_snapshot INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE run_steps ADD COLUMN retry_delay_seconds_snapshot INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE run_steps ADD COLUMN attempt INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE run_steps ADD COLUMN parameters_snapshot TEXT;
+
+-- Task values (inter-step data passing)
+CREATE TABLE IF NOT EXISTS run_step_values (
+    run_step_id TEXT NOT NULL REFERENCES run_steps(run_step_id) ON DELETE CASCADE,
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (run_step_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_run_step_values_run_step ON run_step_values(run_step_id);
+`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
