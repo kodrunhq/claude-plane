@@ -478,8 +478,8 @@ func (s *Store) CreateStep(ctx context.Context, p CreateStepParams) (*Step, erro
 		return nil, fmt.Errorf("invalid task_type %q: must be claude_session or shell", p.TaskType)
 	}
 	// Validate run_if
-	if p.RunIf != "all_success" && p.RunIf != "all_done" && p.RunIf != "none_failed" {
-		return nil, fmt.Errorf("invalid run_if %q: must be all_success, all_done, or none_failed", p.RunIf)
+	if p.RunIf != "all_success" && p.RunIf != "all_done" {
+		return nil, fmt.Errorf("invalid run_if %q: must be all_success or all_done", p.RunIf)
 	}
 	// Validate retries
 	if p.MaxRetries < 0 {
@@ -547,8 +547,8 @@ func (s *Store) UpdateStep(ctx context.Context, p UpdateStepParams) error {
 		return fmt.Errorf("invalid task_type %q: must be claude_session or shell", p.TaskType)
 	}
 	// Validate run_if
-	if p.RunIf != "all_success" && p.RunIf != "all_done" && p.RunIf != "none_failed" {
-		return fmt.Errorf("invalid run_if %q: must be all_success, all_done, or none_failed", p.RunIf)
+	if p.RunIf != "all_success" && p.RunIf != "all_done" {
+		return fmt.Errorf("invalid run_if %q: must be all_success or all_done", p.RunIf)
 	}
 	if p.MaxRetries < 0 {
 		return fmt.Errorf("max_retries must be >= 0, got %d", p.MaxRetries)
