@@ -15,7 +15,7 @@ export interface Job {
   max_concurrent_runs?: number;
 }
 
-export interface Step {
+export interface Task {
   step_id: string;
   job_id: string;
   name: string;
@@ -38,15 +38,15 @@ export interface Step {
   parameters?: Record<string, string>;
 }
 
-export interface StepDependency {
+export interface TaskDependency {
   step_id: string;
   depends_on: string;
 }
 
 export interface JobDetail {
   job: Job;
-  steps: Step[];
-  dependencies: StepDependency[];
+  steps: Task[];
+  dependencies: TaskDependency[];
 }
 
 export interface Run {
@@ -71,7 +71,7 @@ export interface ListRunsParams {
   offset?: number;
 }
 
-export interface RunStep {
+export interface RunTask {
   run_step_id: string;
   run_id: string;
   step_id: string;
@@ -86,7 +86,7 @@ export interface RunStep {
 
 export interface RunDetail {
   run: Run;
-  run_steps: RunStep[];
+  run_steps: RunTask[];
 }
 
 export interface CreateJobParams {
@@ -97,7 +97,7 @@ export interface CreateJobParams {
   max_concurrent_runs?: number;
 }
 
-export interface CreateStepParams {
+export interface CreateTaskParams {
   name: string;
   prompt?: string;
   machine_id: string;
@@ -115,7 +115,7 @@ export interface CreateStepParams {
   on_failure?: string;
 }
 
-export interface UpdateStepParams {
+export interface UpdateTaskParams {
   name?: string;
   prompt?: string;
   machine_id?: string;
