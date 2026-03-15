@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, XCircle, RotateCcw, Clock, Play } from 'lucide-react';
+import { ArrowLeft, XCircle, RotateCcw, Clock, Play, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 import { RunDAGView } from '../components/runs/RunDAGView.tsx';
 import { RunStatusBadge } from '../components/runs/RunStatusBadge.tsx';
 import { TerminalView } from '../components/terminal/TerminalView.tsx';
-import { useRun, useCancelRun, useRetryStep } from '../hooks/useRuns.ts';
+import { useRun, useCancelRun, useRetryStep, useRepairRun } from '../hooks/useRuns.ts';
 import { useJob } from '../hooks/useJobs.ts';
 import { useRunStore } from '../stores/runs.ts';
 import { formatDuration } from '../lib/format.ts';
@@ -24,6 +24,7 @@ export function RunDetail() {
 
   const cancelRun = useCancelRun();
   const retryStep = useRetryStep();
+  const repairRun = useRepairRun();
 
   const selectedStepId = useRunStore((s) => s.selectedStepId);
   const selectStep = useRunStore((s) => s.selectStep);
@@ -83,6 +84,16 @@ export function RunDetail() {
       toast.success('Step retrying');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to retry step');
+    }
+  }
+
+  async function handleRepair() {
+    if (!id) return;
+    try {
+      await repairRun.mutateAsync({ runId: id });
+      toast.success('Run repair started');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to repair run');
     }
   }
 
@@ -158,6 +169,7 @@ export function RunDetail() {
 
   const isActive = run.status === 'running' || run.status === 'pending';
   const canRetry = selectedRunStep?.status === 'failed';
+  const canRepair = run.status === 'failed' || run.status === 'cancelled';
 
   return (
     <div className="flex flex-col h-full">
@@ -185,6 +197,17 @@ export function RunDetail() {
             </div>
           )}
         </div>
+
+        {canRepair && (
+          <button
+            onClick={handleRepair}
+            disabled={repairRun.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-orange-600/20 text-orange-400 hover:bg-orange-600/30 transition-colors disabled:opacity-40"
+          >
+            <Wrench size={14} />
+            Repair
+          </button>
+        )}
 
         {canRetry && (
           <button
@@ -223,8 +246,14 @@ export function RunDetail() {
         {selectedRunStep?.session_id ? (
           <div className="h-full flex flex-col">
             <div className="px-3 py-1.5 bg-bg-secondary border-b border-border-primary text-xs text-text-secondary flex items-center justify-between">
-              <span>
+              <span className="flex items-center gap-2">
                 {selectedStepName ?? 'Step'} - {selectedRunStep.status}
+                {selectedRunStep.task_type_snapshot && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-secondary/70 text-[10px]">
+                    {selectedRunStep.task_type_snapshot}
+                  </span>
+                )}
+                <AttemptBadge attempt={selectedRunStep.attempt} />
               </span>
               {selectedRunStep.error && (
                 <span className="text-red-400 truncate ml-2">{selectedRunStep.error}</span>
@@ -241,5 +270,14 @@ export function RunDetail() {
         )}
       </div>
     </div>
+  );
+}
+
+function AttemptBadge({ attempt }: { attempt?: number }) {
+  if (!attempt || attempt <= 1) return null;
+  return (
+    <span className="px-1.5 py-0.5 rounded-full bg-yellow-600/20 text-yellow-400 text-[10px] font-medium">
+      Attempt {attempt}
+    </span>
   );
 }
