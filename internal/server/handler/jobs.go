@@ -329,6 +329,8 @@ type addStepRequest struct {
 	RunIf             string `json:"run_if"`
 	MaxRetries        int    `json:"max_retries"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds"`
+	TargetJobID       string `json:"target_job_id"`
+	JobParams         string `json:"job_params"`
 }
 
 // AddStep handles POST /api/v1/jobs/{jobID}/steps.
@@ -359,6 +361,19 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 	// For shell tasks, clear prompt.
 	if req.TaskType == "shell" {
 		req.Prompt = ""
+	}
+
+	// For run_job tasks, clear prompt, command, and machine_id.
+	if req.TaskType == "run_job" {
+		req.Prompt = ""
+		req.Command = ""
+		req.MachineID = ""
+	}
+
+	// Self-reference validation for run_job tasks.
+	if req.TaskType == "run_job" && req.TargetJobID == detail.Job.JobID {
+		writeError(w, http.StatusBadRequest, "run_job task cannot target its own job")
+		return
 	}
 
 	// Default step name from current step count when empty.
@@ -393,6 +408,7 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
 	}
 
 	// Validate the new step together with existing steps.
@@ -421,6 +437,8 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
+		JobParams:         req.JobParams,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -448,6 +466,8 @@ type updateStepRequest struct {
 	RunIf             string `json:"run_if"`
 	MaxRetries        int    `json:"max_retries"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds"`
+	TargetJobID       string `json:"target_job_id"`
+	JobParams         string `json:"job_params"`
 }
 
 // UpdateStep handles PUT /api/v1/jobs/{jobID}/steps/{stepID}.
@@ -485,6 +505,19 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		req.Prompt = ""
 	}
 
+	// For run_job tasks, clear prompt, command, and machine_id.
+	if req.TaskType == "run_job" {
+		req.Prompt = ""
+		req.Command = ""
+		req.MachineID = ""
+	}
+
+	// Self-reference validation for run_job tasks.
+	if req.TaskType == "run_job" && req.TargetJobID == detail.Job.JobID {
+		writeError(w, http.StatusBadRequest, "run_job task cannot target its own job")
+		return
+	}
+
 	// Validate model.
 	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" {
 		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku")
@@ -513,6 +546,7 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
 	}
 
 	// Build full steps list with the updated step replacing the original.
@@ -546,6 +580,8 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		RunIf:             req.RunIf,
 		MaxRetries:        req.MaxRetries,
 		RetryDelaySeconds: req.RetryDelaySeconds,
+		TargetJobID:       req.TargetJobID,
+		JobParams:         req.JobParams,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
