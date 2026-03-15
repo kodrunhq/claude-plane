@@ -108,8 +108,11 @@ func (e *SessionStepExecutor) ExecuteStep(
 	}
 	args := parseArgs(runStep.ArgsSnapshot)
 
-	// Inject --dangerously-skip-permissions if snapshot says so (nil defaults to true for jobs).
-	// TODO: When nil, resolve against user preferences at snapshot time instead of defaulting here.
+	// Inject --dangerously-skip-permissions if snapshot says so.
+	// NOTE: A nil SkipPermissionsSnapshot currently means "skip permissions" by default for jobs,
+	// so we treat nil the same as a non-zero (truthy) value here.
+	// TODO(kodrun#prefs-in-snapshot): In a future iteration, resolve a nil value against the user's
+	// preferences at snapshot time instead of defaulting here in the executor.
 	if runStep.SkipPermissionsSnapshot == nil || *runStep.SkipPermissionsSnapshot != 0 {
 		args = stripFlag(args, "--dangerously-skip-permissions")
 		args = append([]string{"--dangerously-skip-permissions"}, args...)

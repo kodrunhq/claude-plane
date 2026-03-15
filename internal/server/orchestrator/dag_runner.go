@@ -142,9 +142,12 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 			case <-timer.C:
 				d.executor.ExecuteStep(ctx, rs, d.OnStepCompleted)
 			case <-ctx.Done():
-				// Step was marked running before delay started; signal completion
-				// so the DAG runner can transition it to cancelled/failed.
-				d.OnStepCompleted(rs.StepID, 1)
+				// Context was cancelled (run cancelled or server shutdown).
+				// Do NOT call OnStepCompleted — CancelRun already handles marking
+				// pending/running steps as cancelled in the DB. Calling OnStepCompleted
+				// here would race with CancelRun's DB updates and could incorrectly
+				// mark the step as completed/failed or trigger dependent launches.
+				return
 			}
 		}()
 	} else {
@@ -268,7 +271,9 @@ func (d *DAGRunner) Cancel() {
 // updateRunStepInDB persists run step status changes. No-op if store is nil (unit tests).
 // processReadyDependents decrements in-degree for dependents of stepID.
 // If stepFailed, skips ready dependents and propagates transitively.
-// Uses an iterative work queue to avoid stack overflow on deep chains.
+// Uses an iterative work queue instead of recursion to avoid stack overflow on deep
+// dependency chains. This is a deliberate design choice and should be preserved when
+// modifying this function.
 // Must be called with d.mu held.
 func (d *DAGRunner) processReadyDependents(stepID string, stepFailed bool, toLaunch *[]store.RunStep) {
 	type workItem struct {

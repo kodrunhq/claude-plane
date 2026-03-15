@@ -209,8 +209,8 @@ func validatePreferences(raw json.RawMessage) error {
 		if !validThemes[p.UI.Theme] {
 			return fmt.Errorf("ui.theme must be one of: light, dark, system")
 		}
-		if p.UI.TerminalFontSize < 0 || p.UI.TerminalFontSize > 72 {
-			return fmt.Errorf("ui.terminal_font_size must be between 0 and 72")
+		if p.UI.TerminalFontSize < 8 || p.UI.TerminalFontSize > 72 {
+			return fmt.Errorf("ui.terminal_font_size must be between 8 and 72")
 		}
 	}
 
