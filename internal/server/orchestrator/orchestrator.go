@@ -134,6 +134,10 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	capturedJobID := jobID
 	capturedTriggerType := triggerType
 	onComplete := func(runID string, status string) {
+		// Clean up shared sessions when the run finishes.
+		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+			cleanup.CleanupRunSessions(runID)
+		}
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
 		}
@@ -310,6 +314,10 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 	// Build new DAGRunner from current DB state
 	rebuildJobID := detail.Run.JobID
 	onComplete := func(runID string, status string) {
+		// Clean up shared sessions when the run finishes.
+		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+			cleanup.CleanupRunSessions(runID)
+		}
 		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
 			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
 		}
@@ -372,6 +380,11 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 
 	if ok {
 		runner.Cancel()
+	}
+
+	// Clean up shared sessions belonging to this run.
+	if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+		cleanup.CleanupRunSessions(runID)
 	}
 
 	// Mark pending/running run steps as cancelled
