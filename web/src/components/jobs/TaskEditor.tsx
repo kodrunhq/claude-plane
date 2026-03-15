@@ -138,7 +138,7 @@ function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean
   if (taskType === 'run_job') {
     return (
       (data.get('target_job_id') as string || '') !== (task.target_job_id ?? '') ||
-      collectJobParams(data) !== (task.job_params ?? undefined)
+      collectJobParams(data) !== (task.job_params || undefined)
     );
   }
 
