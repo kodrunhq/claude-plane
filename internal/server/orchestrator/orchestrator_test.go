@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -33,7 +35,7 @@ func TestOrchestrator_CreateRun(t *testing.T) {
 	mock := newMockExecutor()
 	orch := NewOrchestrator(context.Background(), s, mock)
 
-	run, err := orch.CreateRun(ctx, job.JobID, "manual")
+	run, err := orch.CreateRun(ctx, job.JobID, "manual", nil)
 	if err != nil {
 		t.Fatalf("CreateRun: %v", err)
 	}
@@ -71,7 +73,7 @@ func TestOrchestrator_CreateRun_CycleRejected(t *testing.T) {
 	mock := newMockExecutor()
 	orch := NewOrchestrator(context.Background(), s, mock)
 
-	_, err := orch.CreateRun(ctx, job.JobID, "manual")
+	_, err := orch.CreateRun(ctx, job.JobID, "manual", nil)
 	if err == nil {
 		t.Error("expected error for cyclic DAG, got nil")
 	}
@@ -88,7 +90,7 @@ func TestOrchestrator_CancelRun(t *testing.T) {
 	mock := newMockExecutor()
 	orch := NewOrchestrator(context.Background(), s, mock)
 
-	run, _ := orch.CreateRun(ctx, job.JobID, "manual")
+	run, _ := orch.CreateRun(ctx, job.JobID, "manual", nil)
 	mock.waitForStep(stepA.StepID)
 
 	// Cancel the run
@@ -116,7 +118,7 @@ func TestOrchestrator_RetryStep(t *testing.T) {
 	mock := newMockExecutor()
 	orch := NewOrchestrator(context.Background(), s, mock)
 
-	run, _ := orch.CreateRun(ctx, job.JobID, "manual")
+	run, _ := orch.CreateRun(ctx, job.JobID, "manual", nil)
 
 	// A starts and fails
 	mock.waitForStep(stepA.StepID)
@@ -163,7 +165,7 @@ func TestOrchestrator_OnStepCompleted_ExternalAPI(t *testing.T) {
 		mock := newMockExecutor()
 		orch := NewOrchestrator(context.Background(), s, mock)
 
-		run, err := orch.CreateRun(ctx, job.JobID, "manual")
+		run, err := orch.CreateRun(ctx, job.JobID, "manual", nil)
 		if err != nil {
 			t.Fatalf("CreateRun: %v", err)
 		}
@@ -220,5 +222,142 @@ func waitForRunStatus(t *testing.T, orch *Orchestrator, runID, expectedStatus st
 	}
 	if detail.Run.Status != expectedStatus {
 		t.Fatalf("run %s: persisted status = %q, want %q", runID, detail.Run.Status, expectedStatus)
+	}
+}
+
+func TestOrchestrator_MaxConcurrentRuns(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Create a job with max_concurrent_runs = 1
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Max1 Job", MaxConcurrentRuns: 1})
+	s.CreateStep(ctx, store.CreateStepParams{
+		JobID: job.JobID, Name: "A", Prompt: "p", Command: "claude",
+		OnFailure: "fail_run",
+	})
+
+	mock := newMockExecutor()
+	orch := NewOrchestrator(context.Background(), s, mock)
+
+	// First run should succeed
+	run1, err := orch.CreateRun(ctx, job.JobID, "manual", nil)
+	if err != nil {
+		t.Fatalf("first CreateRun: %v", err)
+	}
+
+	// Second run should be rejected
+	_, err = orch.CreateRun(ctx, job.JobID, "manual", nil)
+	if !errors.Is(err, ErrMaxConcurrentRuns) {
+		t.Fatalf("expected ErrMaxConcurrentRuns, got: %v", err)
+	}
+
+	// Complete the first run
+	detail, _ := s.GetRunWithSteps(ctx, run1.RunID)
+	for _, rs := range detail.RunSteps {
+		mock.waitForStep(rs.StepID)
+		mock.completeStep(rs.StepID, 0)
+	}
+	waitForRunStatus(t, orch, run1.RunID, "completed", 5*time.Second)
+
+	// Now a new run should be allowed
+	_, err = orch.CreateRun(ctx, job.JobID, "manual", nil)
+	if err != nil {
+		t.Fatalf("third CreateRun (after completion): %v", err)
+	}
+}
+
+func TestOrchestrator_MaxConcurrentRuns_DefaultOne(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Default max_concurrent_runs should be 1
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Default Job"})
+	s.CreateStep(ctx, store.CreateStepParams{
+		JobID: job.JobID, Name: "A", Prompt: "p", Command: "claude",
+		OnFailure: "fail_run",
+	})
+
+	mock := newMockExecutor()
+	orch := NewOrchestrator(context.Background(), s, mock)
+
+	_, err := orch.CreateRun(ctx, job.JobID, "manual", nil)
+	if err != nil {
+		t.Fatalf("first CreateRun: %v", err)
+	}
+
+	_, err = orch.CreateRun(ctx, job.JobID, "manual", nil)
+	if !errors.Is(err, ErrMaxConcurrentRuns) {
+		t.Fatalf("expected ErrMaxConcurrentRuns for default max=1, got: %v", err)
+	}
+}
+
+func TestOrchestrator_JobTimeout(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Create job with 1-second timeout
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{Name: "Timeout Job", TimeoutSeconds: 1})
+	s.CreateStep(ctx, store.CreateStepParams{
+		JobID: job.JobID, Name: "A", Prompt: "p", Command: "claude",
+		OnFailure: "fail_run",
+	})
+
+	mock := newMockExecutor()
+	orch := NewOrchestrator(context.Background(), s, mock)
+
+	run, err := orch.CreateRun(ctx, job.JobID, "manual", nil)
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	// Step starts but we don't complete it — timeout should cancel
+	detail, _ := s.GetRunWithSteps(ctx, run.RunID)
+	for _, rs := range detail.RunSteps {
+		mock.waitForStep(rs.StepID)
+	}
+
+	// Wait for timeout to cancel the run
+	waitForRunStatus(t, orch, run.RunID, "cancelled", 5*time.Second)
+}
+
+func TestOrchestrator_ParameterResolution(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Create job with default parameters
+	job, _ := s.CreateJob(ctx, store.CreateJobParams{
+		Name:       "Param Job",
+		Parameters: `{"ENV":"staging","VERSION":"1.0"}`,
+	})
+	s.CreateStep(ctx, store.CreateStepParams{
+		JobID: job.JobID, Name: "A", Prompt: "p", Command: "claude",
+		OnFailure: "fail_run",
+	})
+
+	mock := newMockExecutor()
+	orch := NewOrchestrator(context.Background(), s, mock)
+
+	// Override ENV but keep VERSION default
+	overrides := map[string]string{"ENV": "production"}
+	run, err := orch.CreateRun(ctx, job.JobID, "manual", overrides)
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	// Check that parameters were resolved and stored
+	detail, _ := s.GetRunWithSteps(ctx, run.RunID)
+	if detail.Run.Parameters == "" {
+		t.Fatal("expected parameters to be stored on run")
+	}
+
+	var params map[string]string
+	if err := json.Unmarshal([]byte(detail.Run.Parameters), &params); err != nil {
+		t.Fatalf("unmarshal run params: %v", err)
+	}
+	if params["ENV"] != "production" {
+		t.Errorf("ENV = %q, want %q", params["ENV"], "production")
+	}
+	if params["VERSION"] != "1.0" {
+		t.Errorf("VERSION = %q, want %q", params["VERSION"], "1.0")
 	}
 }
