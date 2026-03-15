@@ -58,6 +58,7 @@ message ServerCommand {
     ResizeTerminalCmd resize_terminal = 5;
     InputDataCmd input_data = 6;
     RequestScrollbackCmd request_scrollback = 7;
+    CleanupScrollbackCmd cleanup_scrollback = 8;
   }
 }
 
@@ -97,6 +98,10 @@ message InputDataCmd {
 }
 
 message RequestScrollbackCmd {
+  string session_id = 1;
+}
+
+message CleanupScrollbackCmd {
   string session_id = 1;
 }
 

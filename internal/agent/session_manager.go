@@ -106,6 +106,8 @@ func (sm *SessionManager) HandleCommand(cmd *pb.ServerCommand) {
 		sm.handleDetach(c.DetachSession)
 	case *pb.ServerCommand_RequestScrollback:
 		sm.handleRequestScrollback(c.RequestScrollback)
+	case *pb.ServerCommand_CleanupScrollback:
+		sm.handleCleanupScrollback(c.CleanupScrollback)
 	default:
 		sm.logger.Warn("unknown command type", "command", cmd)
 	}
@@ -356,6 +358,25 @@ func (sm *SessionManager) handleRequestScrollback(cmd *pb.RequestScrollbackCmd) 
 	}
 
 	sm.sendScrollbackChunks(cmd.GetSessionId(), scrollbackPath)
+}
+
+func (sm *SessionManager) handleCleanupScrollback(cmd *pb.CleanupScrollbackCmd) {
+	sessionID := cmd.GetSessionId()
+	castPath := filepath.Join(sm.dataDir, sessionID+".cast")
+	if err := os.Remove(castPath); err != nil {
+		if !os.IsNotExist(err) {
+			sm.logger.Warn("failed to delete scrollback file",
+				slog.String("session_id", sessionID),
+				slog.String("path", castPath),
+				slog.String("error", err.Error()),
+			)
+		}
+		return
+	}
+	sm.logger.Info("deleted scrollback file",
+		slog.String("session_id", sessionID),
+		slog.String("path", castPath),
+	)
 }
 
 func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
