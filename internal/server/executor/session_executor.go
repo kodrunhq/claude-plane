@@ -50,6 +50,7 @@ type storeIface interface {
 // stepTracking holds in-flight state for a step being executed.
 type stepTracking struct {
 	runID      string
+	runStepID  string
 	stepID     string
 	onComplete func(stepID string, exitCode int)
 	cancel     context.CancelFunc
@@ -86,10 +87,46 @@ func NewSessionStepExecutor(
 
 // ExecuteStep launches the step on the target agent and begins monitoring the
 // resulting session. It is non-blocking; completion is signalled via onComplete.
+// Dispatches to executeShellTask or executeClaudeSession based on TaskTypeSnapshot.
 func (e *SessionStepExecutor) ExecuteStep(
 	ctx context.Context,
 	runStep store.RunStep,
-	_ *orchestrator.ResolveContext,
+	resolveCtx *orchestrator.ResolveContext,
+	onComplete func(stepID string, exitCode int),
+) {
+	switch runStep.TaskTypeSnapshot {
+	case "shell":
+		e.executeShellTask(ctx, runStep, resolveCtx, onComplete)
+	default:
+		e.executeClaudeSession(ctx, runStep, resolveCtx, onComplete)
+	}
+}
+
+// RunStepIDForSession returns the run step ID associated with the given session.
+// This is used by the gRPC server to look up where to persist task values.
+func (e *SessionStepExecutor) RunStepIDForSession(sessionID string) (string, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	t, ok := e.sessionToStep[sessionID]
+	if !ok {
+		return "", false
+	}
+	return t.runStepID, true
+}
+
+// resolveFields applies template resolution if a ResolveContext is available.
+func resolveField(value string, rc *orchestrator.ResolveContext) string {
+	if rc == nil || value == "" {
+		return value
+	}
+	return orchestrator.ResolveReferences(value, rc.RunParams, rc.JobMeta, rc.StepValues, rc.StepResults)
+}
+
+// executeClaudeSession handles the default Claude CLI session execution path.
+func (e *SessionStepExecutor) executeClaudeSession(
+	ctx context.Context,
+	runStep store.RunStep,
+	resolveCtx *orchestrator.ResolveContext,
 	onComplete func(stepID string, exitCode int),
 ) {
 	agent := e.connMgr.GetAgent(runStep.MachineIDSnapshot)
@@ -126,6 +163,9 @@ func (e *SessionStepExecutor) ExecuteStep(
 		args = append(args, "--model", runStep.ModelSnapshot)
 	}
 
+	// Resolve template references in the prompt.
+	resolvedPrompt := resolveField(runStep.PromptSnapshot, resolveCtx)
+
 	workingDir := runStep.WorkingDirSnapshot
 
 	sess := &store.Session{
@@ -156,7 +196,8 @@ func (e *SessionStepExecutor) ExecuteStep(
 					Rows: defaultTermRows,
 					Cols: defaultTermCols,
 				},
-				InitialPrompt: runStep.PromptSnapshot,
+				InitialPrompt: resolvedPrompt,
+				TaskType:       "claude_session",
 			},
 		},
 	}
@@ -178,6 +219,106 @@ func (e *SessionStepExecutor) ExecuteStep(
 		return
 	}
 
+	e.trackAndMonitor(ctx, runStep, sessionID, onComplete)
+}
+
+// executeShellTask handles shell task execution. Shell tasks run an arbitrary
+// command (not Claude CLI) — no --dangerously-skip-permissions, no --model injection,
+// and no initial prompt.
+func (e *SessionStepExecutor) executeShellTask(
+	ctx context.Context,
+	runStep store.RunStep,
+	resolveCtx *orchestrator.ResolveContext,
+	onComplete func(stepID string, exitCode int),
+) {
+	if runStep.CommandSnapshot == "" {
+		e.logger.Error("shell task has no command",
+			"run_step_id", runStep.RunStepID,
+			"step_id", runStep.StepID,
+		)
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	agent := e.connMgr.GetAgent(runStep.MachineIDSnapshot)
+	if agent == nil {
+		e.logger.Warn("no connected agent for machine",
+			"machine_id", runStep.MachineIDSnapshot,
+			"run_step_id", runStep.RunStepID,
+		)
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	sessionID := uuid.New().String()
+
+	// Resolve template references in command and args.
+	resolvedCommand := resolveField(runStep.CommandSnapshot, resolveCtx)
+	resolvedArgsJSON := resolveField(runStep.ArgsSnapshot, resolveCtx)
+	args := parseArgs(resolvedArgsJSON)
+
+	workingDir := runStep.WorkingDirSnapshot
+
+	sess := &store.Session{
+		SessionID:  sessionID,
+		MachineID:  runStep.MachineIDSnapshot,
+		Command:    resolvedCommand,
+		WorkingDir: workingDir,
+		Status:     store.StatusCreated,
+	}
+	if err := e.store.CreateSession(sess); err != nil {
+		e.logger.Error("failed to create session in store",
+			"session_id", sessionID,
+			"run_step_id", runStep.RunStepID,
+			"error", err,
+		)
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	cmd := &pb.ServerCommand{
+		Command: &pb.ServerCommand_CreateSession{
+			CreateSession: &pb.CreateSessionCmd{
+				SessionId:  sessionID,
+				Command:    resolvedCommand,
+				Args:       args,
+				WorkingDir: workingDir,
+				TerminalSize: &pb.TerminalSize{
+					Rows: defaultTermRows,
+					Cols: defaultTermCols,
+				},
+				TaskType: "shell",
+			},
+		},
+	}
+
+	if err := agent.SendCommand(cmd); err != nil {
+		e.logger.Error("failed to send CreateSession command to agent",
+			"session_id", sessionID,
+			"machine_id", runStep.MachineIDSnapshot,
+			"error", err,
+		)
+		if updateErr := e.store.UpdateSessionStatus(sessionID, store.StatusFailed); updateErr != nil {
+			e.logger.Warn("failed to mark session as failed after send error",
+				"session_id", sessionID,
+				"error", updateErr,
+			)
+		}
+		onComplete(runStep.StepID, failureExitCode)
+		return
+	}
+
+	e.trackAndMonitor(ctx, runStep, sessionID, onComplete)
+}
+
+// trackAndMonitor updates the run step to running, registers tracking state, and
+// starts the session monitor goroutine. Shared by both execution paths.
+func (e *SessionStepExecutor) trackAndMonitor(
+	ctx context.Context,
+	runStep store.RunStep,
+	sessionID string,
+	onComplete func(stepID string, exitCode int),
+) {
 	if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, sessionID, 0); err != nil {
 		e.logger.Warn("failed to update run step to running",
 			"run_step_id", runStep.RunStepID,
@@ -190,6 +331,7 @@ func (e *SessionStepExecutor) ExecuteStep(
 
 	tracking := &stepTracking{
 		runID:      runStep.RunID,
+		runStepID:  runStep.RunStepID,
 		stepID:     runStep.StepID,
 		onComplete: onComplete,
 		cancel:     cancel,
