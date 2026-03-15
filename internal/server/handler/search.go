@@ -3,20 +3,21 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
-// SearchHandler handles REST endpoints for searching session logs.
+// SearchHandler handles REST endpoints for searching session content.
 type SearchHandler struct {
-	connMgr *connmgr.ConnectionManager
+	store *store.Store
 }
 
 // NewSearchHandler creates a new SearchHandler.
-func NewSearchHandler(connMgr *connmgr.ConnectionManager) *SearchHandler {
-	return &SearchHandler{connMgr: connMgr}
+func NewSearchHandler(s *store.Store) *SearchHandler {
+	return &SearchHandler{store: s}
 }
 
 // RegisterSearchRoutes mounts all search routes on the given router.
@@ -24,19 +25,7 @@ func RegisterSearchRoutes(r chi.Router, h *SearchHandler) {
 	r.Get("/api/v1/search/sessions", h.SearchSessions)
 }
 
-// SearchResult represents a single search match from an agent's scrollback.
-type SearchResult struct {
-	SessionID     string `json:"session_id"`
-	MachineID     string `json:"machine_id"`
-	Line          string `json:"line"`
-	ContextBefore string `json:"context_before"`
-	ContextAfter  string `json:"context_after"`
-	TimestampMs   int64  `json:"timestamp_ms"`
-	SessionStatus string `json:"session_status,omitempty"`
-}
-
-// SearchSessions handles GET /api/v1/search/sessions?q=<query>&limit=50.
-// Fans out search to connected agents via the CommandStream and aggregates results.
+// SearchSessions handles GET /api/v1/search/sessions?q=<query>&limit=50&offset=0.
 func (h *SearchHandler) SearchSessions(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -44,22 +33,37 @@ func (h *SearchHandler) SearchSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limitStr := r.URL.Query().Get("limit")
 	limit := 50
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 200 {
-			limit = l
-		}
+	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {
+		limit = l
 	}
 
-	// TODO: Fan out SearchScrollbackCmd to connected agents via CommandStream.
-	// For now, return an empty result set. The full implementation requires:
-	// 1. Adding SearchScrollbackCmd/SearchScrollbackResultEvent to the proto
-	// 2. Implementing request/response correlation on AgentConnection
-	// 3. Agent-side .cast file parsing and search
-	_ = limit
-	_ = query
+	offset := 0
+	if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
 
-	results := make([]SearchResult, 0)
+	results, err := h.store.SearchContent(r.Context(), query, limit, offset)
+	if err != nil {
+		if strings.Contains(err.Error(), "fts5: syntax error") ||
+			strings.Contains(err.Error(), "no such column") {
+			writeError(w, http.StatusBadRequest, "invalid search query syntax")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "search failed")
+		return
+	}
+
+	// Fetch context lines for each result
+	for i := range results {
+		before, after, err := h.store.FetchContextLines(r.Context(),
+			results[i].SessionID, results[i].LineNumber, 2, 2)
+		if err != nil {
+			continue // skip context on error, still return the match
+		}
+		results[i].ContextBefore = before
+		results[i].ContextAfter = after
+	}
+
 	writeJSON(w, http.StatusOK, results)
 }
