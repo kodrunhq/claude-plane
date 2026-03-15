@@ -1,3 +1,4 @@
+import { Bot, Terminal } from 'lucide-react';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { TimeAgo } from '../shared/TimeAgo.tsx';
 import type { Session } from '../../types/session.ts';
@@ -10,6 +11,7 @@ interface SessionCardProps {
 
 export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps) {
   const isActive = session.status === 'running' || session.status === 'created';
+  const isTerminalSession = session.command !== '' && session.command !== 'claude';
 
   return (
     <div
@@ -18,7 +20,20 @@ export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps
       onClick={() => onAttach(session.session_id)}
     >
       <div className="flex items-center justify-between mb-3">
-        <StatusBadge status={session.status} size="sm" />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={session.status} size="sm" />
+          {isTerminalSession ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium rounded bg-cyan-500/10 text-cyan-400">
+              <Terminal size={12} />
+              Terminal
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium rounded bg-indigo-500/10 text-indigo-400">
+              <Bot size={12} />
+              Claude
+            </span>
+          )}
+        </div>
         <span className="text-xs text-text-secondary font-mono opacity-60" title={session.session_id}>
           {session.session_id.slice(0, 8)}
         </span>
