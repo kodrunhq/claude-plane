@@ -1,0 +1,22 @@
+FROM node:22-alpine AS frontend
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+COPY --from=frontend /app/internal/server/frontend/dist ./internal/server/frontend/dist
+RUN CGO_ENABLED=0 go build -o /claude-plane-server ./cmd/server
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /claude-plane-server /usr/local/bin/
+RUN addgroup -S claude && adduser -S claude -G claude
+USER claude
+ENTRYPOINT ["claude-plane-server"]
+CMD ["serve", "--config", "/etc/claude-plane/server.toml"]

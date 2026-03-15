@@ -10,6 +10,7 @@ builds:
   - id: server
     binary: claude-plane-server
     main: ./cmd/server
+    env: [CGO_ENABLED=0]
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
@@ -20,6 +21,18 @@ builds:
   - id: agent
     binary: claude-plane-agent
     main: ./cmd/agent
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Version={{ .Version }}
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Commit={{ .ShortCommit }}
+      - -X github.com/kodrunhq/claude-plane/internal/shared/buildinfo.Date={{ .Date }}
+
+  - id: bridge
+    binary: claude-plane-bridge
+    main: ./cmd/bridge
+    env: [CGO_ENABLED=0]
     goos: [linux, darwin]
     goarch: [amd64, arm64]
     ldflags:
@@ -43,6 +56,14 @@ archives:
       - goos: darwin
         formats: [zip]
     name_template: "claude-plane-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - id: bridge
+    ids: [bridge]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: darwin
+        formats: [zip]
+    name_template: "claude-plane-bridge_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
