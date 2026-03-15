@@ -11,6 +11,6 @@ export interface SearchResult {
 }
 
 export const searchApi = {
-  sessions: (q: string, limit = 50) =>
-    request<SearchResult[]>(`/search/sessions?q=${encodeURIComponent(q)}&limit=${limit}`),
+  sessions: (q: string, limit = 50, offset = 0) =>
+    request<SearchResult[]>(`/search/sessions?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
 };
