@@ -2,7 +2,11 @@ FROM alpine:3.20
 ARG TARGETARCH
 RUN apk add --no-cache ca-certificates
 COPY dist/server_linux_${TARGETARCH}*/claude-plane-server /usr/local/bin/
-RUN addgroup -S claude && adduser -S claude -G claude
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN mkdir -p /data && \
+    addgroup -S claude && adduser -S claude -G claude && \
+    chown claude:claude /data
 USER claude
-ENTRYPOINT ["claude-plane-server"]
-CMD ["serve", "--config", "/etc/claude-plane/server.toml"]
+VOLUME /data
+EXPOSE 8080 9090
+ENTRYPOINT ["docker-entrypoint.sh"]
