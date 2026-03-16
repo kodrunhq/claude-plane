@@ -68,10 +68,11 @@ docker run -d --name claude-plane \
   -v claude-plane-data:/data \
   -e ADMIN_EMAIL=me@example.com \
   -e ADMIN_PASSWORD=mysecret \
+  -e SERVER_URL=http://your-server-ip:4200 \
   jurel89/claude-plane:latest
 ```
 
-Dashboard at **http://localhost:4200**. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
+Set `SERVER_URL` to your machine's reachable IP or hostname — agents use this address to connect. Dashboard at **http://localhost:4200**. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
 
 ### Adding an agent (same or remote machine)
 
@@ -91,9 +92,11 @@ Replace `your-server` with `localhost` if running on the same machine, or the se
 **3. Join and start the agent:**
 
 ```bash
-./claude-plane-agent join ABC123 --server http://your-server:4200
+./claude-plane-agent join ABC123 --server http://your-server:4200 --insecure
 ./claude-plane-agent run --config ~/.claude-plane/agent.toml
 ```
+
+The `--insecure` flag is required when the server uses plain HTTP (the default Docker setup). For HTTPS deployments, omit it.
 
 The `join` command downloads TLS certificates and writes the agent config automatically. The machine running the agent needs [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
 
