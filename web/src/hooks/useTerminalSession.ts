@@ -97,14 +97,13 @@ export function useTerminalSession(
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
-            // Wipe the visible viewport (ANSI: erase display + cursor home),
-            // then re-fit. Scrollback was rendered at whatever PTY size existed
-            // when the output was produced. Full-screen TUI apps (Claude CLI)
-            // use absolute cursor positioning that looks garbled at a different
-            // size. The wipe + fit sends a resize → SIGWINCH, and the CLI
-            // redraws its screen cleanly.
-            term.write('\x1b[2J\x1b[H');
-            requestAnimationFrame(() => fitAddon.fit());
+            // Reset the terminal to clear garbled scrollback. Full-screen TUI
+            // apps (Claude CLI) use absolute cursor positioning rendered at the
+            // PTY's size when it started, which differs from the browser's
+            // xterm.js size. reset() wipes the screen buffer completely.
+            // The fit() sends a resize → SIGWINCH, and the CLI redraws clean.
+            term.reset();
+            fitAddon.fit();
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
           }
