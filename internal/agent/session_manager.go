@@ -326,13 +326,25 @@ func (sm *SessionManager) handleAttach(cmd *pb.AttachSessionCmd) {
 	}
 
 	// Session no longer in memory (already exited). Try to replay scrollback
-	// from the persisted .cast file on disk.
+	// from the persisted .cast file on disk, then notify the server that the
+	// session is terminated so the browser can show the correct status.
 	scrollbackPath := filepath.Join(sm.dataDir, sessionID+".cast")
 	sm.logger.Info("session not in memory, replaying scrollback from disk",
 		"session_id", sessionID,
 		"path", scrollbackPath,
 	)
 	sm.sendScrollbackChunks(sessionID, scrollbackPath)
+
+	// Tell the server this session has ended — prevents the browser from
+	// showing a "Connected" indicator on a dead session where typing does nothing.
+	sm.sendEvent(&pb.AgentEvent{
+		Event: &pb.AgentEvent_SessionStatus{
+			SessionStatus: &pb.SessionStatusEvent{
+				SessionId: sessionID,
+				Status:    "terminated",
+			},
+		},
+	})
 }
 
 func (sm *SessionManager) handleDetach(cmd *pb.DetachSessionCmd) {

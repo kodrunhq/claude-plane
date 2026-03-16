@@ -49,6 +49,18 @@ internal/server/frontend/dist/*
 internal/server/agentdl/binaries/*
 !internal/server/agentdl/binaries/.gitkeep
 
+# Built binaries (quickstart, local dev)
+claude-plane-server
+claude-plane-agent
+claude-plane-bridge
+server
+agent
+bridge
+
+# Node modules
+node_modules/
+web/node_modules/
+
 # Runtime data (quickstart, local dev)
 data/
 ca/

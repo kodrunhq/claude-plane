@@ -19,13 +19,5 @@ export interface Machine {
   health?: MachineHealth;
 }
 
-// WebSocket event message types
-export type EventType = 'session.status' | 'session.exit' | 'machine.status' | 'machine.health' | 'run.step.status';
-export interface EventMessage {
-  type: EventType;
-  payload: Record<string, unknown>;
-  timestamp: string;
-}
-
 // Re-export session types for convenience
 export type { Session, CreateSessionRequest, TerminalSize, TerminalStatus } from '../types/session.ts';

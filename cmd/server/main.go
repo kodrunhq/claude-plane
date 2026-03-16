@@ -286,6 +286,7 @@ func newServeCmd() *cobra.Command {
 			// Wire event publisher into components.
 			connMgr.SetPublisher(eventBus)
 			orch.SetPublisher(eventBus)
+			grpcSrv.SetEventPublisher(eventBus)
 
 			// ---- Cron scheduler ----
 			sched := scheduler.NewScheduler(s, eventBus, slog.Default())

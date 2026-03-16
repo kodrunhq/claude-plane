@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { EventMessage } from '../lib/types.ts';
 import { useRunStore } from '../stores/runs.ts';
+
+/** Wire format from WSFanout (internal/server/event/ws_fanout.go). */
+interface WsEventMsg {
+  type: 'event';
+  event_id: string;
+  event_type: string;
+  timestamp: string;
+  source: string;
+  payload: Record<string, unknown>;
+}
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 
@@ -36,10 +45,13 @@ export function useEventStream() {
 
       ws.onmessage = (event: MessageEvent) => {
         try {
-          const msg = JSON.parse(event.data as string) as EventMessage;
-          switch (msg.type) {
-            case 'session.status':
-            case 'session.exit':
+          const msg = JSON.parse(event.data as string) as WsEventMsg;
+          if (msg.type !== 'event') return;
+
+          switch (msg.event_type) {
+            case 'session.started':
+            case 'session.exited':
+            case 'session.terminated':
               queryClient.invalidateQueries({ queryKey: ['sessions'] });
               break;
             case 'machine.status':

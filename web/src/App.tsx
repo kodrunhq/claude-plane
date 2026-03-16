@@ -25,9 +25,9 @@ import { SettingsPage } from './views/SettingsPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { MultiviewPage } from './components/multiview/MultiviewPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
-import { InjectPanel } from './components/sessions/InjectPanel.tsx'
-import { useSession } from './hooks/useSessions.ts'
 import { useAuthStore } from './stores/auth.ts'
+import { useThemeEffect } from './hooks/useThemeEffect.ts'
+import { useUIPrefs } from './hooks/useUIPrefs.ts'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,14 +37,20 @@ const queryClient = new QueryClient({
   },
 })
 
+/** Reads user theme preference and applies data-theme attribute to <html>.
+ *  Must be inside QueryClientProvider to access preferences. */
+function ThemeApplier() {
+  useThemeEffect()
+  return null
+}
+
 function TerminalRoute() {
   const { sessionId } = useParams<{ sessionId: string }>()
-  const { data: session } = useSession(sessionId ?? '')
+  const { terminal_font_size } = useUIPrefs()
   if (!sessionId) return null
   return (
     <div className="flex flex-col h-full">
-      <TerminalView sessionId={sessionId} className="flex-1 min-h-0" />
-      <InjectPanel sessionId={sessionId} sessionStatus={session?.status ?? ''} />
+      <TerminalView sessionId={sessionId} className="flex-1 min-h-0" fontSize={terminal_font_size} />
     </div>
   )
 }
@@ -70,13 +76,14 @@ function App() {
     return (
       <>
         <LoginPage />
-        <Toaster theme="dark" />
+        <Toaster theme="system" />
       </>
     )
   }
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeApplier />
       <BrowserRouter>
         <AppShell>
           <Routes>
@@ -108,7 +115,7 @@ function App() {
           </Routes>
         </AppShell>
       </BrowserRouter>
-      <Toaster theme="dark" />
+      <Toaster theme="system" />
     </QueryClientProvider>
   )
 }
