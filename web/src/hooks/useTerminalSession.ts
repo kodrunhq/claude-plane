@@ -95,11 +95,15 @@ export function useTerminalSession(
     ws.onopen = () => {
       // Cookie-based auth: the session_token cookie is sent automatically
       // on the WebSocket upgrade request, so no first-message auth is needed.
-      setStatus('replaying');
 
-      // Fit the terminal to the container — this triggers term.onResize which
-      // sends the resize control message to the server automatically.
+      // CRITICAL: send resize BEFORE anything else. The server will forward
+      // this to the agent before the attach command's scrollback replay.
+      // Without this, scrollback is replayed at the wrong terminal size,
+      // causing garbled rendering (Claude CLI's status bar, horizontal rules,
+      // and cursor positioning all depend on correct column count).
       fitAddon.fit();
+
+      setStatus('replaying');
 
       // Safety timeout: if scrollback_end never arrives, transition to live
       // mode after 10 seconds to avoid being stuck on "Loading history...".
@@ -119,6 +123,11 @@ export function useTerminalSession(
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
+            // Re-fit after scrollback completes. This sends a fresh resize to the
+            // agent which triggers SIGWINCH on the PTY, causing full-screen TUI apps
+            // (like Claude CLI) to re-render at the correct terminal dimensions.
+            // Without this, scrollback replayed at the wrong size stays garbled.
+            requestAnimationFrame(() => fitAddon.fit());
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
           }
