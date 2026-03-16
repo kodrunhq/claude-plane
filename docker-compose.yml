@@ -1,0 +1,49 @@
+services:
+  # One-shot init: generates CA, server cert, config, and admin account.
+  # Skips if server.toml already exists (idempotent on restart).
+  init:
+    image: jurel89/claude-plane:latest
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -e
+        if [ -f /etc/claude-plane/server.toml ]; then
+          echo "Already initialized, skipping."
+          exit 0
+        fi
+        echo "==> Generating CA..."
+        claude-plane-server ca init --out-dir /etc/claude-plane/ca
+        echo "==> Issuing server certificate..."
+        claude-plane-server ca issue-server --ca-dir /etc/claude-plane/ca --out-dir /etc/claude-plane/server-cert
+        echo "==> Generating config..."
+        JWT_SECRET=$$(head -c 32 /dev/urandom | base64)
+        printf '[http]\nlisten = "0.0.0.0:8080"\n\n[grpc]\nlisten = "0.0.0.0:9090"\n\n[tls]\nca_cert = "/etc/claude-plane/ca/ca.pem"\nserver_cert = "/etc/claude-plane/server-cert/server.pem"\nserver_key = "/etc/claude-plane/server-cert/server-key.pem"\n\n[database]\npath = "/data/claude-plane.db"\n\n[auth]\njwt_secret = "%s"\nregistration_mode = "closed"\n' "$$JWT_SECRET" > /etc/claude-plane/server.toml
+        echo "==> Seeding admin account..."
+        echo "$${ADMIN_PASSWORD}" | claude-plane-server seed-admin --db /data/claude-plane.db --email "$${ADMIN_EMAIL}" --name Admin
+        chown -R claude:claude /etc/claude-plane /data
+        echo "==> Init complete. Admin: $${ADMIN_EMAIL}"
+    environment:
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localhost}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme123}
+    user: root
+    volumes:
+      - config:/etc/claude-plane
+      - data:/data
+
+  server:
+    image: jurel89/claude-plane:latest
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - config:/etc/claude-plane:ro
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  config:
+  data:

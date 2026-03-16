@@ -45,49 +45,31 @@ Three components, each a single Go binary:
 
 ## Quickstart
 
-Get claude-plane running on a single machine (builds from source, generates certs, seeds admin, starts server + agent):
+### Docker Compose (recommended)
 
 ```bash
 git clone https://github.com/kodrunhq/claude-plane.git
 cd claude-plane
-./install.sh quickstart
+docker compose up -d
 ```
 
-The script prints your admin credentials and dashboard URL. Ctrl+C stops everything.
-
-See the [Quickstart Guide](docs/quickstart.md) for step-by-step setup and configuration options.
-
-## Installation
-
-### Docker
-
-The server requires a config file with TLS certificates, JWT secret, and database path. Generate these first with the built-in CA tooling, then mount them into the container:
+This automatically generates TLS certificates, creates a config file, seeds an admin account (`admin@localhost` / `changeme123`), and starts the server. Customize credentials with environment variables:
 
 ```bash
-docker pull jurel89/claude-plane:latest
-
-docker run -d \
-  --name claude-plane \
-  -p 8443:8443 \
-  -p 9090:9090 \
-  -v ./server.toml:/etc/claude-plane/server.toml:ro \
-  -v ./ca:/etc/claude-plane/ca:ro \
-  -v ./server-cert:/etc/claude-plane/server-cert:ro \
-  -v claude-plane-data:/data \
-  jurel89/claude-plane:latest
+ADMIN_EMAIL=me@example.com ADMIN_PASSWORD=mysecret docker compose up -d
 ```
 
-See the [Server Installation](docs/install-server.md) guide for config file setup and certificate generation. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
+Dashboard at **http://localhost:8080** once running.
 
-### Install script
+### Docker (standalone)
 
 ```bash
-# Server
-curl -fsSL https://raw.githubusercontent.com/kodrunhq/claude-plane/main/install.sh | bash
-
-# Agent (on worker machines)
-curl -fsSL https://raw.githubusercontent.com/kodrunhq/claude-plane/main/install.sh | bash -s -- agent
+git clone https://github.com/kodrunhq/claude-plane.git
+cd claude-plane
+./docker-quickstart.sh
 ```
+
+The script prompts for admin credentials, generates certs and config in `./claude-plane-data/`, and starts a Docker container. Run it again to restart without re-initializing.
 
 ### Build from source
 
