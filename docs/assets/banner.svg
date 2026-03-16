@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 200" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="subtitleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="200" rx="12" fill="url(#bg)"/>
+
+  <!-- Decorative grid dots -->
+  <g fill="#1e3a5f" opacity="0.3">
+    <circle cx="50" cy="30" r="1.5"/>
+    <circle cx="90" cy="30" r="1.5"/>
+    <circle cx="130" cy="30" r="1.5"/>
+    <circle cx="50" cy="60" r="1.5"/>
+    <circle cx="90" cy="60" r="1.5"/>
+    <circle cx="130" cy="60" r="1.5"/>
+    <circle cx="50" cy="90" r="1.5"/>
+    <circle cx="90" cy="90" r="1.5"/>
+    <circle cx="130" cy="90" r="1.5"/>
+    <circle cx="770" cy="110" r="1.5"/>
+    <circle cx="810" cy="110" r="1.5"/>
+    <circle cx="850" cy="110" r="1.5"/>
+    <circle cx="770" cy="140" r="1.5"/>
+    <circle cx="810" cy="140" r="1.5"/>
+    <circle cx="850" cy="140" r="1.5"/>
+    <circle cx="770" cy="170" r="1.5"/>
+    <circle cx="810" cy="170" r="1.5"/>
+    <circle cx="850" cy="170" r="1.5"/>
+  </g>
+
+  <!-- Terminal icon -->
+  <g transform="translate(160, 55)" filter="url(#glow)">
+    <rect width="56" height="42" rx="6" fill="none" stroke="url(#accent)" stroke-width="2" opacity="0.8"/>
+    <text x="12" y="30" fill="#3b82f6" font-size="22" font-weight="700" font-family="monospace">&gt;_</text>
+  </g>
+
+  <!-- Connection lines from icon to title -->
+  <line x1="220" y1="76" x2="248" y2="76" stroke="#3b82f6" stroke-width="1.5" opacity="0.3" stroke-dasharray="4,3"/>
+
+  <!-- Project name -->
+  <text x="260" y="88" fill="url(#accent)" font-size="48" font-weight="800" letter-spacing="-1" filter="url(#softGlow)">claude-plane</text>
+
+  <!-- Subtitle -->
+  <text x="262" y="118" fill="url(#subtitleGrad)" font-size="16" font-weight="400" letter-spacing="0.5">Self-hosted control plane for distributed Claude CLI sessions</text>
+
+  <!-- Tech pills -->
+  <g transform="translate(260, 138)">
+    <rect width="52" height="22" rx="11" fill="#1e3a5f" stroke="#2563eb" stroke-width="1" opacity="0.6"/>
+    <text x="26" y="15" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="600">Go</text>
+
+    <rect x="60" width="68" height="22" rx="11" fill="#1e3a5f" stroke="#7c3aed" stroke-width="1" opacity="0.6"/>
+    <text x="94" y="15" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="600">React 19</text>
+
+    <rect x="136" width="58" height="22" rx="11" fill="#1e3a5f" stroke="#059669" stroke-width="1" opacity="0.6"/>
+    <text x="165" y="15" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">gRPC</text>
+
+    <rect x="202" width="62" height="22" rx="11" fill="#1e3a5f" stroke="#0891b2" stroke-width="1" opacity="0.6"/>
+    <text x="233" y="15" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">mTLS</text>
+
+    <rect x="272" width="64" height="22" rx="11" fill="#1e3a5f" stroke="#d97706" stroke-width="1" opacity="0.6"/>
+    <text x="304" y="15" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">SQLite</text>
+  </g>
+</svg>
