@@ -26,10 +26,11 @@ export function SessionCard({ session, onAttach, onTerminate, selectable, select
         <div className="absolute top-2 left-2 z-10">
           <input
             type="checkbox"
-            checked={selected}
+            checked={!!selected}
             onChange={() => onSelect?.(session.session_id)}
             className="w-4 h-4 rounded border-border-primary accent-accent-primary cursor-pointer"
             onClick={(e) => e.stopPropagation()}
+            aria-label={`Select session ${session.session_id.slice(0, 8)}`}
           />
         </div>
       )}

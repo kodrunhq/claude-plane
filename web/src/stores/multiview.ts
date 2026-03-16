@@ -109,6 +109,7 @@ interface MultiviewState {
   focusedPaneId: string | null;
   createScratchWorkspace: (sessionIds: readonly string[]) => void;
   saveWorkspace: (name: string) => void;
+  saveWorkspaceAs: (name: string) => void;
   deleteWorkspace: (id: string) => void;
   loadWorkspace: (id: string) => void;
   renameWorkspace: (id: string, name: string) => void;
@@ -143,6 +144,25 @@ export const useMultiviewStore = create<MultiviewState>((set, get) => ({
     persistWorkspaces(updated);
     persistScratch(saved);
     set({ workspaces: updated, activeWorkspace: saved });
+  },
+
+  saveWorkspaceAs: (name) => {
+    const { activeWorkspace, workspaces } = get();
+    if (!activeWorkspace) return;
+
+    const now = new Date().toISOString();
+    const copy: Workspace = {
+      ...activeWorkspace,
+      id: crypto.randomUUID(),
+      name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const updated = [...workspaces, copy];
+
+    persistWorkspaces(updated);
+    persistScratch(copy);
+    set({ workspaces: updated, activeWorkspace: copy });
   },
 
   deleteWorkspace: (id) => {

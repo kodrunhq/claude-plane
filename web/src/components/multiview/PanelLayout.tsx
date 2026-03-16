@@ -66,13 +66,17 @@ export function PanelLayout({ preset, panes, renderPane, workspaceId }: PanelLay
 
   switch (preset) {
     case '2-horizontal':
-    case 'custom':
       return (
         <Group orientation="horizontal" id={`${baseId}-h`}>
           <Panel minSize={15}>{renderPane(panes[0])}</Panel>
           <ResizeHandle />
           <Panel minSize={15}>{renderPane(panes[1])}</Panel>
         </Group>
+      );
+
+    case 'custom':
+      return (
+        <HorizontalRow panes={panes} renderPane={renderPane} groupId={`${baseId}-custom`} minSize={10} />
       );
 
     case '2-vertical':

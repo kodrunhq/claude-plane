@@ -39,6 +39,7 @@ export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
     workspaces,
     setLayoutPreset,
     saveWorkspace,
+    saveWorkspaceAs,
     loadWorkspace,
     deleteWorkspace,
     renameWorkspace,
@@ -47,7 +48,7 @@ export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [showSwitcher, setShowSwitcher] = useState(false);
-  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [savePromptMode, setSavePromptMode] = useState<'save' | 'saveAs' | null>(null);
   const [saveName, setSaveName] = useState('');
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -79,15 +80,19 @@ export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
     if (activeWorkspace?.name) {
       saveWorkspace(activeWorkspace.name);
     } else {
-      setShowSavePrompt(true);
+      setSavePromptMode('save');
       setSaveName('');
     }
   };
 
   const handleSaveConfirm = () => {
     if (saveName.trim()) {
-      saveWorkspace(saveName.trim());
-      setShowSavePrompt(false);
+      if (savePromptMode === 'saveAs') {
+        saveWorkspaceAs(saveName.trim());
+      } else {
+        saveWorkspace(saveName.trim());
+      }
+      setSavePromptMode(null);
     }
   };
 
@@ -156,7 +161,7 @@ export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
 
         {/* Save As */}
         <button
-          onClick={() => { setShowSavePrompt(true); setSaveName(''); }}
+          onClick={() => { setSavePromptMode('saveAs'); setSaveName(''); }}
           className="p-1 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
           title="Save as new workspace"
         >
@@ -232,10 +237,12 @@ export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
       />
 
       {/* Save Prompt Modal */}
-      {showSavePrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSavePrompt(false)}>
+      {savePromptMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSavePromptMode(null)}>
           <div className="bg-bg-secondary p-4 rounded-lg shadow-xl w-80" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-text-primary mb-3">Save Workspace</h3>
+            <h3 className="text-sm font-semibold text-text-primary mb-3">
+              {savePromptMode === 'saveAs' ? 'Save As New Workspace' : 'Save Workspace'}
+            </h3>
             <input
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
@@ -247,7 +254,7 @@ export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
             />
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => setShowSavePrompt(false)}
+                onClick={() => setSavePromptMode(null)}
                 className="px-3 py-1.5 text-xs rounded text-text-secondary hover:text-text-primary"
               >
                 Cancel
