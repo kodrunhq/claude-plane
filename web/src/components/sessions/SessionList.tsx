@@ -8,9 +8,12 @@ interface SessionListProps {
   onAttach: (id: string) => void;
   onTerminate: (id: string) => void;
   emptyMessage?: string;
+  selectable?: boolean;
+  selectedIds?: ReadonlySet<string>;
+  onSelect?: (id: string) => void;
 }
 
-export function SessionList({ sessions, onAttach, onTerminate, emptyMessage }: SessionListProps) {
+export function SessionList({ sessions, onAttach, onTerminate, emptyMessage, selectable, selectedIds, onSelect }: SessionListProps) {
   if (sessions.length === 0) {
     return (
       <EmptyState
@@ -29,6 +32,9 @@ export function SessionList({ sessions, onAttach, onTerminate, emptyMessage }: S
           session={session}
           onAttach={onAttach}
           onTerminate={onTerminate}
+          selectable={selectable}
+          selected={selectedIds?.has(session.session_id)}
+          onSelect={onSelect}
         />
       ))}
     </div>

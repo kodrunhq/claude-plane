@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { Group, Panel, Separator } from 'react-resizable-panels';
 import type { LayoutPreset, Pane } from '../../types/multiview';
 
 interface PanelLayoutProps {
@@ -11,29 +11,29 @@ interface PanelLayoutProps {
 
 function ResizeHandle() {
   return (
-    <PanelResizeHandle className="w-1 hover:w-1.5 bg-border-primary hover:bg-accent-primary transition-all duration-150" />
+    <Separator className="w-1 hover:w-1.5 bg-border-primary hover:bg-accent-primary transition-all duration-150" />
   );
 }
 
 function VerticalResizeHandle() {
   return (
-    <PanelResizeHandle className="h-1 hover:h-1.5 bg-border-primary hover:bg-accent-primary transition-all duration-150" />
+    <Separator className="h-1 hover:h-1.5 bg-border-primary hover:bg-accent-primary transition-all duration-150" />
   );
 }
 
 function HorizontalRow({
   panes,
   renderPane,
-  autoSaveId,
+  groupId,
   minSize,
 }: {
   readonly panes: readonly Pane[];
   readonly renderPane: (pane: Pane) => ReactNode;
-  readonly autoSaveId: string;
+  readonly groupId: string;
   readonly minSize?: number;
 }) {
   return (
-    <PanelGroup direction="horizontal" autoSaveId={autoSaveId}>
+    <Group orientation="horizontal" id={groupId}>
       {panes.map((pane, i) => (
         <Fragment key={pane.id}>
           {i > 0 && <ResizeHandle />}
@@ -42,7 +42,7 @@ function HorizontalRow({
           </Panel>
         </Fragment>
       ))}
-    </PanelGroup>
+    </Group>
   );
 }
 
@@ -53,90 +53,90 @@ export function PanelLayout({ preset, panes, renderPane, workspaceId }: PanelLay
     case '2-horizontal':
     case 'custom':
       return (
-        <PanelGroup direction="horizontal" autoSaveId={`${baseId}-h`}>
+        <Group orientation="horizontal" id={`${baseId}-h`}>
           <Panel minSize={15}>{renderPane(panes[0])}</Panel>
           <ResizeHandle />
           <Panel minSize={15}>{renderPane(panes[1])}</Panel>
-        </PanelGroup>
+        </Group>
       );
 
     case '2-vertical':
       return (
-        <PanelGroup direction="vertical" autoSaveId={`${baseId}-v`}>
+        <Group orientation="vertical" id={`${baseId}-v`}>
           <Panel minSize={15}>{renderPane(panes[0])}</Panel>
           <VerticalResizeHandle />
           <Panel minSize={15}>{renderPane(panes[1])}</Panel>
-        </PanelGroup>
+        </Group>
       );
 
     case '3-columns':
       return (
-        <HorizontalRow panes={panes.slice(0, 3)} renderPane={renderPane} autoSaveId={`${baseId}-h`} minSize={10} />
+        <HorizontalRow panes={panes.slice(0, 3)} renderPane={renderPane} groupId={`${baseId}-h`} minSize={10} />
       );
 
     case '3-main-side':
       return (
-        <PanelGroup direction="horizontal" autoSaveId={`${baseId}-h`}>
+        <Group orientation="horizontal" id={`${baseId}-h`}>
           <Panel defaultSize={66} minSize={30}>
             {renderPane(panes[0])}
           </Panel>
           <ResizeHandle />
           <Panel minSize={15}>
-            <PanelGroup direction="vertical" autoSaveId={`${baseId}-v-right`}>
+            <Group orientation="vertical" id={`${baseId}-v-right`}>
               <Panel minSize={20}>{renderPane(panes[1])}</Panel>
               <VerticalResizeHandle />
               <Panel minSize={20}>{renderPane(panes[2])}</Panel>
-            </PanelGroup>
+            </Group>
           </Panel>
-        </PanelGroup>
+        </Group>
       );
 
     case '4-grid':
       return (
-        <PanelGroup direction="vertical" autoSaveId={`${baseId}-v`}>
+        <Group orientation="vertical" id={`${baseId}-v`}>
           <Panel minSize={20}>
-            <HorizontalRow panes={panes.slice(0, 2)} renderPane={renderPane} autoSaveId={`${baseId}-h-top`} />
+            <HorizontalRow panes={panes.slice(0, 2)} renderPane={renderPane} groupId={`${baseId}-h-top`} />
           </Panel>
           <VerticalResizeHandle />
           <Panel minSize={20}>
-            <HorizontalRow panes={panes.slice(2, 4)} renderPane={renderPane} autoSaveId={`${baseId}-h-bot`} />
+            <HorizontalRow panes={panes.slice(2, 4)} renderPane={renderPane} groupId={`${baseId}-h-bot`} />
           </Panel>
-        </PanelGroup>
+        </Group>
       );
 
     case '5-grid':
       return (
-        <PanelGroup direction="vertical" autoSaveId={`${baseId}-v`}>
+        <Group orientation="vertical" id={`${baseId}-v`}>
           <Panel minSize={20}>
-            <HorizontalRow panes={panes.slice(0, 3)} renderPane={renderPane} autoSaveId={`${baseId}-h-top`} minSize={10} />
+            <HorizontalRow panes={panes.slice(0, 3)} renderPane={renderPane} groupId={`${baseId}-h-top`} minSize={10} />
           </Panel>
           <VerticalResizeHandle />
           <Panel minSize={20}>
-            <HorizontalRow panes={panes.slice(3, 5)} renderPane={renderPane} autoSaveId={`${baseId}-h-bot`} />
+            <HorizontalRow panes={panes.slice(3, 5)} renderPane={renderPane} groupId={`${baseId}-h-bot`} />
           </Panel>
-        </PanelGroup>
+        </Group>
       );
 
     case '6-grid':
       return (
-        <PanelGroup direction="vertical" autoSaveId={`${baseId}-v`}>
+        <Group orientation="vertical" id={`${baseId}-v`}>
           <Panel minSize={20}>
-            <HorizontalRow panes={panes.slice(0, 3)} renderPane={renderPane} autoSaveId={`${baseId}-h-top`} minSize={10} />
+            <HorizontalRow panes={panes.slice(0, 3)} renderPane={renderPane} groupId={`${baseId}-h-top`} minSize={10} />
           </Panel>
           <VerticalResizeHandle />
           <Panel minSize={20}>
-            <HorizontalRow panes={panes.slice(3, 6)} renderPane={renderPane} autoSaveId={`${baseId}-h-bot`} minSize={10} />
+            <HorizontalRow panes={panes.slice(3, 6)} renderPane={renderPane} groupId={`${baseId}-h-bot`} minSize={10} />
           </Panel>
-        </PanelGroup>
+        </Group>
       );
 
     default:
       return (
-        <PanelGroup direction="horizontal" autoSaveId={`${baseId}-h`}>
+        <Group orientation="horizontal" id={`${baseId}-h`}>
           <Panel minSize={15}>{renderPane(panes[0])}</Panel>
           <ResizeHandle />
           <Panel minSize={15}>{renderPane(panes[1])}</Panel>
-        </PanelGroup>
+        </Group>
       );
   }
 }
