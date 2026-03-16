@@ -50,13 +50,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   checkSession: async () => {
     try {
-      const res = await fetch('/api/v1/machines', {
+      const res = await fetch('/api/v1/auth/me', {
         credentials: 'same-origin',
       });
       if (res.ok) {
-        // Session cookie is valid — we don't have a /me endpoint,
-        // so we just mark the session as authenticated.
-        set({ user: null, authenticated: true, loading: false });
+        const data = await res.json() as { user_id: string; email: string; role: string };
+        set({
+          user: { userId: data.user_id, email: data.email, role: data.role },
+          authenticated: true,
+          loading: false,
+        });
       } else {
         set({ user: null, authenticated: false, loading: false });
       }
