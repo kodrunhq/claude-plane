@@ -80,7 +80,14 @@ export function useTerminalSession(
 
     ws.onopen = () => {
       setStatus('replaying');
+
+      // Always send the current terminal dimensions on connect. The initial
+      // fitAddon.fit() (on RAF) fires before the WS is open, so term.onResize
+      // drops the message (readyState !== OPEN). By the time ws.onopen fires,
+      // fit() is a no-op because xterm already has the correct size — but the
+      // server/agent never received it. Send it explicitly here.
       fitAddon.fit();
+      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
 
       // Safety timeout: if scrollback_end never arrives, transition to live
       scrollbackTimeout = window.setTimeout(() => {
@@ -97,10 +104,6 @@ export function useTerminalSession(
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
-            term.reset();
-            fitAddon.fit();
-            // DEBUG: show what xterm thinks vs what was sent to PTY
-            console.warn('[TERM DEBUG] xterm cols=%d rows=%d', term.cols, term.rows);
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
           }
@@ -129,7 +132,6 @@ export function useTerminalSession(
 
     // Resize -> server (JSON control message)
     const onResizeDisposable = term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      console.warn('[TERM DEBUG] onResize cols=%d rows=%d ws.readyState=%d', cols, rows, ws.readyState);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }

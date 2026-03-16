@@ -136,8 +136,6 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 		}
 	}
 
-	sm.logger.Info("creating session", "session_id", cmd.GetSessionId(), "cols", cols, "rows", rows, "command", command)
-
 	sess, err := NewSession(
 		cmd.GetSessionId(),
 		command,
@@ -295,7 +293,6 @@ func (sm *SessionManager) handleResize(cmd *pb.ResizeTerminalCmd) {
 		sm.logger.Warn("invalid resize dimensions", "session_id", cmd.GetSessionId(), "rows", r, "cols", c)
 		return
 	}
-	sm.logger.Info("resizing session", "session_id", cmd.GetSessionId(), "cols", c, "rows", r)
 	if err := sess.Resize(uint16(r), uint16(c)); err != nil {
 		sm.logger.Error("resize failed", "session_id", cmd.GetSessionId(), "error", err)
 	}
