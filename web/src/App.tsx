@@ -23,6 +23,7 @@ import { ConnectorDetailPage } from './views/ConnectorDetailPage.tsx'
 import { SearchPage } from './views/SearchPage.tsx'
 import { SettingsPage } from './views/SettingsPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
+import { MultiviewPage } from './components/multiview/MultiviewPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { InjectPanel } from './components/sessions/InjectPanel.tsx'
 import { useSession } from './hooks/useSessions.ts'
@@ -82,6 +83,8 @@ function App() {
             <Route path="/" element={<CommandCenter />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/sessions/:sessionId" element={<TerminalRoute />} />
+            <Route path="/multiview" element={<MultiviewPage />} />
+            <Route path="/multiview/:workspaceId" element={<MultiviewPage />} />
             <Route path="/machines" element={<MachinesPage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/new" element={<JobEditor />} />

@@ -11,6 +11,7 @@ export type { TerminalStatus };
 export function useTerminalSession(
   sessionId: string,
   containerRef: RefObject<HTMLDivElement | null>,
+  options?: { useWebGL?: boolean },
 ) {
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -26,6 +27,13 @@ export function useTerminalSession(
 
   useEffect(() => {
     if (!containerEl || !sessionId) return;
+
+    // Validate sessionId format before constructing WebSocket URL
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(sessionId)) {
+      setStatus('disconnected');
+      return;
+    }
 
     // 1. Create xterm.js instance
     const term = new Terminal({
@@ -43,10 +51,12 @@ export function useTerminalSession(
     term.loadAddon(fitAddon);
 
     // WebGL renderer with silent fallback to canvas/DOM
-    try {
-      term.loadAddon(new WebglAddon());
-    } catch {
-      // Falls back to canvas/DOM renderer silently
+    if (options?.useWebGL !== false) {
+      try {
+        term.loadAddon(new WebglAddon());
+      } catch {
+        // Falls back to canvas/DOM renderer silently
+      }
     }
 
     term.open(containerEl);
@@ -130,14 +140,19 @@ export function useTerminalSession(
       }
     });
 
-    // 5. Container resize -> fit terminal
+    // 5. Container resize -> fit terminal (debounced for multi-pane performance)
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new ResizeObserver(() => {
-      fitAddon.fit();
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        fitAddon.fit();
+      }, 50);
     });
     observer.observe(containerEl);
 
     // Cleanup
     return () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
       cancelAnimationFrame(initialFitFrame);
       clearTimeout(scrollbackTimeout);
       onDataDisposable.dispose();
@@ -154,7 +169,7 @@ export function useTerminalSession(
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, containerEl]);
+  }, [sessionId, containerEl, options?.useWebGL]);
 
   const fitTerminal = useCallback(() => {
     fitAddonRef.current?.fit();
