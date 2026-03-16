@@ -30,6 +30,13 @@ go.work.sum
 # Claude Code worktrees
 .claude/
 
+# Planning and internal docs (not shipped — kept locally for reference)
+.planning/
+.superpowers/
+docs/internal/
+docs/plans/
+docs/superpowers/
+
 # Editor/IDE
 # .idea/
 # .vscode/
