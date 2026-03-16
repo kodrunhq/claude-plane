@@ -112,6 +112,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 		// Protected routes (JWT + optional API key auth)
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware(h.authSvc, aka))
+			r.Get("/auth/me", h.Me)
 			r.Post("/auth/logout", h.Logout)
 			r.Get("/machines", h.ListMachines)
 			r.Get("/machines/{machineID}", h.GetMachine)
