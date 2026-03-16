@@ -81,12 +81,12 @@ Create `/etc/claude-plane/server.toml`:
 
 ```toml
 [http]
-listen = "0.0.0.0:8443"
+listen = "0.0.0.0:4200"
 tls_cert = "/etc/claude-plane/server-cert/server.pem"
 tls_key = "/etc/claude-plane/server-cert/server-key.pem"
 
 [grpc]
-listen = "0.0.0.0:9443"
+listen = "0.0.0.0:4201"
 
 [tls]
 ca_cert = "/etc/claude-plane/ca/ca.pem"
@@ -176,14 +176,14 @@ The server needs two ports open:
 
 | Port | Protocol | Purpose |
 |------|----------|---------|
-| 8443 | TCP | HTTPS — browser access (REST API + WebSocket) |
-| 9443 | TCP | gRPC — agent connections (mTLS) |
+| 4200 | TCP | HTTPS — browser access (REST API + WebSocket) |
+| 4201 | TCP | gRPC — agent connections (mTLS) |
 
 If using `ufw`:
 
 ```bash
-sudo ufw allow 8443/tcp
-sudo ufw allow 9443/tcp
+sudo ufw allow 4200/tcp
+sudo ufw allow 4201/tcp
 ```
 
 ## 9. Reverse Proxy (Optional)
@@ -201,7 +201,7 @@ server {
     ssl_certificate_key /path/to/private-key.pem;
 
     location / {
-        proxy_pass https://127.0.0.1:8443;
+        proxy_pass https://127.0.0.1:4200;
         proxy_ssl_verify off;  # Internal connection
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -212,14 +212,14 @@ server {
 }
 ```
 
-Note: The gRPC port (9443) should be exposed directly — agents connect via gRPC, not HTTP.
+Note: The gRPC port (4201) should be exposed directly — agents connect via gRPC, not HTTP.
 
 ## Verifying the Installation
 
 Once the serve loop is fully wired, verify the server is running:
 
 ```bash
-curl -k https://localhost:8443/api/v1/auth/login -X POST \
+curl -k https://localhost:4200/api/v1/auth/login -X POST \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"your-password"}'
 ```

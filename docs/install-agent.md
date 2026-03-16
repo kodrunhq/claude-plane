@@ -8,7 +8,7 @@ Deploy `claude-plane-agent` on worker machines where Claude CLI sessions will ru
 - Go 1.25+ (for building from source) or a pre-built binary
 - **Claude CLI** — installed and authenticated. The agent spawns Claude CLI processes in PTYs.
 - Agent certificate, key, and CA certificate from the server (see [Server Installation](install-server.md#3-set-up-tls))
-- Outbound TCP access to the server's gRPC port (default: 9443)
+- Outbound TCP access to the server's gRPC port (default: 4201)
 
 ## 1. Build the Binary
 
@@ -42,7 +42,7 @@ Create `/etc/claude-plane/agent.toml`:
 
 ```toml
 [server]
-address = "your-server-hostname.example.com:9443"
+address = "your-server-hostname.example.com:4201"
 
 [tls]
 ca_cert = "/etc/claude-plane/ca.pem"
@@ -145,7 +145,7 @@ To run multiple agents:
 ## Troubleshooting
 
 **Agent can't connect:**
-- Verify outbound access to the server's gRPC port: `nc -zv server-host 9443`
+- Verify outbound access to the server's gRPC port: `nc -zv server-host 4201`
 - Check that the CA certificate matches the one used to issue the server certificate
 - Verify the machine ID in the config matches the certificate CN
 

@@ -64,12 +64,12 @@ Create `server.toml`:
 
 ```toml
 [http]
-listen = "0.0.0.0:8443"
+listen = "0.0.0.0:4200"
 tls_cert = "server-cert/server.pem"
 tls_key = "server-cert/server-key.pem"
 
 [grpc]
-listen = "0.0.0.0:9443"
+listen = "0.0.0.0:4201"
 
 [tls]
 ca_cert = "ca/ca.pem"
@@ -91,7 +91,7 @@ Create `agent.toml`:
 
 ```toml
 [server]
-address = "localhost:9443"
+address = "localhost:4201"
 
 [tls]
 ca_cert = "ca/ca.pem"
@@ -132,7 +132,7 @@ In a separate terminal:
 
 ## Open the Dashboard
 
-Navigate to `https://localhost:8443` (step-by-step) or `http://127.0.0.1:8080` (quickstart) in your browser. Log in with the admin credentials from the setup.
+Navigate to `http://localhost:4200` in your browser. Log in with the admin credentials from the setup.
 
 You should see the agent machine listed on the **Machines** page. From here you can:
 

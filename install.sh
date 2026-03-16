@@ -169,10 +169,10 @@ run_quickstart() {
   info "Writing server config..."
   cat > "$config_file" <<TOML
 [http]
-address = "0.0.0.0:8080"
+address = "0.0.0.0:4200"
 
 [grpc]
-address = "0.0.0.0:9090"
+address = "0.0.0.0:4201"
 
 [tls]
 ca_cert     = "${ca_dir}/ca.pem"
@@ -217,8 +217,8 @@ TOML
   local ready=false
   for i in $(seq 1 30); do
     # Prefer explicit health endpoint, but fall back to root page if needed
-    if curl -sf http://localhost:8080/api/v1/health &>/dev/null ||
-       curl -sf http://localhost:8080/ &>/dev/null; then
+    if curl -sf http://localhost:4200/api/v1/health &>/dev/null ||
+       curl -sf http://localhost:4200/ &>/dev/null; then
       ready=true
       break
     fi
@@ -234,7 +234,7 @@ TOML
 
   echo ""
   ok "claude-plane is running!"
-  echo -e "  Dashboard: ${BOLD}http://localhost:8080${NC}"
+  echo -e "  Dashboard: ${BOLD}http://localhost:4200${NC}"
   echo -e "  Admin:     ${BOLD}${admin_email}${NC}"
   echo ""
   echo "Press Ctrl+C to stop."

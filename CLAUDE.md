@@ -99,7 +99,7 @@ Frontend: `tsc --noEmit` → `eslint` → `vitest --run` → `vite build`.
 cd web && npm install && npm run dev    # Vite dev server on port 3000
 ```
 
-Vite proxies `/api` and `/ws` to `https://localhost:8443` (self-signed cert, `secure: false`). The `/ws` proxy enables WebSocket passthrough. Production builds output to `internal/server/frontend/dist/` for `go:embed`.
+Vite proxies `/api` and `/ws` to `https://localhost:4200` (self-signed cert, `secure: false`). The `/ws` proxy enables WebSocket passthrough. Production builds output to `internal/server/frontend/dist/` for `go:embed`.
 
 ## Proto Generation
 

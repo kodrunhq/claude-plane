@@ -21,7 +21,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
   JWT_SECRET=$(head -c 32 /dev/urandom | base64)
 
-  printf '[http]\nlisten = "0.0.0.0:8080"\n\n[grpc]\nlisten = "0.0.0.0:9090"\n\n[tls]\nca_cert = "%s/ca.pem"\nserver_cert = "%s/server.pem"\nserver_key = "%s/server-key.pem"\n\n[database]\npath = "%s"\n\n[auth]\njwt_secret = "%s"\nregistration_mode = "closed"\n' \
+  printf '[http]\nlisten = "0.0.0.0:4200"\n\n[grpc]\nlisten = "0.0.0.0:4201"\n\n[tls]\nca_cert = "%s/ca.pem"\nserver_cert = "%s/server.pem"\nserver_key = "%s/server-key.pem"\n\n[database]\npath = "%s"\n\n[auth]\njwt_secret = "%s"\nregistration_mode = "closed"\n' \
     "$CA_DIR" "$CERT_DIR" "$CERT_DIR" "$DB_FILE" "$JWT_SECRET" \
     > "$CONFIG_FILE"
 
@@ -37,7 +37,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
   echo "==> Initialization complete."
   echo "    Admin email:    $ADMIN_EMAIL"
   echo "    Admin password: $ADMIN_PASSWORD"
-  echo "    Dashboard:      http://localhost:8080"
+  echo "    Dashboard:      http://localhost:4200"
   echo ""
 fi
 
