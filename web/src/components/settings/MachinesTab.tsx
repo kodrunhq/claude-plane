@@ -163,7 +163,7 @@ function MachineOverrideCard({
             <select
               value={override.model}
               onChange={(e) => onUpdate({ model: e.target.value })}
-              className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
+              className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
             >
               {MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -189,7 +189,7 @@ function MachineOverrideCard({
               onChange={(e) => onUpdate({ max_concurrent_sessions: Number(e.target.value) || 0 })}
               min={0}
               placeholder="0 (use machine default)"
-              className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+              className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
             />
             <p className="text-xs text-text-secondary mt-1">0 uses the machine default</p>
           </div>

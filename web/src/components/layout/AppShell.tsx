@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { TopBar } from './TopBar.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { StatusBar } from './StatusBar.tsx';
@@ -13,6 +13,11 @@ export function AppShell({ children }: AppShellProps) {
   const isMobile = useIsMobile();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+
+  // Auto-close mobile drawer when switching to desktop (e.g. device rotation).
+  useEffect(() => {
+    if (!isMobile) setSidebarOpen(false);
+  }, [isMobile, setSidebarOpen]);
 
   return (
     <div className="h-screen flex flex-col bg-bg-primary">

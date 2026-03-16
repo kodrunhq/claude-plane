@@ -183,7 +183,7 @@ export function MultiviewPage() {
           {panes.map((pane, i) => (
             <button
               key={pane.id}
-              onClick={() => setMobilePaneIndex(i)}
+              onClick={() => { setMobilePaneIndex(i); setFocusedPane(pane.id); }}
               className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                 i === safeIndex
                   ? 'text-text-primary border-b-2 border-accent-primary'

@@ -183,7 +183,7 @@ export function TelegramForm({ connector, onClose, onSaved }: TelegramFormProps)
           </div>
 
           {/* Topic IDs row */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm text-text-secondary mb-1">
                 Events topic ID <span className="text-status-error">*</span>
