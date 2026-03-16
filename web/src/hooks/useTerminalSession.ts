@@ -11,7 +11,7 @@ export type { TerminalStatus };
 export function useTerminalSession(
   sessionId: string,
   containerRef: RefObject<HTMLDivElement | null>,
-  options?: { useWebGL?: boolean },
+  options?: { useWebGL?: boolean; fontSize?: number },
 ) {
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -39,7 +39,7 @@ export function useTerminalSession(
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
-      fontSize: 14,
+      fontSize: options?.fontSize ?? 14,
       scrollback: 10000,
       theme: {
         background: '#1a1b26',
@@ -180,7 +180,7 @@ export function useTerminalSession(
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, containerEl, options?.useWebGL]);
+  }, [sessionId, containerEl, options?.useWebGL, options?.fontSize]);
 
   const fitTerminal = useCallback(() => {
     fitAddonRef.current?.fit();
