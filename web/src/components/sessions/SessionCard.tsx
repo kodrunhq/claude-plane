@@ -48,6 +48,11 @@ export function SessionCard({ session, onAttach, onTerminate, selectable, select
               Claude
             </span>
           )}
+          {session.model && (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium rounded bg-purple-500/10 text-purple-400">
+              {session.model}
+            </span>
+          )}
         </div>
         <span className="text-xs text-text-secondary font-mono opacity-60" title={session.session_id}>
           {session.session_id.slice(0, 8)}

@@ -76,13 +76,15 @@ func NewSessionHandler(s *store.Store, cm *connmgr.ConnectionManager, r *Registr
 
 // createSessionRequest is the JSON body for POST /api/v1/sessions.
 type createSessionRequest struct {
-	MachineID     string            `json:"machine_id"`
-	Command       string            `json:"command"`
-	Args          []string          `json:"args"`
-	WorkingDir    string            `json:"working_dir"`
-	TerminalSize  *terminalSize     `json:"terminal_size"`
-	EnvVars       map[string]string `json:"env_vars"`
-	InitialPrompt string            `json:"initial_prompt"`
+	MachineID       string            `json:"machine_id"`
+	Command         string            `json:"command"`
+	Args            []string          `json:"args"`
+	WorkingDir      string            `json:"working_dir"`
+	TerminalSize    *terminalSize     `json:"terminal_size"`
+	EnvVars         map[string]string `json:"env_vars"`
+	InitialPrompt   string            `json:"initial_prompt"`
+	Model           string            `json:"model"`
+	SkipPermissions string            `json:"skip_permissions"`
 	// Template fields
 	TemplateID   string            `json:"template_id"`
 	TemplateName string            `json:"template_name"`
@@ -199,13 +201,18 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	// Persist to store
 	sess := &store.Session{
-		SessionID:  sessionID,
-		MachineID:  req.MachineID,
-		UserID:     userID,
-		TemplateID: templateID,
-		Command:    req.Command,
-		WorkingDir: req.WorkingDir,
-		Status:     store.StatusCreated,
+		SessionID:     sessionID,
+		MachineID:     req.MachineID,
+		UserID:        userID,
+		TemplateID:    templateID,
+		Command:       req.Command,
+		WorkingDir:    req.WorkingDir,
+		Status:        store.StatusCreated,
+		Model:         req.Model,
+		SkipPerms:     req.SkipPermissions,
+		EnvVars:       marshalJSON(req.EnvVars),
+		Args:          marshalJSON(req.Args),
+		InitialPrompt: req.InitialPrompt,
 	}
 	if err := h.store.CreateSession(sess); err != nil {
 		h.logger.Error("failed to create session", "error", err)
@@ -514,4 +521,17 @@ func (h *SessionHandler) authorizeSession(r *http.Request, sess *store.Session) 
 		return false
 	}
 	return claims.Role == "admin" || claims.UserID == sess.UserID
+}
+
+// marshalJSON serializes a value to a JSON string. Returns an empty string
+// if the value is nil or serialization fails.
+func marshalJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

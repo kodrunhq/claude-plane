@@ -12,6 +12,12 @@ export interface Session {
   status: 'created' | 'running' | 'completed' | 'failed' | 'terminated';
   created_at: string;
   updated_at: string;
+  template_id?: string;
+  model?: string;
+  skip_permissions?: string;
+  env_vars?: string;
+  args?: string;
+  initial_prompt?: string;
 }
 
 export interface CreateSessionRequest {

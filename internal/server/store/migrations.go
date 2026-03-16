@@ -492,6 +492,13 @@ ALTER TABLE provisioning_tokens ADD COLUMN short_code TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_tokens_short_code ON provisioning_tokens(short_code);
 `,
 	},
+	{
+		Version:     14,
+		Description: "session metadata columns for model, skip_permissions, env_vars",
+		SQL: `ALTER TABLE sessions ADD COLUMN model TEXT DEFAULT '';
+ALTER TABLE sessions ADD COLUMN skip_permissions TEXT DEFAULT '';
+ALTER TABLE sessions ADD COLUMN env_vars TEXT DEFAULT '';`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
