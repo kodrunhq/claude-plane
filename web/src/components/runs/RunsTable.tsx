@@ -26,6 +26,7 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
   const badgeSize = compact ? 'sm' as const : 'md' as const;
 
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-sm">
       <thead>
         <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
@@ -80,5 +81,6 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

@@ -1,14 +1,26 @@
 import { Menu } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
+import { useIsMobile } from '../../hooks/useMediaQuery.ts';
 
 export function TopBar() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
+  const isMobile = useIsMobile();
+
+  function handleMenuClick() {
+    if (isMobile) {
+      setSidebarOpen(!sidebarOpen);
+    } else {
+      toggleSidebar();
+    }
+  }
 
   return (
     <header className="flex items-center justify-between h-12 px-4 bg-bg-secondary border-b border-border-primary shrink-0">
       <button
-        onClick={toggleSidebar}
-        className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+        onClick={handleMenuClick}
+        className="p-2 md:p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
         aria-label="Toggle sidebar"
       >
         <Menu size={20} />

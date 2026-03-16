@@ -72,16 +72,23 @@ const navSections: NavSection[] = [
   },
 ];
 
+interface NavItemLinkProps extends NavItem {
+  collapsed: boolean;
+  onClick?: () => void;
+}
+
 function NavItemLink({
   to,
   label,
   icon: Icon,
   collapsed,
-}: NavItem & { collapsed: boolean }) {
+  onClick,
+}: NavItemLinkProps) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
+      onClick={onClick}
       className={({ isActive }) =>
         `group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
           isActive
@@ -103,7 +110,12 @@ function NavItemLink({
   );
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  /** Called after a nav link is clicked — used by mobile drawer to auto-close. */
+  onNavigate?: () => void;
+}
+
+export function Sidebar({ onNavigate }: SidebarProps) {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
@@ -112,10 +124,10 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200"
-      style={{ width: collapsed ? 64 : 240 }}
+      className="flex flex-col bg-bg-secondary border-r border-border-primary transition-all duration-200 h-full"
+      style={{ width: collapsed && !onNavigate ? 64 : 240 }}
     >
-      <nav className="flex-1 flex flex-col p-2 mt-2 gap-5">
+      <nav className="flex-1 flex flex-col p-2 mt-2 gap-5 overflow-y-auto">
         {navSections.map((section) => {
           if (section.adminOnly && !isAdmin) {
             return null;
@@ -123,13 +135,13 @@ export function Sidebar() {
 
           return (
             <div key={section.title} className="flex flex-col gap-0.5">
-              {!collapsed && (
+              {(!collapsed || onNavigate) && (
                 <span className="px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-text-secondary/60 select-none">
                   {section.title}
                 </span>
               )}
               {section.items.map((item) => (
-                <NavItemLink key={item.to} {...item} collapsed={collapsed} />
+                <NavItemLink key={item.to} {...item} collapsed={collapsed && !onNavigate} onClick={onNavigate} />
               ))}
             </div>
           );
@@ -137,14 +149,14 @@ export function Sidebar() {
       </nav>
 
       <div className="p-2 border-t border-border-primary space-y-0.5">
-        <NavItemLink to="/settings" label="Settings" icon={Settings} collapsed={collapsed} />
+        <NavItemLink to="/settings" label="Settings" icon={Settings} collapsed={collapsed && !onNavigate} onClick={onNavigate} />
         <button
           onClick={() => logout()}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-status-error hover:bg-status-error/10 w-full transition-all duration-200"
           aria-label="Sign out"
         >
           <LogOut size={18} className="shrink-0" />
-          {!collapsed && <span className="font-medium">Sign out</span>}
+          {(!collapsed || onNavigate) && <span className="font-medium">Sign out</span>}
         </button>
       </div>
     </aside>
