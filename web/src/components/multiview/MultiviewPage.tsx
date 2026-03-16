@@ -8,6 +8,9 @@ import { EmptyMultiview } from './EmptyMultiview';
 import { useMultiviewStore } from '../../stores/multiview';
 import type { Pane } from '../../types/multiview';
 
+/** WebGL contexts are limited per browser tab (~8-16). Stay conservative for multi-pane. */
+const WEBGL_PANE_LIMIT = 4;
+
 export function MultiviewPage() {
   const { workspaceId } = useParams<{ workspaceId?: string }>();
   const {
@@ -56,9 +59,13 @@ export function MultiviewPage() {
         return;
       }
 
-      // Escape — unfocus
+      // Escape — close picker first, then unfocus
       if (e.key === 'Escape') {
-        setFocusedPane(null);
+        if (pickerTarget) {
+          setPickerTarget(null);
+        } else {
+          setFocusedPane(null);
+        }
         return;
       }
 
@@ -83,7 +90,7 @@ export function MultiviewPage() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [activeWorkspace, focusedPaneId, setFocusedPane]);
+  }, [activeWorkspace, focusedPaneId, setFocusedPane, pickerTarget]);
 
   const handlePickerSelect = useCallback(
     (sessionId: string) => {
@@ -97,7 +104,7 @@ export function MultiviewPage() {
     [pickerTarget, addPane, swapSession],
   );
 
-  const useWebGL = (activeWorkspace?.panes.length ?? 0) <= 4;
+  const useWebGL = (activeWorkspace?.panes.length ?? 0) <= WEBGL_PANE_LIMIT;
 
   if (!activeWorkspace) {
     return (
@@ -136,7 +143,7 @@ export function MultiviewPage() {
     if (pane) {
       return (
         <div className="flex flex-col h-full">
-          <MultiviewToolbar />
+          <MultiviewToolbar onAddPane={() => setPickerTarget('__new__')} />
           <div className="flex-1 min-h-0 p-1">{renderPane(pane)}</div>
           {pickerTarget && (
             <SessionPicker

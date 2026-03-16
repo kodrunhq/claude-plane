@@ -71,7 +71,7 @@ export function SessionCard({ session, onAttach, onTerminate, selectable, select
         <TimeAgo date={session.updated_at} className="text-text-secondary" />
       </div>
 
-      {isActive && (
+      {isActive && !selectable && (
         <div className="flex gap-2 mt-3 pt-3 border-t border-border-primary">
           <button
             className="flex-1 px-3 py-1.5 text-xs rounded-md font-medium bg-accent-cyan/10 text-accent-cyan hover:bg-accent-cyan/20 transition-all hover:shadow-[0_0_12px_rgba(6,182,212,0.15)]"
