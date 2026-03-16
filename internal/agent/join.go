@@ -110,7 +110,7 @@ data_dir   = %q
 	)
 
 	configPath := filepath.Join(configDir, "agent.toml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o640); err != nil {
 		return fmt.Errorf("write agent.toml: %w", err)
 	}
 

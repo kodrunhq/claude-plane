@@ -13,7 +13,7 @@ const DEFAULT_PARAMS: CreateProvisionParams = {
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
@@ -45,8 +45,10 @@ function ExpiryCountdown({ expiresAt }: { expiresAt: string }) {
   // Re-render every second for countdown
   useEffect(() => {
     const interval = setInterval(() => {
-      if (new Date(expiresAt).getTime() - Date.now() <= 0) {
+      const diff = new Date(expiresAt).getTime() - Date.now();
+      if (diff <= 0) {
         clearInterval(interval);
+        return;
       }
       setTick((t) => t + 1);
     }, 1000);

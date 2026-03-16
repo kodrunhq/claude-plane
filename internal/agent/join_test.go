@@ -53,17 +53,17 @@ func TestJoin_Success(t *testing.T) {
 	assertFileContains(t, filepath.Join(configDir, "agent.toml"), "worker-01")
 	assertFileContains(t, filepath.Join(configDir, "agent.toml"), "10.0.1.50:9090")
 
-	// Verify file permissions (all should be 0600).
-	permChecks := []struct {
+	// Verify file permissions: certificates are 0600 (private key material),
+	// agent.toml is 0640 (config file, no secrets).
+	certPermChecks := []struct {
 		path string
 		name string
 	}{
 		{filepath.Join(configDir, "certs", "ca.pem"), "ca.pem"},
 		{filepath.Join(configDir, "certs", "agent.pem"), "agent.pem"},
 		{filepath.Join(configDir, "certs", "agent-key.pem"), "agent-key.pem"},
-		{filepath.Join(configDir, "agent.toml"), "agent.toml"},
 	}
-	for _, pc := range permChecks {
+	for _, pc := range certPermChecks {
 		info, err := os.Stat(pc.path)
 		if err != nil {
 			t.Fatalf("stat %s: %v", pc.name, err)
@@ -71,6 +71,13 @@ func TestJoin_Success(t *testing.T) {
 		if info.Mode().Perm() != 0o600 {
 			t.Errorf("%s mode = %o, want 600", pc.name, info.Mode().Perm())
 		}
+	}
+	tomlInfo, err := os.Stat(filepath.Join(configDir, "agent.toml"))
+	if err != nil {
+		t.Fatalf("stat agent.toml: %v", err)
+	}
+	if tomlInfo.Mode().Perm() != 0o640 {
+		t.Errorf("agent.toml mode = %o, want 640", tomlInfo.Mode().Perm())
 	}
 }
 
