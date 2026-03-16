@@ -1,11 +1,21 @@
-# claude-plane
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="claude-plane" width="900">
+</p>
 
-[![CI](https://github.com/kodrunhq/claude-plane/actions/workflows/ci.yml/badge.svg)](https://github.com/kodrunhq/claude-plane/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/kodrunhq/claude-plane/actions/workflows/ci.yml"><img src="https://github.com/kodrunhq/claude-plane/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go"></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React"></a>
+  <a href="https://hub.docker.com/r/jurel89/claude-plane"><img src="https://img.shields.io/docker/v/jurel89/claude-plane?sort=semver&label=Docker%20Hub&logo=docker&logoColor=white" alt="Docker Hub"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+</p>
 
-A self-hosted control plane for managing interactive [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) sessions across distributed machines. Run Claude on any number of worker machines and manage them all from a single web interface.
+<p align="center">
+  A self-hosted control plane for managing interactive <a href="https://docs.anthropic.com/en/docs/claude-code">Claude CLI</a> sessions across distributed machines.<br>
+  Run Claude on any number of workers and manage them all from a single web interface.
+</p>
+
+---
 
 ## Features
 
@@ -13,7 +23,7 @@ A self-hosted control plane for managing interactive [Claude CLI](https://docs.a
 - **Multi-View** — View and interact with 2-6 terminal sessions simultaneously in configurable, resizable split-pane layouts with saved workspaces
 - **Persistent sessions** — CLI sessions survive browser disconnects; reconnect and pick up where you left off with full scrollback replay
 - **Job system** — Define multi-step jobs as DAGs, trigger runs, and let Claude work across machines with dependency-aware orchestration
-- **Real-time terminal** — Full terminal emulation in the browser via xterm.js with live WebSocket streaming
+- **Real-time terminal** — Full terminal emulation via xterm.js with live WebSocket streaming
 - **External integrations** — Bridge component connects GitHub, Telegram, and Slack to trigger jobs and relay notifications
 - **Zero-config networking** — Agents dial in to the server, so workers can be behind NATs and firewalls
 - **Single binary per role** — No runtime dependencies. `scp` the binary, add a config file, and run
@@ -24,6 +34,14 @@ A self-hosted control plane for managing interactive [Claude CLI](https://docs.a
 <p align="center">
   <img src="docs/assets/architecture.svg" alt="claude-plane architecture" width="800">
 </p>
+
+Three components, each a single Go binary:
+
+| Component | Role |
+|-----------|------|
+| **Server** | Control plane. Serves the React frontend, manages sessions, orchestrates jobs, accepts inbound gRPC connections from agents. SQLite storage. |
+| **Agent** | Runs on worker machines. Manages Claude CLI processes in PTYs, buffers terminal output, maintains persistent gRPC connection to the server. |
+| **Bridge** | Connects external services (GitHub, Telegram, Slack) to the server via its REST API. |
 
 ## Quickstart
 
@@ -39,6 +57,49 @@ The script prints your admin credentials and dashboard URL. Ctrl+C stops everyth
 
 See the [Quickstart Guide](docs/quickstart.md) for step-by-step setup and configuration options.
 
+## Installation
+
+### Docker (recommended)
+
+```bash
+docker pull jurel89/claude-plane:latest
+
+docker run -d \
+  -p 8443:8443 \
+  -v claude-plane-data:/data \
+  jurel89/claude-plane:latest
+```
+
+Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
+
+### Install script
+
+```bash
+# Server
+curl -fsSL https://raw.githubusercontent.com/kodrunhq/claude-plane/main/install.sh | bash
+
+# Agent (on worker machines)
+curl -fsSL https://raw.githubusercontent.com/kodrunhq/claude-plane/main/install.sh | bash -s -- agent
+```
+
+### Build from source
+
+**Prerequisites:** Go 1.25+, Node.js 22+
+
+```bash
+# Frontend (output embeds into server binary via go:embed)
+cd web && npm install && npm run build && cd ..
+
+# Backend binaries
+go build -o claude-plane-server ./cmd/server
+go build -o claude-plane-agent ./cmd/agent
+go build -o claude-plane-bridge ./cmd/bridge
+
+# Run tests
+go test -race ./...
+cd web && npm run test -- --run
+```
+
 ## Documentation
 
 | Guide | Description |
@@ -48,58 +109,6 @@ See the [Quickstart Guide](docs/quickstart.md) for step-by-step setup and config
 | [Agent Installation](docs/install-agent.md) | Worker machine agent setup |
 | [Configuration Reference](docs/configuration.md) | All config file options |
 | [Architecture](docs/architecture.md) | System design and data flows |
-
-## Build from Source
-
-**Prerequisites:** Go 1.25+, Node.js 22+
-
-```bash
-# Backend binaries
-go build -o claude-plane-server ./cmd/server
-go build -o claude-plane-agent ./cmd/agent
-
-# Frontend (output goes to internal/server/frontend/dist/ for embedding)
-cd web
-npm install
-npm run build
-cd ..
-
-# Run tests
-go test -race ./...
-cd web && npm run test -- --run
-```
-
-## Project Structure
-
-```
-cmd/server/              Server entrypoint (serve, CA tools, seed-admin)
-cmd/agent/               Agent entrypoint (run)
-cmd/bridge/              Bridge entrypoint (GitHub, Telegram, Slack connectors)
-internal/server/         Server business logic
-  api/                   REST handlers, middleware, router
-  auth/                  JWT authentication, token blocklist
-  config/                Server TOML config loading
-  connmgr/               Agent connection manager
-  event/                 Pub/sub event bus, webhook delivery
-  executor/              Job-to-session execution bridge
-  grpc/                  gRPC server for agent connections
-  handler/               REST handlers by domain
-  httputil/              Shared HTTP response helpers
-  orchestrator/          Job DAG execution engine
-  provision/             Agent provisioning tokens and install scripts
-  scheduler/             Cron-based job scheduling
-  session/               Session management, WebSocket handlers
-  store/                 SQLite data access layer
-  frontend/              Embedded frontend assets
-internal/agent/          Agent business logic
-  config/                Agent TOML config loading
-internal/bridge/         Bridge business logic
-  connector/             External service connectors
-internal/shared/         Shared code (proto, TLS utilities)
-proto/                   Protobuf definitions
-web/                     React frontend (Vite + TypeScript)
-docs/                    Project documentation
-```
 
 ## Contributing
 
