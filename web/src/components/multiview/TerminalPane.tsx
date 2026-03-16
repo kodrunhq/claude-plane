@@ -51,13 +51,16 @@ export function TerminalPane({
 
   const isStale = session && ['completed', 'failed', 'terminated'].includes(session.status);
 
+  // Use border (not ring) for the focus indicator because the inner content
+  // needs overflow-hidden for the terminal, and ring renders as box-shadow
+  // which gets clipped by overflow-hidden.
   const borderClass = isFocused
-    ? 'ring-2 ring-accent-primary shadow-[0_0_8px_rgba(99,102,241,0.3)]'
-    : 'ring-1 ring-border-primary';
+    ? 'border-2 border-accent-primary shadow-[0_0_8px_rgba(99,102,241,0.3)]'
+    : 'border border-border-primary';
 
   return (
     <div
-      className={`flex flex-col h-full rounded overflow-hidden ${borderClass} transition-shadow`}
+      className={`flex flex-col h-full rounded overflow-hidden ${borderClass} transition-all`}
       onClick={onFocus}
     >
       {session && (
