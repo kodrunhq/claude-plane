@@ -33,7 +33,7 @@ export function SessionList({ sessions, onAttach, onTerminate, emptyMessage, sel
           onAttach={onAttach}
           onTerminate={onTerminate}
           selectable={selectable}
-          selected={selectedIds?.has(session.session_id)}
+          selected={!!selectedIds?.has(session.session_id)}
           onSelect={onSelect}
         />
       ))}

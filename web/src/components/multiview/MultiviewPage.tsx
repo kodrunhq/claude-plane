@@ -76,12 +76,9 @@ export function MultiviewPage() {
         const currentIndex = panes.findIndex((p) => p.id === focusedPaneId);
         if (currentIndex < 0) return;
 
-        let nextIndex = currentIndex;
-        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-          nextIndex = Math.min(currentIndex + 1, panes.length - 1);
-        } else {
-          nextIndex = Math.max(currentIndex - 1, 0);
-        }
+        const nextIndex = (e.key === 'ArrowRight' || e.key === 'ArrowDown')
+          ? Math.min(currentIndex + 1, panes.length - 1)
+          : Math.max(currentIndex - 1, 0);
         if (nextIndex !== currentIndex) {
           setFocusedPane(panes[nextIndex].id);
         }
@@ -159,7 +156,7 @@ export function MultiviewPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <MultiviewToolbar />
+      <MultiviewToolbar onAddPane={() => setPickerTarget('__new__')} />
       <div className="flex-1 min-h-0 p-1">
         <PanelLayout
           preset={activeWorkspace.layout.preset}
