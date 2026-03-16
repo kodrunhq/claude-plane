@@ -2,9 +2,12 @@
 package config
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -163,8 +166,9 @@ type SecretsConfig struct {
 
 // ParseEncryptionKey resolves and decodes the 32-byte AES-256 encryption key.
 // Resolution order: EncryptionKeyFile > EncryptionKey > CLAUDE_PLANE_ENCRYPTION_KEY env var.
+// If no key is found from any source, auto-generates one and persists it to {dataDir}/encryption.key.
 // Returns an error if the resolved key is not a 64-character hex string (32 bytes).
-func (s *SecretsConfig) ParseEncryptionKey() ([]byte, error) {
+func (s *SecretsConfig) ParseEncryptionKey(dataDir string) ([]byte, error) {
 	raw := s.EncryptionKey
 
 	if s.EncryptionKeyFile != "" {
@@ -180,7 +184,11 @@ func (s *SecretsConfig) ParseEncryptionKey() ([]byte, error) {
 	}
 
 	if raw == "" {
-		return nil, fmt.Errorf("secrets.encryption_key not configured (set in config or CLAUDE_PLANE_ENCRYPTION_KEY env var)")
+		resolved, err := s.autoGenerateKey(dataDir)
+		if err != nil {
+			return nil, err
+		}
+		raw = resolved
 	}
 
 	key, err := hex.DecodeString(raw)
@@ -191,6 +199,44 @@ func (s *SecretsConfig) ParseEncryptionKey() ([]byte, error) {
 		return nil, fmt.Errorf("secrets.encryption_key must decode to exactly 32 bytes (64 hex chars), got %d bytes", len(key))
 	}
 	return key, nil
+}
+
+// autoGenerateKey loads or creates an encryption key at {dataDir}/encryption.key.
+func (s *SecretsConfig) autoGenerateKey(dataDir string) (string, error) {
+	keyPath := filepath.Join(dataDir, "encryption.key")
+
+	data, err := os.ReadFile(keyPath)
+	if err == nil {
+		raw := strings.TrimSpace(string(data))
+		if len(raw) != 64 {
+			return "", fmt.Errorf("existing encryption key file at %s has invalid content (expected 64 hex chars, got %d)", keyPath, len(raw))
+		}
+		if _, decErr := hex.DecodeString(raw); decErr != nil {
+			return "", fmt.Errorf("existing encryption key file at %s has invalid content: not valid hex", keyPath)
+		}
+		return raw, nil
+	}
+
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("read encryption key file %q: %w", keyPath, err)
+	}
+
+	// Generate new 32-byte key.
+	keyBytes := make([]byte, 32)
+	if _, err := rand.Read(keyBytes); err != nil {
+		return "", fmt.Errorf("generate encryption key: %w", err)
+	}
+	raw := hex.EncodeToString(keyBytes)
+
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return "", fmt.Errorf("create data directory %q: %w", dataDir, err)
+	}
+	if err := os.WriteFile(keyPath, []byte(raw+"\n"), 0600); err != nil {
+		return "", fmt.Errorf("write encryption key file %q: %w", keyPath, err)
+	}
+
+	slog.Info("generated encryption key", "path", keyPath)
+	return raw, nil
 }
 
 // GetRegistrationMode returns the configured registration mode, defaulting to "closed".
