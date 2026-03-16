@@ -26,7 +26,7 @@ export function RunsPage() {
   const { data: jobs } = useJobs();
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Runs</h1>

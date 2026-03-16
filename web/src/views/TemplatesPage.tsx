@@ -76,9 +76,9 @@ export function TemplatesPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Templates</h1>
         <Link
           to="/templates/new"
@@ -90,7 +90,7 @@ export function TemplatesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
           <input
@@ -127,15 +127,16 @@ export function TemplatesPage() {
           description={templates && templates.length > 0 ? 'Try adjusting your search or filters.' : 'Create a template to define reusable session configurations.'}
         />
       ) : (
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Command</th>
-              <th className="px-4 py-2">Args</th>
-              <th className="px-4 py-2">Working Dir</th>
-              <th className="px-4 py-2">Tags</th>
-              <th className="px-4 py-2">Updated</th>
+              <th className="px-4 py-2 hidden md:table-cell">Args</th>
+              <th className="px-4 py-2 hidden md:table-cell">Working Dir</th>
+              <th className="px-4 py-2 hidden md:table-cell">Tags</th>
+              <th className="px-4 py-2 hidden md:table-cell">Updated</th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
@@ -166,13 +167,13 @@ export function TemplatesPage() {
                 <td className="px-4 py-2 font-mono text-xs text-text-secondary">
                   {template.command || '—'}
                 </td>
-                <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={template.args?.join(' ') ?? ''}>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary hidden md:table-cell" title={template.args?.join(' ') ?? ''}>
                   {formatArgs(template.args)}
                 </td>
-                <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={template.working_dir ?? ''}>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary hidden md:table-cell" title={template.working_dir ?? ''}>
                   {formatWorkingDir(template.working_dir)}
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-4 py-2 hidden md:table-cell">
                   {template.tags && template.tags.length > 0 ? (
                     <div className="flex gap-1 flex-wrap">
                       {template.tags.slice(0, 3).map((tag) => (
@@ -191,7 +192,7 @@ export function TemplatesPage() {
                     <span className="text-xs text-text-secondary/40">—</span>
                   )}
                 </td>
-                <td className="px-4 py-2 text-text-secondary">
+                <td className="px-4 py-2 text-text-secondary hidden md:table-cell">
                   {formatTimeAgo(template.updated_at)}
                 </td>
                 <td className="px-4 py-2">
@@ -216,6 +217,7 @@ export function TemplatesPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <ConfirmDialog

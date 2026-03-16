@@ -36,7 +36,7 @@ export function TemplateEditor() {
 
   if (isEditing && templateLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <div className="animate-pulse space-y-4 max-w-2xl">
           <div className="h-6 bg-bg-tertiary rounded w-1/4" />
           <div className="h-10 bg-bg-tertiary rounded" />
@@ -49,14 +49,14 @@ export function TemplateEditor() {
 
   if (isEditing && !template && !templateLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <p className="text-text-secondary">Template not found.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       <button
         onClick={handleCancel}
         className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary mb-4 transition-colors"

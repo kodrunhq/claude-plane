@@ -29,9 +29,10 @@ export function StatusBar() {
         </span>
       </div>
 
-      <div className="flex items-center gap-4 opacity-90">
+      <div className="flex items-center gap-2 md:gap-4 opacity-90">
         <span>{machineCount} machine{machineCount !== 1 ? 's' : ''}</span>
-        <span>{sessionCount} active session{sessionCount !== 1 ? 's' : ''}</span>
+        <span className="hidden md:inline">{sessionCount} active session{sessionCount !== 1 ? 's' : ''}</span>
+        <span className="md:hidden">{sessionCount} active</span>
       </div>
     </footer>
   );

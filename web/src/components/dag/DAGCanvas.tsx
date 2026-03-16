@@ -14,14 +14,12 @@ import '@xyflow/react/dist/style.css';
 
 import { TaskNode } from './TaskNode.tsx';
 import { TaskEdge } from './TaskEdge.tsx';
+import { useIsMobile } from '../../hooks/useMediaQuery.ts';
 import type { TaskNodeData } from './TaskNode.tsx';
 import type { Task, TaskDependency, RunTask } from '../../types/job.ts';
 
 const nodeTypes = { step: TaskNode };
 const edgeTypes = { step: TaskEdge };
-
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 60;
 
 interface DAGCanvasProps {
   steps: Task[];
@@ -37,13 +35,17 @@ interface DAGCanvasProps {
 function getLayoutedElements(
   nodes: Node<TaskNodeData>[],
   edges: Edge[],
+  isMobile: boolean,
 ): { nodes: Node<TaskNodeData>[]; edges: Edge[] } {
+  const nodeWidth = isMobile ? 120 : 180;
+  const nodeHeight = isMobile ? 44 : 60;
+
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 });
+  g.setGraph({ rankdir: isMobile ? 'TB' : 'LR', nodesep: isMobile ? 30 : 50, ranksep: isMobile ? 60 : 100 });
 
   for (const node of nodes) {
-    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    g.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   }
   for (const edge of edges) {
     g.setEdge(edge.source, edge.target);
@@ -56,8 +58,8 @@ function getLayoutedElements(
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
-        y: nodeWithPosition.y - NODE_HEIGHT / 2,
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
       },
     };
   });
@@ -80,6 +82,7 @@ export function DAGCanvas({
   onConnect: onConnectProp,
   className = '',
 }: DAGCanvasProps) {
+  const isMobile = useIsMobile();
   const runStepMap = useMemo(() => buildRunTaskMap(runSteps), [runSteps]);
 
   const { initialNodes, initialEdges } = useMemo(() => {
@@ -112,9 +115,9 @@ export function DAGCanvas({
       };
     });
 
-    const layouted = getLayoutedElements(nodes, edges);
+    const layouted = getLayoutedElements(nodes, edges, isMobile);
     return { initialNodes: layouted.nodes, initialEdges: layouted.edges };
-  }, [steps, dependencies, runStepMap]);
+  }, [steps, dependencies, runStepMap, isMobile]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);

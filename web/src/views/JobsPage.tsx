@@ -82,7 +82,7 @@ export function JobsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <div className="bg-status-error/10 border border-status-error/30 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="text-status-error shrink-0" size={20} />
           <p className="text-sm text-text-primary flex-1">
@@ -101,8 +101,8 @@ export function JobsPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Jobs</h1>
         <button
           onClick={() => navigate('/jobs/new')}
@@ -114,7 +114,7 @@ export function JobsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
           <input
@@ -151,15 +151,16 @@ export function JobsPage() {
           description={jobs && jobs.length > 0 ? 'Try adjusting your search or filters.' : 'Create your first job to get started.'}
         />
       ) : (
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Tasks</th>
-              <th className="px-4 py-2">Machine</th>
-              <th className="px-4 py-2">Trigger</th>
-              <th className="px-4 py-2">Created</th>
+              <th className="px-4 py-2 hidden md:table-cell">Machine</th>
+              <th className="px-4 py-2 hidden md:table-cell">Trigger</th>
+              <th className="px-4 py-2 hidden md:table-cell">Created</th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
@@ -199,13 +200,13 @@ export function JobsPage() {
                 <td className="px-4 py-2 text-text-secondary">
                   {job.step_count ?? 0}
                 </td>
-                <td className="px-4 py-2 font-mono text-xs text-text-secondary" title={job.machine_ids ?? ''}>
+                <td className="px-4 py-2 font-mono text-xs text-text-secondary hidden md:table-cell" title={job.machine_ids ?? ''}>
                   {formatMachineIds(job.machine_ids)}
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-4 py-2 hidden md:table-cell">
                   <TriggerBadge type={job.trigger_type ?? 'manual'} />
                 </td>
-                <td className="px-4 py-2 text-text-secondary">
+                <td className="px-4 py-2 text-text-secondary hidden md:table-cell">
                   {formatTimeAgo(job.created_at)}
                 </td>
                 <td className="px-4 py-2">
@@ -222,6 +223,7 @@ export function JobsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

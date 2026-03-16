@@ -96,7 +96,7 @@ function TokenRow({ token, onRevokeRequest }: TokenRowProps) {
           <button
             onClick={() => onRevokeRequest(token)}
             disabled={!canRevoke}
-            className="p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             title={canRevoke ? 'Revoke token' : 'Cannot revoke — token is not active'}
           >
             <Trash2 size={15} />
@@ -125,7 +125,7 @@ export function TokensList({ tokens }: TokensListProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-border-primary">
+      <div className="overflow-x-auto rounded-lg border border-border-primary">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-bg-secondary">

@@ -263,7 +263,7 @@ export function JobEditor() {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
         <button
           onClick={() => navigate('/jobs')}
           className="text-text-secondary hover:text-text-primary transition-colors"
@@ -305,7 +305,7 @@ export function JobEditor() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-border-primary bg-bg-secondary px-4 shrink-0">
+      <div className="flex border-b border-border-primary bg-bg-secondary px-4 shrink-0 overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -343,9 +343,9 @@ export function JobEditor() {
 
         {/* Tasks tab — preserves the original DAG + TaskEditor layout */}
         {activeTab === 'tasks' && (
-          <div className="flex flex-1 min-h-0">
-            {/* DAG Canvas (left) */}
-            <div className="flex-1 min-w-0">
+          <div className="flex flex-col md:flex-row flex-1 min-h-0">
+            {/* DAG Canvas (left on desktop, top on mobile) */}
+            <div className="flex-1 min-w-0 min-h-[200px] md:min-h-0">
               {steps.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-text-secondary text-sm gap-2">
                   <p>No tasks yet. Click "Add Task" to begin.</p>
@@ -371,8 +371,8 @@ export function JobEditor() {
               )}
             </div>
 
-            {/* Task Editor sidebar (right) */}
-            <div className="w-80 border-l border-border-primary bg-bg-secondary shrink-0 flex flex-col">
+            {/* Task Editor sidebar (right on desktop, below on mobile) */}
+            <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-border-primary bg-bg-secondary shrink-0 flex flex-col max-h-[50vh] md:max-h-none overflow-y-auto">
               <TaskEditor
                 task={selectedTask}
                 machines={machines ?? []}

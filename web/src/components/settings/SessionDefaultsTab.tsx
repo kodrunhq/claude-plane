@@ -58,7 +58,7 @@ export function SessionDefaultsTab({ preferences, onSave, saving }: SessionDefau
           onChange={(e) => setSessionTimeout(e.target.value)}
           min={0}
           placeholder="No timeout"
-          className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         <p className="text-xs text-text-secondary mt-1">Leave empty for no timeout</p>
       </div>

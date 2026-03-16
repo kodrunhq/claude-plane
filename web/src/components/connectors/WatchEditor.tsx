@@ -131,7 +131,7 @@ export function WatchEditor({ watch, onChange, onRemove, index }: WatchEditorPro
         </div>
 
         {/* Machine ID + Poll Interval */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm text-text-secondary mb-1">Machine ID</label>
             <input

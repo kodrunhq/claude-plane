@@ -107,7 +107,7 @@ export function EventsTable({ events }: EventsTableProps) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border-primary">
+    <div className="overflow-x-auto rounded-lg border border-border-primary">
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-bg-secondary">
