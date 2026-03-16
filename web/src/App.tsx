@@ -25,8 +25,6 @@ import { SettingsPage } from './views/SettingsPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { MultiviewPage } from './components/multiview/MultiviewPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
-import { InjectPanel } from './components/sessions/InjectPanel.tsx'
-import { useSession } from './hooks/useSessions.ts'
 import { useAuthStore } from './stores/auth.ts'
 import { useThemeEffect } from './hooks/useThemeEffect.ts'
 import { useUIPrefs } from './hooks/useUIPrefs.ts'
@@ -48,13 +46,11 @@ function ThemeApplier() {
 
 function TerminalRoute() {
   const { sessionId } = useParams<{ sessionId: string }>()
-  const { data: session } = useSession(sessionId ?? '')
   const { terminal_font_size } = useUIPrefs()
   if (!sessionId) return null
   return (
     <div className="flex flex-col h-full">
       <TerminalView sessionId={sessionId} className="flex-1 min-h-0" fontSize={terminal_font_size} />
-      <InjectPanel sessionId={sessionId} sessionStatus={session?.status ?? ''} />
     </div>
   )
 }

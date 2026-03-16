@@ -26,7 +26,7 @@ const statusColors: Record<TerminalStatus, string> = {
 
 export function TerminalView({ sessionId, onStatusChange, className = '', useWebGL, fontSize }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { status, fitTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
+  const { status, fitTerminal, focusTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
 
   // Notify parent of status changes
   useEffect(() => {
@@ -43,6 +43,13 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
     ];
     return () => timers.forEach(clearTimeout);
   }, [fitTerminal]);
+
+  // Auto-focus terminal when it becomes live so keystrokes work immediately.
+  useEffect(() => {
+    if (status === 'live') {
+      focusTerminal();
+    }
+  }, [status, focusTerminal]);
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
@@ -63,11 +70,12 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
         <span className="text-text-secondary font-mono">{sessionId.slice(0, 8)}</span>
       </div>
 
-      {/* Terminal container */}
+      {/* Terminal container — click to focus xterm.js so keystrokes register */}
       <div
         ref={containerRef}
         className="flex-1 min-h-0"
         style={{ backgroundColor: '#1a1b26' }}
+        onClick={focusTerminal}
       />
     </div>
   );
