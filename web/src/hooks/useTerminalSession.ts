@@ -97,13 +97,24 @@ export function useTerminalSession(
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
-            // Reset the terminal to clear garbled scrollback. Full-screen TUI
-            // apps (Claude CLI) use absolute cursor positioning rendered at the
-            // PTY's size when it started, which differs from the browser's
-            // xterm.js size. reset() wipes the screen buffer completely.
-            // The fit() sends a resize → SIGWINCH, and the CLI redraws clean.
+            // Force a SIGWINCH on the PTY to make the CLI redraw its screen.
+            // The PTY was created at an estimated size that may match xterm.js,
+            // in which case fit() is a no-op (no resize sent, no SIGWINCH).
+            // To guarantee a redraw: resize to 1 col smaller, then back.
+            // This two-step resize always triggers SIGWINCH regardless of
+            // whether the initial PTY size matched.
             term.reset();
-            fitAddon.fit();
+            const currentCols = term.cols;
+            const currentRows = term.rows;
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'resize', cols: Math.max(1, currentCols - 1), rows: currentRows }));
+              // Restore correct size after a tick
+              setTimeout(() => {
+                fitAddon.fit();
+              }, 50);
+            } else {
+              fitAddon.fit();
+            }
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
           }
