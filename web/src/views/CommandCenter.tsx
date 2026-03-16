@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { TimeAgo } from '../components/shared/TimeAgo.tsx';
 import { toast } from 'sonner';
+import { useUIPrefs } from '../hooks/useUIPrefs.ts';
 import type { Job, Run } from '../types/job.ts';
 
 export function CommandCenter() {
@@ -25,6 +26,7 @@ export function CommandCenter() {
   const { data: templates } = useTemplates();
   const terminateSession = useTerminateSession();
 
+  const { command_center_cards: visibleCards } = useUIPrefs();
   const [modalOpen, setModalOpen] = useState(false);
   const [preselectedMachine, setPreselectedMachine] = useState<string | undefined>();
   const [terminateId, setTerminateId] = useState<string | null>(null);
@@ -160,7 +162,7 @@ export function CommandCenter() {
       {/* Machines & Active Sessions — side-by-side */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Machines */}
-        <section>
+        {visibleCards.includes('machines') && <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
               Machines
@@ -189,10 +191,10 @@ export function CommandCenter() {
               ))}
             </div>
           )}
-        </section>
+        </section>}
 
         {/* Active Sessions */}
-        <section>
+        {visibleCards.includes('sessions') && <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
               Active Sessions
@@ -214,11 +216,11 @@ export function CommandCenter() {
               emptyMessage="No active sessions. Create one to get started."
             />
           )}
-        </section>
+        </section>}
       </div>
 
       {/* Recent Jobs — full width */}
-      <section>
+      {visibleCards.includes('jobs') && <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
             Recent Jobs
@@ -249,10 +251,10 @@ export function CommandCenter() {
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* Recent Runs — full width */}
-      <section>
+      {visibleCards.includes('runs') && <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
             Recent Runs
@@ -277,10 +279,10 @@ export function CommandCenter() {
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
-      {/* Templates — bottom, conditional */}
-      {(templates ?? []).length > 0 && (
+      {/* Templates — bottom, conditional on preference and data */}
+      {visibleCards.includes('templates') && (templates ?? []).length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">

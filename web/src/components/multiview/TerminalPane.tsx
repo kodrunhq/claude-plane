@@ -5,6 +5,7 @@ import { PaneHeader } from './PaneHeader';
 import { PaneEmptyState } from './PaneEmptyState';
 import { useSession } from '../../hooks/useSessions';
 import { useMachines } from '../../hooks/useMachines';
+import { useUIPrefs } from '../../hooks/useUIPrefs';
 import type { Pane } from '../../types/multiview';
 
 interface TerminalPaneProps {
@@ -38,6 +39,7 @@ export function TerminalPane({
   const hasSession = pane.sessionId !== '';
   const { data: session } = useSession(hasSession ? pane.sessionId : '');
   const { data: machines } = useMachines();
+  const { terminal_font_size } = useUIPrefs();
 
   const machineName = useMemo(() => {
     if (!session || !machines) return '...';
@@ -86,6 +88,7 @@ export function TerminalPane({
               sessionId={pane.sessionId}
               className="h-full opacity-50"
               useWebGL={useWebGL}
+              fontSize={terminal_font_size}
             />
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="text-center">
@@ -107,6 +110,7 @@ export function TerminalPane({
             sessionId={pane.sessionId}
             className="h-full"
             useWebGL={useWebGL}
+            fontSize={terminal_font_size}
           />
         )}
       </div>

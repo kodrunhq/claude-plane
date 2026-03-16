@@ -7,6 +7,7 @@ interface TerminalViewProps {
   onStatusChange?: (status: TerminalStatus) => void;
   className?: string;
   useWebGL?: boolean;
+  fontSize?: number;
 }
 
 const statusLabels: Record<TerminalStatus, string> = {
@@ -23,9 +24,9 @@ const statusColors: Record<TerminalStatus, string> = {
   disconnected: 'text-red-400',
 };
 
-export function TerminalView({ sessionId, onStatusChange, className = '', useWebGL }: TerminalViewProps) {
+export function TerminalView({ sessionId, onStatusChange, className = '', useWebGL, fontSize }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { status, fitTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL });
+  const { status, fitTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
 
   // Notify parent of status changes
   useEffect(() => {
