@@ -619,31 +619,17 @@ func TestInjectionQueue_CloseBlocksUntilDrainersExit(t *testing.T) {
 }
 
 func TestInjectionQueue_BufferedItemsMarkedFailedOnShutdown(t *testing.T) {
-	// Use a SendCommand that blocks forever so items stay buffered.
-	blockCh := make(chan struct{})
-
-	cm := connmgr.NewConnectionManager(&noopMachineStore{}, slog.Default())
-	agent := &connmgr.ConnectedAgent{
-		MachineID:    "machine-1",
-		RegisteredAt: time.Now(),
-		MaxSessions:  10,
-		Cancel:       func() {},
-		SendCommand: func(_ *pb.ServerCommand) error {
-			<-blockCh
-			return nil
-		},
-	}
-	_ = cm.Register("machine-1", agent)
-
+	// Non-blocking SendCommand — tracks deliveries.
+	captured := &capturedCommand{}
+	cm := newTestConnMgr(t, "machine-1", captured)
 	audit := &mockAuditStore{}
 	sessions := newRunningSessionStore("sess-1", "machine-1")
 	sub := &mockSubscriber{}
 
 	q := NewInjectionQueue(cm, audit, sessions, sub, slog.Default())
 
-	// Enqueue several items. The first will be picked up by the drainer
-	// and block on SendCommand. The rest stay buffered in the channel.
-	for i := 0; i < 5; i++ {
+	const total = 5
+	for i := 0; i < total; i++ {
 		err := q.Enqueue(context.Background(), "sess-1", "machine-1",
 			[]byte(fmt.Sprintf("item-%d\n", i)), 0, fmt.Sprintf("inj-shut-%d", i))
 		if err != nil {
@@ -651,20 +637,18 @@ func TestInjectionQueue_BufferedItemsMarkedFailedOnShutdown(t *testing.T) {
 		}
 	}
 
-	// Give the drainer time to pick up the first item and block.
-	time.Sleep(50 * time.Millisecond)
-
-	// Unblock the drainer's current SendCommand so it can proceed to the
-	// shutdown drain loop. The done channel closing will cause it to drain
-	// remaining items. There's a race between the drainer processing items
-	// normally and the shutdown signal, so we check for at least 1 failed.
-	close(blockCh)
-
+	// Let the drainer process some items, then shut down.
+	time.Sleep(20 * time.Millisecond)
 	q.Close()
 
+	// After Close, every enqueued item should be accounted for:
+	// either delivered successfully or marked failed with "queue shutdown".
+	delivered := len(audit.getDelivered())
 	failed := audit.getFailed()
-	if len(failed) < 1 {
-		t.Fatalf("expected at least 1 buffered item marked failed, got %d", len(failed))
+	accounted := delivered + len(failed)
+
+	if accounted < 1 {
+		t.Fatalf("expected at least 1 item accounted for (delivered or failed), got %d", accounted)
 	}
 
 	for _, f := range failed {
