@@ -172,7 +172,7 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
                     {group.label}
                   </span>
                 </label>
-                <div className="grid grid-cols-2 gap-1 pl-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pl-5">
                   {group.events.map((event) => (
                     <label
                       key={event}

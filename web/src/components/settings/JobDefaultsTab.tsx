@@ -46,7 +46,7 @@ export function JobDefaultsTab({ preferences, onSave, saving }: JobDefaultsTabPr
           onChange={(e) => setStepTimeout(e.target.value)}
           min={0}
           placeholder="No timeout"
-          className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         <p className="text-xs text-text-secondary mt-1">Leave empty for no timeout</p>
       </div>
@@ -62,7 +62,7 @@ export function JobDefaultsTab({ preferences, onSave, saving }: JobDefaultsTabPr
           min={0}
           max={DEFAULT_STEP_DELAY_MAX_SECONDS}
           placeholder="0"
-          className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         <p className="text-xs text-text-secondary mt-1">
           Delay between steps (0-{DEFAULT_STEP_DELAY_MAX_SECONDS})

@@ -36,7 +36,7 @@ function CredentialRow({ credential, onDeleteRequest }: CredentialRowProps) {
         <div className="flex items-center gap-1 justify-end">
           <button
             onClick={() => onDeleteRequest(credential)}
-            className="p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors"
             title="Delete credential"
           >
             <Trash2 size={15} />
@@ -65,7 +65,7 @@ export function CredentialsList({ credentials }: CredentialsListProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-border-primary">
+      <div className="overflow-x-auto rounded-lg border border-border-primary">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-bg-secondary">

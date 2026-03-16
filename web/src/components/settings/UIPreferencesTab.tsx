@@ -68,7 +68,7 @@ export function UIPreferencesTab({ preferences, onSave, saving }: UIPreferencesT
         <select
           value={theme}
           onChange={(e) => setTheme(e.target.value as UIPrefs['theme'])}
-          className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
         >
           {THEME_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -86,7 +86,7 @@ export function UIPreferencesTab({ preferences, onSave, saving }: UIPreferencesT
           onChange={(e) => setFontSize(e.target.value)}
           min={8}
           max={32}
-          className="w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
+          className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         <p className="text-xs text-text-secondary mt-1">8-32px</p>
       </div>

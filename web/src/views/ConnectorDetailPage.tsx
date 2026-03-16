@@ -191,7 +191,7 @@ export function ConnectorDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-48 bg-bg-secondary rounded" />
           <div className="h-32 bg-bg-secondary rounded-lg" />
@@ -202,14 +202,14 @@ export function ConnectorDetailPage() {
 
   if (!connector) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <p className="text-text-secondary">Connector not found.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
+    <div className="p-4 md:p-6 space-y-6 max-w-3xl">
       {/* Back link */}
       <button
         onClick={() => navigate('/connectors')}

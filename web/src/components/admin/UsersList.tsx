@@ -57,14 +57,14 @@ function UserRow({ user, onEdit, onDeleteRequest }: UserRowProps) {
         <div className="flex items-center gap-1 justify-end">
           <button
             onClick={() => onEdit(user)}
-            className="p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             title="Edit user"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => onDeleteRequest(user)}
-            className="p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors"
             title="Delete user"
           >
             <Trash2 size={15} />
@@ -93,7 +93,7 @@ export function UsersList({ users, onEdit }: UsersListProps) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-border-primary">
+      <div className="overflow-x-auto rounded-lg border border-border-primary">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-bg-secondary">
