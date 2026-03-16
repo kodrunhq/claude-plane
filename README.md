@@ -10,9 +10,11 @@ A self-hosted control plane for managing interactive [Claude CLI](https://docs.a
 ## Features
 
 - **Remote session management** — Create, monitor, and interact with Claude CLI sessions on any connected machine from your browser
+- **Multi-View** — View and interact with 2-6 terminal sessions simultaneously in configurable, resizable split-pane layouts with saved workspaces
 - **Persistent sessions** — CLI sessions survive browser disconnects; reconnect and pick up where you left off with full scrollback replay
 - **Job system** — Define multi-step jobs as DAGs, trigger runs, and let Claude work across machines with dependency-aware orchestration
 - **Real-time terminal** — Full terminal emulation in the browser via xterm.js with live WebSocket streaming
+- **External integrations** — Bridge component connects GitHub, Telegram, and Slack to trigger jobs and relay notifications
 - **Zero-config networking** — Agents dial in to the server, so workers can be behind NATs and firewalls
 - **Single binary per role** — No runtime dependencies. `scp` the binary, add a config file, and run
 - **mTLS security** — Agent-to-server communication secured with mutual TLS and a built-in CA
@@ -25,20 +27,17 @@ A self-hosted control plane for managing interactive [Claude CLI](https://docs.a
 
 ## Quickstart
 
-Get claude-plane running on a single machine:
+Get claude-plane running on a single machine (builds from source, generates certs, seeds admin, starts server + agent):
 
 ```bash
-# Build
-go build -o claude-plane-server ./cmd/server
-go build -o claude-plane-agent ./cmd/agent
-
-# Run (generates certs, configs, admin account, starts everything)
-./quickstart.sh
+git clone https://github.com/kodrunhq/claude-plane.git
+cd claude-plane
+./install.sh quickstart
 ```
 
-The script prints your admin credentials and opens the dashboard at `http://127.0.0.1:8080`. Ctrl+C stops everything.
+The script prints your admin credentials and dashboard URL. Ctrl+C stops everything.
 
-See the [Quickstart Guide](docs/quickstart.md) for manual setup and configuration options.
+See the [Quickstart Guide](docs/quickstart.md) for step-by-step setup and configuration options.
 
 ## Documentation
 
@@ -75,20 +74,27 @@ cd web && npm run test -- --run
 ```
 cmd/server/              Server entrypoint (serve, CA tools, seed-admin)
 cmd/agent/               Agent entrypoint (run)
+cmd/bridge/              Bridge entrypoint (GitHub, Telegram, Slack connectors)
 internal/server/         Server business logic
   api/                   REST handlers, middleware, router
   auth/                  JWT authentication, token blocklist
   config/                Server TOML config loading
   connmgr/               Agent connection manager
+  event/                 Pub/sub event bus, webhook delivery
+  executor/              Job-to-session execution bridge
   grpc/                  gRPC server for agent connections
-  handler/               Job and run REST handlers
+  handler/               REST handlers by domain
   httputil/              Shared HTTP response helpers
   orchestrator/          Job DAG execution engine
+  provision/             Agent provisioning tokens and install scripts
+  scheduler/             Cron-based job scheduling
   session/               Session management, WebSocket handlers
   store/                 SQLite data access layer
   frontend/              Embedded frontend assets
 internal/agent/          Agent business logic
   config/                Agent TOML config loading
+internal/bridge/         Bridge business logic
+  connector/             External service connectors
 internal/shared/         Shared code (proto, TLS utilities)
 proto/                   Protobuf definitions
 web/                     React frontend (Vite + TypeScript)
