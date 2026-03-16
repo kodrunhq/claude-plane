@@ -145,43 +145,7 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 	ch := reg.Subscribe(sessionID)
 	defer reg.Unsubscribe(sessionID, ch)
 
-	// Wait for the first resize message from the browser before attaching.
-	// The browser sends a resize immediately on WebSocket open (fitAddon.fit()),
-	// which tells us the actual terminal dimensions. We forward this to the agent
-	// BEFORE the attach command so that scrollback replay uses the correct size.
-	// Without this, scrollback recorded at a different size produces garbled output
-	// (Claude CLI uses full-width rules, cursor positioning, and a status bar that
-	// all depend on the correct column count).
-	resizeReceived := false
-	firstMsgCtx, firstMsgCancel := context.WithTimeout(ctx, 2*time.Second)
-	defer firstMsgCancel()
-	for !resizeReceived {
-		msgType, data, err := conn.Read(firstMsgCtx)
-		if err != nil {
-			// Timeout or disconnect — proceed with attach anyway (best effort)
-			logger.Debug("no resize before attach", "session_id", sessionID, "error", err)
-			break
-		}
-		if msgType == websocket.MessageText {
-			var ctrl wsControlMessage
-			if json.Unmarshal(data, &ctrl) == nil && ctrl.Type == "resize" {
-				if err := sendToAgent(cm, machineID, &pb.ServerCommand{
-					Command: &pb.ServerCommand_ResizeTerminal{
-						ResizeTerminal: &pb.ResizeTerminalCmd{
-							SessionId: sessionID,
-							Size:      &pb.TerminalSize{Cols: ctrl.Cols, Rows: ctrl.Rows},
-						},
-					},
-				}); err != nil {
-					logger.Warn("failed to send pre-attach resize", "error", err, "session_id", sessionID)
-				}
-				resizeReceived = true
-			}
-		}
-		// Binary messages before attach are dropped (shouldn't happen normally)
-	}
-
-	// Now attach: the agent knows the correct terminal size.
+	// Attach session on the agent: replays scrollback and enables live relay.
 	if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 		Command: &pb.ServerCommand_AttachSession{
 			AttachSession: &pb.AttachSessionCmd{
