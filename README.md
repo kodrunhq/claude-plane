@@ -73,24 +73,29 @@ docker run -d --name claude-plane \
 
 Dashboard at **http://localhost:4200**. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
 
-### Adding worker machines
+### Adding an agent (same or remote machine)
 
-Once the server is running, connect agents from any machine. The server serves the agent binary directly — no separate download needed:
+The server needs at least one agent to run Claude CLI sessions. You can run an agent on the same machine as the server or on any remote worker. The server serves the agent binary directly — no separate download needed.
+
+**1. Download the agent binary from your server:**
 
 ```bash
-# On the worker machine: download the agent from your server
 curl -o claude-plane-agent http://your-server:4200/dl/agent/linux-amd64
 chmod +x claude-plane-agent
 ```
 
-Then generate a provisioning code from the dashboard (Provisioning page) and join:
+Replace `your-server` with `localhost` if running on the same machine, or the server's IP/hostname for remote workers. Use `linux-arm64`, `darwin-amd64`, or `darwin-arm64` for other platforms.
+
+**2. Generate a provisioning code** from the dashboard: go to the **Provisioning** page and create a new token. You'll get a 6-character code.
+
+**3. Join and start the agent:**
 
 ```bash
 ./claude-plane-agent join ABC123 --server http://your-server:4200
 ./claude-plane-agent run --config ~/.claude-plane/agent.toml
 ```
 
-The `join` command downloads TLS certificates and writes the agent config automatically. The worker machine needs [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
+The `join` command downloads TLS certificates and writes the agent config automatically. The machine running the agent needs [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
 
 ### Build from source
 
