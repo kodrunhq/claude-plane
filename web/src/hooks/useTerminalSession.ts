@@ -186,5 +186,9 @@ export function useTerminalSession(
     fitAddonRef.current?.fit();
   }, []);
 
-  return { status, term: termRef, ws: wsRef, fitTerminal };
+  const focusTerminal = useCallback(() => {
+    termRef.current?.focus();
+  }, []);
+
+  return { status, term: termRef, ws: wsRef, fitTerminal, focusTerminal };
 }
