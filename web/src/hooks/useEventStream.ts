@@ -1,6 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRunStore } from '../stores/runs.ts';
+import {
+  SESSION_STARTED,
+  SESSION_EXITED,
+  SESSION_TERMINATED,
+  MACHINE_CONNECTED,
+  MACHINE_DISCONNECTED,
+  RUN_CREATED,
+  RUN_STARTED,
+  RUN_COMPLETED,
+  RUN_FAILED,
+  RUN_CANCELLED,
+  RUN_STEP_COMPLETED,
+  RUN_STEP_FAILED,
+  TEMPLATE_CREATED,
+  TEMPLATE_UPDATED,
+  TEMPLATE_DELETED,
+} from '../constants/eventTypes.ts';
 
 /** Wire format from WSFanout (internal/server/event/ws_fanout.go). */
 interface WsEventMsg {
@@ -49,23 +66,36 @@ export function useEventStream() {
           if (msg.type !== 'event') return;
 
           switch (msg.event_type) {
-            case 'session.started':
-            case 'session.exited':
-            case 'session.terminated':
+            case SESSION_STARTED:
+            case SESSION_EXITED:
+            case SESSION_TERMINATED:
               queryClient.invalidateQueries({ queryKey: ['sessions'] });
               break;
-            case 'machine.status':
-            case 'machine.health':
+            case MACHINE_CONNECTED:
+            case MACHINE_DISCONNECTED:
               queryClient.invalidateQueries({ queryKey: ['machines'] });
               break;
-            case 'run.step.status': {
-              const p = msg.payload as { runId?: string; stepId?: string; status?: string; sessionId?: string };
-              if (p.runId && p.stepId && p.status) {
-                useRunStore.getState().updateTaskStatus(p.runId, p.stepId, p.status, p.sessionId);
+            case RUN_CREATED:
+            case RUN_STARTED:
+            case RUN_COMPLETED:
+            case RUN_FAILED:
+            case RUN_CANCELLED:
+              queryClient.invalidateQueries({ queryKey: ['runs'] });
+              break;
+            case RUN_STEP_COMPLETED:
+            case RUN_STEP_FAILED: {
+              const p = msg.payload as { run_id?: string; step_id?: string; status?: string; session_id?: string };
+              if (p.run_id && p.step_id && p.status) {
+                useRunStore.getState().updateTaskStatus(p.run_id, p.step_id, p.status, p.session_id);
               }
               queryClient.invalidateQueries({ queryKey: ['runs'] });
               break;
             }
+            case TEMPLATE_CREATED:
+            case TEMPLATE_UPDATED:
+            case TEMPLATE_DELETED:
+              queryClient.invalidateQueries({ queryKey: ['templates'] });
+              break;
           }
         } catch {
           // Ignore unparseable messages
