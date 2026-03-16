@@ -3,7 +3,8 @@ set -euo pipefail
 
 echo ""
 echo -e "\033[0;33m==> WARNING:\033[0m quickstart.sh is deprecated and will be removed in a future release."
-echo -e "    Use instead:  curl -fsSL https://raw.githubusercontent.com/kodrunhq/claude-plane/main/install.sh | bash -s -- quickstart"
+echo -e "    Use instead (local):  ./install.sh quickstart"
+echo -e "           or (remote):  curl -fsSL https://raw.githubusercontent.com/kodrunhq/claude-plane/main/install.sh | bash -s -- quickstart"
 echo ""
 
 # claude-plane quickstart — single-machine setup in one command.

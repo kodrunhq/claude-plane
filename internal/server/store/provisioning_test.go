@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,10 +22,18 @@ func newTestStoreForProvisioning(t *testing.T) *Store {
 }
 
 // makeToken returns a ProvisioningToken with the given expiry offset from now.
+// A unique short_code is derived from tokenVal to avoid UNIQUE constraint violations
+// when multiple tokens are inserted in the same test.
 func makeToken(tokenVal, machineID string, expiresIn time.Duration) ProvisioningToken {
 	now := time.Now().UTC()
+	// Derive a deterministic 6-char short code from tokenVal so each test token
+	// gets a unique code without needing a real random generator.
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(tokenVal))
+	shortCode := fmt.Sprintf("%06X", h.Sum32()&0xFFFFFF)
 	return ProvisioningToken{
 		Token:         tokenVal,
+		ShortCode:     shortCode,
 		MachineID:     machineID,
 		TargetOS:      "linux",
 		TargetArch:    "amd64",
