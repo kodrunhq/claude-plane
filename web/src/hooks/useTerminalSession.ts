@@ -123,10 +123,14 @@ export function useTerminalSession(
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
-            // Re-fit after scrollback completes. This sends a fresh resize to the
-            // agent which triggers SIGWINCH on the PTY, causing full-screen TUI apps
-            // (like Claude CLI) to re-render at the correct terminal dimensions.
-            // Without this, scrollback replayed at the wrong size stays garbled.
+            // Clear the terminal buffer and re-fit. Scrollback was replayed at
+            // whatever size the PTY had when the data was generated (often the
+            // default 80x24 or a different browser width). Full-screen TUI apps
+            // like Claude CLI use cursor positioning and full-width rules that
+            // look garbled at the wrong size. Clearing wipes the stale output,
+            // and the fit sends a resize → SIGWINCH which makes the CLI redraw
+            // its entire screen cleanly at the correct dimensions.
+            term.clear();
             requestAnimationFrame(() => fitAddon.fit());
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
