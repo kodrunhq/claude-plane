@@ -94,7 +94,8 @@ func wsURL(srv *httptest.Server, sessionID string) string {
 	return strings.Replace(srv.URL, "http://", "ws://", 1) + "/ws/terminal/" + sessionID
 }
 
-// dialWithAuth connects to the WebSocket and performs first-message auth.
+// dialWithAuth connects to the WebSocket, performs first-message auth, and
+// sends an initial resize (the server waits for a resize before attaching).
 func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessionID string, recorder *commandRecorder, token string) *websocket.Conn {
 	t.Helper()
 	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID), nil)
@@ -105,6 +106,12 @@ func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessi
 	if err := conn.Write(ctx, websocket.MessageText, authMsg); err != nil {
 		conn.CloseNow()
 		t.Fatalf("write auth: %v", err)
+	}
+	// Send initial resize — the server waits for this before attaching.
+	resizeMsg, _ := json.Marshal(map[string]interface{}{"type": "resize", "cols": 80, "rows": 24})
+	if err := conn.Write(ctx, websocket.MessageText, resizeMsg); err != nil {
+		conn.CloseNow()
+		t.Fatalf("write resize: %v", err)
 	}
 	if recorder != nil {
 		waitForAttachCommand(t, ctx, recorder, sessionID)
@@ -396,8 +403,14 @@ func TestWebSocketFirstMessageAuth(t *testing.T) {
 			t.Fatalf("write auth: %v", err)
 		}
 
-		// Give server time to process auth and start relay
-		time.Sleep(100 * time.Millisecond)
+		// Send initial resize — the server waits for this before attaching.
+		resizeMsg, _ := json.Marshal(map[string]interface{}{"type": "resize", "cols": 80, "rows": 24})
+		if err := conn.Write(ctx, websocket.MessageText, resizeMsg); err != nil {
+			t.Fatalf("write resize: %v", err)
+		}
+
+		// Give server time to process auth, resize, and start relay
+		time.Sleep(200 * time.Millisecond)
 
 		// Publish data and verify we receive it (proves auth succeeded)
 		reg.Publish(sessionID, []byte("auth-ok"))
