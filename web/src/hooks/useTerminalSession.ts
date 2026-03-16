@@ -162,7 +162,7 @@ export function useTerminalSession(
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, containerEl]);
+  }, [sessionId, containerEl, options?.useWebGL]);
 
   const fitTerminal = useCallback(() => {
     fitAddonRef.current?.fit();

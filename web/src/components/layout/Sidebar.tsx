@@ -16,6 +16,7 @@ import {
   Key,
   Search,
   Settings,
+  LayoutGrid,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -38,6 +39,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/', label: 'Command Center', icon: LayoutDashboard },
       { to: '/sessions', label: 'Sessions', icon: Terminal },
+      { to: '/multiview', label: 'Multi-View', icon: LayoutGrid },
       { to: '/machines', label: 'Machines', icon: Server },
       { to: '/jobs', label: 'Jobs', icon: Workflow },
       { to: '/templates', label: 'Templates', icon: FileText },

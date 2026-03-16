@@ -7,18 +7,32 @@ interface SessionCardProps {
   session: Session;
   onAttach: (id: string) => void;
   onTerminate: (id: string) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
-export function SessionCard({ session, onAttach, onTerminate }: SessionCardProps) {
+export function SessionCard({ session, onAttach, onTerminate, selectable, selected, onSelect }: SessionCardProps) {
   const isActive = session.status === 'running' || session.status === 'created';
   const isTerminalSession = session.command !== '' && !session.command.startsWith('claude');
 
   return (
     <div
-      className="gradient-border-card p-4 cursor-pointer"
+      className="gradient-border-card p-4 cursor-pointer relative"
       style={{ '--glow-color': '#06b6d4' } as React.CSSProperties}
-      onClick={() => onAttach(session.session_id)}
+      onClick={() => selectable ? onSelect?.(session.session_id) : onAttach(session.session_id)}
     >
+      {selectable && (
+        <div className="absolute top-2 left-2 z-10">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onSelect?.(session.session_id)}
+            className="w-4 h-4 rounded border-border-primary accent-accent-primary cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <StatusBadge status={session.status} size="sm" />

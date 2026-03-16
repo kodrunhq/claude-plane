@@ -10,7 +10,7 @@ function Box({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
   return <rect x={x} y={y} width={w} height={h} rx={1} fill="currentColor" opacity={0.3} stroke="currentColor" strokeWidth={0.5} />;
 }
 
-const layouts: Record<LayoutPreset, (s: number) => JSX.Element> = {
+const layouts: Record<LayoutPreset, (s: number) => React.ReactNode> = {
   '2-horizontal': (s) => (
     <>
       <Box x={1} y={1} w={s / 2 - 2} h={s - 2} />

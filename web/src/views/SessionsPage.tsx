@@ -1,12 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, AlertCircle, LayoutGrid } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import { useMultiviewStore } from '../stores/multiview.ts';
 
 const STATUS_OPTIONS = ['all', 'running', 'created', 'completed', 'failed', 'terminated'] as const;
 
@@ -17,6 +18,9 @@ export function SessionsPage() {
   const [machineFilter, setMachineFilter] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [terminateId, setTerminateId] = useState<string | null>(null);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const createScratchWorkspace = useMultiviewStore((s) => s.createScratchWorkspace);
 
   const filters = useMemo(() => {
     const f: Record<string, string> = {};
@@ -37,6 +41,25 @@ export function SessionsPage() {
     setTerminateId(id);
   }
 
+  const handleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < 6) {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleOpenMultiView = useCallback(() => {
+    if (selectedIds.size >= 2) {
+      createScratchWorkspace([...selectedIds]);
+      navigate('/multiview');
+    }
+  }, [selectedIds, createScratchWorkspace, navigate]);
+
   async function confirmTerminate() {
     if (!terminateId) return;
     try {
@@ -53,13 +76,29 @@ export function SessionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Sessions</h1>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
-        >
-          <Plus size={16} />
-          New Session
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setMultiSelectMode(!multiSelectMode);
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-md transition-colors ${
+              multiSelectMode
+                ? 'bg-accent-primary text-white'
+                : 'bg-bg-secondary border border-border-primary text-text-primary hover:bg-bg-tertiary'
+            }`}
+          >
+            <LayoutGrid size={14} />
+            Multi-View
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+          >
+            <Plus size={16} />
+            New Session
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -131,10 +170,26 @@ export function SessionsPage() {
           sessions={sessions ?? []}
           onAttach={handleAttach}
           onTerminate={handleTerminate}
+          selectable={multiSelectMode}
+          selectedIds={selectedIds}
+          onSelect={handleSelect}
         />
       )}
 
       <NewSessionModal open={modalOpen} onClose={() => setModalOpen(false)} />
+
+      {multiSelectMode && selectedIds.size >= 2 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-bg-secondary border border-border-primary rounded-lg shadow-xl px-4 py-2.5 flex items-center gap-3 z-40">
+          <span className="text-sm text-text-secondary">{selectedIds.size} sessions selected</span>
+          <button
+            onClick={handleOpenMultiView}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-accent-primary text-white hover:bg-accent-primary/80 transition-colors"
+          >
+            <LayoutGrid size={14} />
+            Open in Multi-View
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={terminateId !== null}
