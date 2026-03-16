@@ -29,7 +29,11 @@ const MIN_PANES: Record<LayoutPreset, number> = {
   custom: 2,
 };
 
-export function MultiviewToolbar() {
+interface MultiviewToolbarProps {
+  readonly onAddPane?: () => void;
+}
+
+export function MultiviewToolbar({ onAddPane }: MultiviewToolbarProps) {
   const {
     activeWorkspace,
     workspaces,
@@ -38,7 +42,6 @@ export function MultiviewToolbar() {
     loadWorkspace,
     deleteWorkspace,
     renameWorkspace,
-    addPane,
   } = useMultiviewStore();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -203,10 +206,10 @@ export function MultiviewToolbar() {
 
       <div className="flex-1" />
 
-      {/* Add Pane */}
+      {/* Add Pane — opens session picker; pane is only added when a session is chosen */}
       {paneCount < 6 && (
         <button
-          onClick={() => addPane('')}
+          onClick={onAddPane}
           className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-bg-tertiary text-text-secondary hover:text-text-primary hover:bg-border-primary transition-colors"
         >
           <Plus size={12} />

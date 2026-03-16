@@ -46,8 +46,23 @@ function HorizontalRow({
   );
 }
 
+const MIN_PANES_FOR: Record<LayoutPreset, number> = {
+  '2-horizontal': 2, '2-vertical': 2,
+  '3-columns': 3, '3-main-side': 3,
+  '4-grid': 4, '5-grid': 5, '6-grid': 6,
+  custom: 2,
+};
+
 export function PanelLayout({ preset, panes, renderPane, workspaceId }: PanelLayoutProps) {
   const baseId = `multiview-${workspaceId}`;
+
+  if (panes.length < MIN_PANES_FOR[preset]) {
+    return (
+      <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+        Layout requires at least {MIN_PANES_FOR[preset]} panes
+      </div>
+    );
+  }
 
   switch (preset) {
     case '2-horizontal':
