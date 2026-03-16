@@ -142,7 +142,10 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 	}
 
 	curlCmd := fmt.Sprintf("curl -sfL %s/api/v1/provision/%s/script | sudo bash", svc.httpAddress, tokenID)
-	joinCmd := fmt.Sprintf("claude-plane-agent join %s --server %s", shortCode, svc.httpAddress)
+	joinCmd := fmt.Sprintf("./claude-plane-agent join %s --server %s", shortCode, svc.httpAddress)
+	if strings.HasPrefix(svc.httpAddress, "http://") {
+		joinCmd += " --insecure"
+	}
 
 	return &ProvisionResult{
 		Token:       tokenID,

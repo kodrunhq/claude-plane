@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Copy, Check, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { copyToClipboard } from '../../lib/clipboard.ts';
 import { useCreateProvisioningToken } from '../../hooks/useProvisioning.ts';
 import type { CreateProvisionParams, ProvisionResult } from '../../types/provisioning.ts';
 import { OS_OPTIONS, ARCH_OPTIONS } from '../../types/provisioning.ts';
@@ -19,7 +20,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyToClipboard(text);
       setCopied(true);
       toast.success('Copied to clipboard');
       timerRef.current = setTimeout(() => setCopied(false), 2000);
