@@ -5,8 +5,8 @@ import type { Pane } from '../../../types/multiview';
 
 // Mock react-resizable-panels to avoid DOM measurement issues in jsdom
 vi.mock('react-resizable-panels', () => ({
-  Group: ({ children, ...props }: Record<string, unknown>) => (
-    <div data-testid="panel-group" data-orientation={props.orientation as string}>{props.children ? undefined : null}{children}</div>
+  Group: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="panel-group">{children}</div>
   ),
   Panel: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="panel">{children}</div>
@@ -20,6 +20,10 @@ const makePanes = (count: number): Pane[] =>
     sessionId: `session-${i}`,
   }));
 
+function getPaneIds(renderPane: ReturnType<typeof vi.fn>): string[] {
+  return renderPane.mock.calls.map((call: unknown[]) => (call[0] as Pane).id);
+}
+
 describe('PanelLayout', () => {
   it('renders 2-horizontal with correct pane order', () => {
     const renderPane = vi.fn((pane: Pane) => <div data-testid={`content-${pane.id}`} />);
@@ -27,8 +31,7 @@ describe('PanelLayout', () => {
       <PanelLayout preset="2-horizontal" panes={makePanes(2)} renderPane={renderPane} workspaceId="ws-1" />,
     );
     expect(renderPane).toHaveBeenCalledTimes(2);
-    expect(renderPane.mock.calls[0][0].id).toBe('pane-0');
-    expect(renderPane.mock.calls[1][0].id).toBe('pane-1');
+    expect(getPaneIds(renderPane)).toEqual(['pane-0', 'pane-1']);
   });
 
   it('renders 4-grid with 4 panes in correct reading order', () => {
@@ -37,8 +40,7 @@ describe('PanelLayout', () => {
       <PanelLayout preset="4-grid" panes={makePanes(4)} renderPane={renderPane} workspaceId="ws-1" />,
     );
     expect(renderPane).toHaveBeenCalledTimes(4);
-    const ids = renderPane.mock.calls.map((c) => (c[0] as Pane).id);
-    expect(ids).toEqual(['pane-0', 'pane-1', 'pane-2', 'pane-3']);
+    expect(getPaneIds(renderPane)).toEqual(['pane-0', 'pane-1', 'pane-2', 'pane-3']);
   });
 
   it('renders 5-grid with 3 top + 2 bottom', () => {
@@ -47,10 +49,7 @@ describe('PanelLayout', () => {
       <PanelLayout preset="5-grid" panes={makePanes(5)} renderPane={renderPane} workspaceId="ws-1" />,
     );
     expect(renderPane).toHaveBeenCalledTimes(5);
-    expect(renderPane.mock.calls[0][0].id).toBe('pane-0');
-    expect(renderPane.mock.calls[2][0].id).toBe('pane-2');
-    expect(renderPane.mock.calls[3][0].id).toBe('pane-3');
-    expect(renderPane.mock.calls[4][0].id).toBe('pane-4');
+    expect(getPaneIds(renderPane)).toEqual(['pane-0', 'pane-1', 'pane-2', 'pane-3', 'pane-4']);
   });
 
   it('renders fallback message when pane count is less than preset requires', () => {
@@ -68,9 +67,7 @@ describe('PanelLayout', () => {
       <PanelLayout preset="3-main-side" panes={makePanes(3)} renderPane={renderPane} workspaceId="ws-1" />,
     );
     expect(renderPane).toHaveBeenCalledTimes(3);
-    expect(renderPane.mock.calls[0][0].id).toBe('pane-0');
-    expect(renderPane.mock.calls[1][0].id).toBe('pane-1');
-    expect(renderPane.mock.calls[2][0].id).toBe('pane-2');
+    expect(getPaneIds(renderPane)).toEqual(['pane-0', 'pane-1', 'pane-2']);
   });
 
   it('renders custom preset with all panes', () => {
