@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
@@ -69,6 +70,7 @@ type agentService struct {
 	agentConnMgr    *connmgr.ConnectionManager
 	registry        *session.Registry
 	sessionStore    SessionStore
+	eventPublisher  event.Publisher
 	runStepLookup   RunStepLookup
 	taskValueStore  TaskValueStore
 	stepIdleHandler StepIdleHandler
@@ -147,6 +149,13 @@ func (s *GRPCServer) SetStepIdleHandler(handler StepIdleHandler) {
 // SetCleanupStore sets the store used for dispatching pending cleanups on agent reconnect.
 func (s *GRPCServer) SetCleanupStore(cs cleanupStore) {
 	s.agentSvc.cleanupStore = cs
+}
+
+// SetEventPublisher sets the event bus publisher for broadcasting session lifecycle
+// events (terminated, exited). These events feed the /ws/events endpoint, which the
+// frontend uses to invalidate cached session lists.
+func (s *GRPCServer) SetEventPublisher(p event.Publisher) {
+	s.agentSvc.eventPublisher = p
 }
 
 // SetContentIngestor sets the content ingestor for search indexing.
@@ -391,13 +400,28 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					controlMsg := []byte(`{"type":"session_ended","status":"` + newStatus + `"}`)
 					s.registry.PublishControl(ss.GetSessionId(), controlMsg)
 				}
+				// Publish to event bus so /ws/events subscribers (sessions list) get invalidated.
+				if s.eventPublisher != nil {
+					var evType string
+					switch newStatus {
+					case status.Terminated:
+						evType = event.TypeSessionTerminated
+					case status.Failed, status.Completed:
+						evType = event.TypeSessionExited
+					}
+					if evType != "" {
+						if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID)); err != nil {
+							s.logger.Warn("failed to publish session event", "type", evType, "error", err)
+						}
+					}
+				}
 			}
 			if se := res.event.GetSessionExit(); se != nil {
+				exitStatus := status.Completed
+				if se.GetExitCode() != 0 {
+					exitStatus = status.Failed
+				}
 				if s.sessionStore != nil {
-					exitStatus := status.Completed
-					if se.GetExitCode() != 0 {
-						exitStatus = status.Failed
-					}
 					// Only update if not already in a terminal state (e.g., user-initiated "terminated").
 					if err := s.sessionStore.UpdateSessionStatusIfNotTerminal(se.GetSessionId(), exitStatus); err != nil {
 						s.logger.Warn("failed to update session status on exit",
@@ -409,6 +433,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					"session_id", se.GetSessionId(),
 					"exit_code", se.GetExitCode(),
 				)
+				// Publish to event bus so sessions list auto-refreshes.
+				if s.eventPublisher != nil {
+					if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(event.TypeSessionExited, se.GetSessionId(), machineID)); err != nil {
+						s.logger.Warn("failed to publish session exit event", "error", err)
+					}
+				}
 				// Flush content ingestor for this session
 				if s.ingestor != nil {
 					s.ingestor.FlushSession(se.GetSessionId())
