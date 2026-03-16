@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCreateApiKey } from '../../hooks/useApiKeys.ts';
+import { copyToClipboard } from '../../lib/clipboard.ts';
 
 interface CreateKeyModalProps {
   open: boolean;
@@ -59,7 +60,7 @@ export function CreateKeyModal({ open, onClose }: CreateKeyModalProps) {
 
   async function handleCopy(plaintext: string) {
     try {
-      await navigator.clipboard.writeText(plaintext);
+      await copyToClipboard(plaintext);
       setCopied(true);
       toast.success('Key copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
