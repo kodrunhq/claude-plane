@@ -206,6 +206,42 @@ describe('multiview store', () => {
     expect(JSON.parse(stored!).panes).toHaveLength(2);
   });
 
+  it('should shift focus to previous pane when removing the focused pane', async () => {
+    const { useMultiviewStore } = await import('../../stores/multiview');
+    const { createScratchWorkspace, setFocusedPane, removePane } = useMultiviewStore.getState();
+
+    createScratchWorkspace(['s1', 's2', 's3']);
+    const panes = useMultiviewStore.getState().activeWorkspace!.panes;
+    setFocusedPane(panes[1].id);
+    removePane(panes[1].id);
+
+    expect(useMultiviewStore.getState().focusedPaneId).toBe(panes[0].id);
+  });
+
+  it('should clear activeWorkspace and scratch on deleteWorkspace when active', async () => {
+    const { useMultiviewStore } = await import('../../stores/multiview');
+    const { createScratchWorkspace, saveWorkspace, deleteWorkspace } = useMultiviewStore.getState();
+
+    createScratchWorkspace(['s1', 's2']);
+    saveWorkspace('Active WS');
+    const wsId = useMultiviewStore.getState().workspaces[0].id;
+    deleteWorkspace(wsId);
+
+    expect(useMultiviewStore.getState().activeWorkspace).toBeNull();
+    expect(localStorage.getItem('claude-plane:multiview:scratch')).toBeNull();
+  });
+
+  it('should not change activeWorkspace when loading non-existent workspace', async () => {
+    const { useMultiviewStore } = await import('../../stores/multiview');
+    const { createScratchWorkspace, loadWorkspace } = useMultiviewStore.getState();
+
+    createScratchWorkspace(['s1', 's2']);
+    const before = useMultiviewStore.getState().activeWorkspace;
+    loadWorkspace('non-existent-id');
+
+    expect(useMultiviewStore.getState().activeWorkspace).toBe(before);
+  });
+
   it('should persist saved workspaces to localStorage', async () => {
     const { useMultiviewStore } = await import('../../stores/multiview');
     const { createScratchWorkspace, saveWorkspace } = useMultiviewStore.getState();
