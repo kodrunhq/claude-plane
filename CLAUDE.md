@@ -45,6 +45,21 @@ cd web && npm install && npm run build && cd ..
 ./claude-plane-server seed-admin --email admin@example.com --name Admin
 ```
 
+## Important: Frontend Embedding
+
+The server binary embeds the frontend via `go:embed` from `internal/server/frontend/dist/`. **Source changes in `web/src/` are NOT live until you rebuild:**
+
+```bash
+cd web && npm run build && cd ..    # outputs to internal/server/frontend/dist/
+go build -o claude-plane-server ./cmd/server  # embeds the new dist/
+```
+
+When debugging frontend issues in production mode, verify the bundle hash in the browser Network tab matches the file in `dist/assets/`. For development, use `cd web && npm run dev` (Vite dev server on port 3000 with proxy).
+
+## Terminal Resize Gotcha
+
+xterm.js `fitAddon.fit()` fires on `requestAnimationFrame` (before the WebSocket opens). The `term.onResize` callback checks `ws.readyState === WebSocket.OPEN` and silently drops the resize. Always send an **explicit** resize message on `ws.onopen` — never rely on `fit()` triggering `onResize` during connection setup.
+
 ## Testing
 
 ```bash
