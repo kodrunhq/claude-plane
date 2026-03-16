@@ -28,6 +28,7 @@ import { TerminalView } from './components/terminal/TerminalView.tsx'
 import { InjectPanel } from './components/sessions/InjectPanel.tsx'
 import { useSession } from './hooks/useSessions.ts'
 import { useAuthStore } from './stores/auth.ts'
+import { useThemeEffect } from './hooks/useThemeEffect.ts'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +37,13 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+/** Reads user theme preference and applies data-theme attribute to <html>.
+ *  Must be inside QueryClientProvider to access preferences. */
+function ThemeApplier() {
+  useThemeEffect()
+  return null
+}
 
 function TerminalRoute() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -70,13 +78,14 @@ function App() {
     return (
       <>
         <LoginPage />
-        <Toaster theme="dark" />
+        <Toaster theme="system" />
       </>
     )
   }
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeApplier />
       <BrowserRouter>
         <AppShell>
           <Routes>
@@ -108,7 +117,7 @@ function App() {
           </Routes>
         </AppShell>
       </BrowserRouter>
-      <Toaster theme="dark" />
+      <Toaster theme="system" />
     </QueryClientProvider>
   )
 }
