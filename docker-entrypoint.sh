@@ -21,8 +21,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
 
   JWT_SECRET=$(head -c 32 /dev/urandom | base64)
 
-  printf '[http]\nlisten = "0.0.0.0:4200"\n\n[grpc]\nlisten = "0.0.0.0:4201"\n\n[tls]\nca_cert = "%s/ca.pem"\nserver_cert = "%s/server.pem"\nserver_key = "%s/server-key.pem"\n\n[database]\npath = "%s"\n\n[auth]\njwt_secret = "%s"\nregistration_mode = "closed"\n' \
-    "$CA_DIR" "$CERT_DIR" "$CERT_DIR" "$DB_FILE" "$JWT_SECRET" \
+  printf '[http]\nlisten = "0.0.0.0:4200"\n\n[grpc]\nlisten = "0.0.0.0:4201"\n\n[tls]\nca_cert = "%s/ca.pem"\nserver_cert = "%s/server.pem"\nserver_key = "%s/server-key.pem"\n\n[database]\npath = "%s"\n\n[auth]\njwt_secret = "%s"\nregistration_mode = "closed"\n\n[ca]\ndir = "%s"\n' \
+    "$CA_DIR" "$CERT_DIR" "$CERT_DIR" "$DB_FILE" "$JWT_SECRET" "$CA_DIR" \
     > "$CONFIG_FILE"
 
   ADMIN_EMAIL="${ADMIN_EMAIL:-admin@localhost}"
