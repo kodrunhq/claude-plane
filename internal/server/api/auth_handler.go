@@ -192,6 +192,22 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Me handles GET /api/v1/auth/me.
+// Returns the current user's identity from the JWT claims.
+func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "missing claims")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"user_id": claims.UserID,
+		"email":   claims.Email,
+		"role":    claims.Role,
+	})
+}
+
 // Logout handles POST /api/v1/auth/logout.
 // Revokes the current JWT token.
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
