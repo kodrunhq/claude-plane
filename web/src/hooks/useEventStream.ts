@@ -38,8 +38,9 @@ export function useEventStream() {
         try {
           const msg = JSON.parse(event.data as string) as EventMessage;
           switch (msg.type) {
-            case 'session.status':
-            case 'session.exit':
+            case 'session.started':
+            case 'session.exited':
+            case 'session.terminated':
               queryClient.invalidateQueries({ queryKey: ['sessions'] });
               break;
             case 'machine.status':
