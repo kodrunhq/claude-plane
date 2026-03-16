@@ -43,7 +43,7 @@ describe('PanelLayout', () => {
   });
 
   it('renders 5-grid with 3 top + 2 bottom', () => {
-    const renderPane = vi.fn((pane: Pane) => <div />);
+    const renderPane = vi.fn((_pane: Pane) => <div />);
     render(
       <PanelLayout preset="5-grid" panes={makePanes(5)} renderPane={renderPane} workspaceId="ws-1" />,
     );
@@ -65,7 +65,7 @@ describe('PanelLayout', () => {
   });
 
   it('renders 3-main-side with pane[0] as main and panes[1,2] as side', () => {
-    const renderPane = vi.fn((pane: Pane) => <div />);
+    const renderPane = vi.fn((_pane: Pane) => <div />);
     render(
       <PanelLayout preset="3-main-side" panes={makePanes(3)} renderPane={renderPane} workspaceId="ws-1" />,
     );
