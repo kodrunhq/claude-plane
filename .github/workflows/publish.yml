@@ -1,0 +1,146 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: "Version bump type (use 'current' to release the latest existing tag)"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - current
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version
+        id: version
+        env:
+          VERSION_BUMP: ${{ inputs.version_bump }}
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
+          CURRENT="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "$VERSION_BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            current) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "### Version: v${NEW_VERSION} (${VERSION_BUMP} from ${LATEST_TAG})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check tag does not exist
+        if: inputs.version_bump != 'current'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+      - name: Stub frontend dist for embed
+        run: mkdir -p internal/server/frontend/dist && touch internal/server/frontend/dist/.gitkeep
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test backend
+        run: go test -race ./...
+
+      - name: Test frontend
+        working-directory: web
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run lint
+          npm run test -- --run
+
+      - name: Smoke test (build all binaries)
+        run: |
+          go build -o /tmp/claude-plane-server ./cmd/server
+          go build -o /tmp/claude-plane-agent ./cmd/agent
+          go build -o /tmp/claude-plane-bridge ./cmd/bridge
+          /tmp/claude-plane-server version 2>/dev/null || true
+          /tmp/claude-plane-agent version 2>/dev/null || true
+
+      - name: Create and push tag
+        if: inputs.version_bump != 'current'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git tag -a "$TAG" -m "release: $TAG"
+          git push origin "$TAG"
+
+      - name: Release with goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Docker: server image only ---
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/kodrunhq/claude-plane:${{ steps.version.outputs.tag }}
+            ghcr.io/kodrunhq/claude-plane:latest
+            jurel89/claude-plane:${{ steps.version.outputs.tag }}
+            jurel89/claude-plane:latest
