@@ -34,7 +34,11 @@ export function PaneHeader({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    const menuWidth = 160;
+    const menuHeight = 120;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight);
+    setContextMenu({ x, y });
   };
 
   return (

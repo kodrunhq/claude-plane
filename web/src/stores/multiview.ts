@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Workspace, Pane, LayoutPreset } from '../types/multiview';
+import type { Workspace, Pane, LayoutPreset, LayoutConfig } from '../types/multiview';
 
 const SCRATCH_KEY = 'claude-plane:multiview:scratch';
 const WORKSPACES_KEY = 'claude-plane:multiview:workspaces';
@@ -14,14 +14,26 @@ function isValidPane(p: unknown): p is Pane {
   );
 }
 
+const VALID_PRESETS = new Set<string>([
+  '2-horizontal', '2-vertical', '3-columns', '3-main-side',
+  '4-grid', '5-grid', '6-grid', 'custom',
+]);
+
+function isValidLayout(l: unknown): l is LayoutConfig {
+  if (typeof l !== 'object' || l === null) return false;
+  const layout = l as Record<string, unknown>;
+  return typeof layout.preset === 'string' && VALID_PRESETS.has(layout.preset);
+}
+
 function isValidWorkspace(w: unknown): w is Workspace {
   if (typeof w !== 'object' || w === null) return false;
   const ws = w as Record<string, unknown>;
   return (
     typeof ws.id === 'string' && UUID_RE.test(ws.id) &&
     (ws.name === null || typeof ws.name === 'string') &&
-    typeof ws.layout === 'object' && ws.layout !== null &&
+    isValidLayout(ws.layout) &&
     Array.isArray(ws.panes) && ws.panes.every(isValidPane) &&
+    ws.panes.length >= 2 && ws.panes.length <= 6 &&
     typeof ws.createdAt === 'string' &&
     typeof ws.updatedAt === 'string'
   );
@@ -126,7 +138,9 @@ export const useMultiviewStore = create<MultiviewState>((set, get) => ({
   focusedPaneId: null,
 
   createScratchWorkspace: (sessionIds) => {
-    const workspace = makeWorkspace(sessionIds);
+    const clamped = sessionIds.slice(0, 6);
+    if (clamped.length < 2) return;
+    const workspace = makeWorkspace(clamped);
     persistScratch(workspace);
     set({ activeWorkspace: workspace, focusedPaneId: null });
   },

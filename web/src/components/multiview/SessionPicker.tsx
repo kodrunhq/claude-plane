@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Search, Sparkles, TerminalSquare } from 'lucide-react';
 import { useSessions } from '../../hooks/useSessions';
 import { useMachines } from '../../hooks/useMachines';
@@ -43,14 +43,28 @@ export function SessionPicker({ onSelect, onClose, excludeSessionIds = [] }: Ses
 
   const isExcluded = (id: string) => excludeSessionIds.includes(id);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-picker-title"
         className="bg-bg-secondary rounded-lg shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border-primary">
-          <h3 className="text-sm font-semibold text-text-primary">Select Session</h3>
+          <h3 id="session-picker-title" className="text-sm font-semibold text-text-primary">Select Session</h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-bg-tertiary">
             <X size={16} className="text-text-secondary" />
           </button>
