@@ -6,6 +6,7 @@ import { TerminalPane } from './TerminalPane';
 import { SessionPicker } from './SessionPicker';
 import { EmptyMultiview } from './EmptyMultiview';
 import { useMultiviewStore } from '../../stores/multiview';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 import type { Pane } from '../../types/multiview';
 
 /** WebGL contexts are limited per browser tab (~8-16). Stay conservative for multi-pane. */
@@ -23,8 +24,10 @@ export function MultiviewPage() {
     removePane,
   } = useMultiviewStore();
 
+  const isMobile = useIsMobile();
   const [maximizedPaneId, setMaximizedPaneId] = useState<string | null>(null);
   const [pickerTarget, setPickerTarget] = useState<string | null>(null);
+  const [mobilePaneIndex, setMobilePaneIndex] = useState(0);
 
   // Load workspace from URL param (validate UUID format first)
   useEffect(() => {
@@ -164,6 +167,45 @@ export function MultiviewPage() {
         </div>
       );
     }
+  }
+
+  // Mobile: show one pane at a time with tab bar
+  if (isMobile) {
+    const panes = activeWorkspace.panes;
+    const safeIndex = Math.min(mobilePaneIndex, panes.length - 1);
+    const currentPane = panes[safeIndex];
+
+    return (
+      <div className="flex flex-col h-full">
+        <MultiviewToolbar onAddPane={() => setPickerTarget('__new__')} />
+        {/* Pane tabs */}
+        <div className="flex border-b border-border-primary bg-bg-secondary px-2 shrink-0 overflow-x-auto">
+          {panes.map((pane, i) => (
+            <button
+              key={pane.id}
+              onClick={() => setMobilePaneIndex(i)}
+              className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                i === safeIndex
+                  ? 'text-text-primary border-b-2 border-accent-primary'
+                  : 'text-text-secondary'
+              }`}
+            >
+              Pane {i + 1}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 min-h-0 p-1">
+          {currentPane && renderPane(currentPane)}
+        </div>
+        {pickerTarget && (
+          <SessionPicker
+            onSelect={handlePickerSelect}
+            onClose={() => setPickerTarget(null)}
+            excludeSessionIds={excludeSessionIds}
+          />
+        )}
+      </div>
+    );
   }
 
   return (

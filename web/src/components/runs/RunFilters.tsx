@@ -38,7 +38,7 @@ export function RunFilters({
   onTriggerTypeChange,
 }: RunFiltersProps) {
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
       <div>
         <label className="block text-xs text-text-secondary mb-1">Job</label>
         <select value={selectedJobId} onChange={(e) => onJobChange(e.target.value)} className={SELECT_CLASS}>

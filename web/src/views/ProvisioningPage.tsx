@@ -10,7 +10,7 @@ export function ProvisioningPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <div className="bg-status-error/10 border border-status-error/30 rounded-lg p-4 flex items-center gap-3">
           <AlertCircle className="text-status-error shrink-0" size={20} />
           <p className="text-sm text-text-primary flex-1">
@@ -29,7 +29,7 @@ export function ProvisioningPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-text-primary">Provisioning</h1>
         <p className="text-sm text-text-secondary mt-0.5">

@@ -93,21 +93,21 @@ function WebhookRow({ webhook, onEdit, onViewDeliveries, onDeleteRequest }: Webh
         <div className="flex items-center gap-1 justify-end">
           <button
             onClick={() => onViewDeliveries(webhook)}
-            className="p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             title="Delivery history"
           >
             <History size={15} />
           </button>
           <button
             onClick={() => onEdit(webhook)}
-            className="p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             title="Edit webhook"
           >
             <Pencil size={15} />
           </button>
           <button
             onClick={() => onDeleteRequest(webhook)}
-            className="p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors"
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-bg-tertiary transition-colors"
             title="Delete webhook"
           >
             <Trash2 size={15} />
@@ -136,7 +136,7 @@ export function WebhooksList({ webhooks, onEdit, onViewDeliveries }: WebhooksLis
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-border-primary">
+      <div className="overflow-x-auto rounded-lg border border-border-primary">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-bg-secondary">
