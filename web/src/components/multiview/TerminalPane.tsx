@@ -42,7 +42,9 @@ export function TerminalPane({
   const machineName = useMemo(() => {
     if (!session || !machines) return '...';
     const machine = machines.find((m) => m.machine_id === session.machine_id);
-    return machine?.display_name ?? machine?.machine_id?.slice(0, 8) ?? 'unknown';
+    if (machine?.display_name) return machine.display_name;
+    // Show full machine_id (or a meaningful prefix) so it's distinguishable from session IDs
+    return machine?.machine_id ?? session.machine_id ?? 'unknown';
   }, [session, machines]);
 
   const isStale = session && ['completed', 'failed', 'terminated'].includes(session.status);
@@ -60,6 +62,7 @@ export function TerminalPane({
         <PaneHeader
           sessionType={detectSessionType(session.command)}
           machineName={machineName}
+          sessionId={pane.sessionId}
           workingDir={session.working_dir}
           isMaximized={isMaximized}
           onMaximize={onMaximize}

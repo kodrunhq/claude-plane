@@ -32,10 +32,15 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
     onStatusChange?.(status);
   }, [status, onStatusChange]);
 
-  // Re-fit on mount (handles deferred rendering)
+  // Re-fit on mount with staggered timing to handle deferred rendering.
+  // The hook already does staggered fits, but TerminalView may mount after
+  // the hook's initial fits have already fired (e.g., when switching tabs).
   useEffect(() => {
-    const timer = setTimeout(() => fitTerminal(), 100);
-    return () => clearTimeout(timer);
+    const timers = [
+      setTimeout(() => fitTerminal(), 50),
+      setTimeout(() => fitTerminal(), 250),
+    ];
+    return () => timers.forEach(clearTimeout);
   }, [fitTerminal]);
 
   return (
