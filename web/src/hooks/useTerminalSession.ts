@@ -35,7 +35,6 @@ export function useTerminalSession(
       return;
     }
 
-    // 1. Create xterm.js instance
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
@@ -50,7 +49,6 @@ export function useTerminalSession(
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
 
-    // WebGL renderer with silent fallback to canvas/DOM
     if (options?.useWebGL !== false) {
       try {
         term.loadAddon(new WebglAddon());
@@ -61,27 +59,15 @@ export function useTerminalSession(
 
     term.open(containerEl);
 
-    // Staggered fit strategy: xterm.js needs the container to have its final
-    // CSS dimensions before fit() can calculate correct rows/cols. In complex
-    // layouts (multi-view split panes, resizable panels), the container may not
-    // reach its final size until several frames after mount. We fit at multiple
-    // intervals to catch different layout timing scenarios:
-    //   - RAF: catches immediate layout (simple cases)
-    //   - 150ms: catches CSS transitions and panel layout calculations
-    //   - 500ms: catches slow layout engines and deferred rendering
-    // Subsequent fits are no-ops if dimensions haven't changed, so the overhead
-    // is negligible.
-    const fitTimers: ReturnType<typeof setTimeout>[] = [];
+    // Initial fit deferred to next frame so the container has layout dimensions.
     const initialFitFrame = requestAnimationFrame(() => {
       fitAddon.fit();
     });
-    fitTimers.push(setTimeout(() => fitAddon.fit(), 150));
-    fitTimers.push(setTimeout(() => fitAddon.fit(), 500));
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // 2. WebSocket connection (first-message auth)
+    // WebSocket connection
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(
       `${protocol}//${window.location.host}/ws/terminal/${sessionId}`,
@@ -93,20 +79,10 @@ export function useTerminalSession(
     setStatus('connecting');
 
     ws.onopen = () => {
-      // Cookie-based auth: the session_token cookie is sent automatically
-      // on the WebSocket upgrade request, so no first-message auth is needed.
-
-      // CRITICAL: send resize BEFORE anything else. The server will forward
-      // this to the agent before the attach command's scrollback replay.
-      // Without this, scrollback is replayed at the wrong terminal size,
-      // causing garbled rendering (Claude CLI's status bar, horizontal rules,
-      // and cursor positioning all depend on correct column count).
+      setStatus('replaying');
       fitAddon.fit();
 
-      setStatus('replaying');
-
       // Safety timeout: if scrollback_end never arrives, transition to live
-      // mode after 10 seconds to avoid being stuck on "Loading history...".
       scrollbackTimeout = window.setTimeout(() => {
         setStatus((prev) => (prev === 'replaying' ? 'live' : prev));
       }, 10_000);
@@ -114,23 +90,20 @@ export function useTerminalSession(
 
     ws.onmessage = (event: MessageEvent) => {
       if (event.data instanceof ArrayBuffer) {
-        // Binary frame: terminal output (scrollback or live)
         term.write(new Uint8Array(event.data));
       } else {
-        // Text frame: control message
         try {
           const msg = JSON.parse(event.data as string) as { type: string };
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
-            // Clear the terminal buffer and re-fit. Scrollback was replayed at
-            // whatever size the PTY had when the data was generated (often the
-            // default 80x24 or a different browser width). Full-screen TUI apps
-            // like Claude CLI use cursor positioning and full-width rules that
-            // look garbled at the wrong size. Clearing wipes the stale output,
-            // and the fit sends a resize → SIGWINCH which makes the CLI redraw
-            // its entire screen cleanly at the correct dimensions.
-            term.clear();
+            // Wipe the visible viewport (ANSI: erase display + cursor home),
+            // then re-fit. Scrollback was rendered at whatever PTY size existed
+            // when the output was produced. Full-screen TUI apps (Claude CLI)
+            // use absolute cursor positioning that looks garbled at a different
+            // size. The wipe + fit sends a resize → SIGWINCH, and the CLI
+            // redraws its screen cleanly.
+            term.write('\x1b[2J\x1b[H');
             requestAnimationFrame(() => fitAddon.fit());
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
@@ -151,21 +124,21 @@ export function useTerminalSession(
 
     wsRef.current = ws;
 
-    // 3. Keystrokes -> server (binary frames)
+    // Keystrokes -> server (binary frames)
     const onDataDisposable = term.onData((data: string) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(new TextEncoder().encode(data));
       }
     });
 
-    // 4. Resize -> server (JSON control message)
+    // Resize -> server (JSON control message)
     const onResizeDisposable = term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
     });
 
-    // 5. Container resize -> fit terminal (debounced for multi-pane performance)
+    // Container resize -> fit terminal (debounced)
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     const observer = new ResizeObserver(() => {
       if (resizeTimer) clearTimeout(resizeTimer);
@@ -175,16 +148,13 @@ export function useTerminalSession(
     });
     observer.observe(containerEl);
 
-    // Cleanup
     return () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       cancelAnimationFrame(initialFitFrame);
-      fitTimers.forEach(clearTimeout);
       clearTimeout(scrollbackTimeout);
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
       observer.disconnect();
-      // Clear handlers before closing to prevent post-unmount state updates
       ws.onopen = null;
       ws.onmessage = null;
       ws.onerror = null;

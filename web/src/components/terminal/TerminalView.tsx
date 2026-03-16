@@ -26,23 +26,11 @@ const statusColors: Record<TerminalStatus, string> = {
 
 export function TerminalView({ sessionId, onStatusChange, className = '', useWebGL, fontSize }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { status, fitTerminal, focusTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
+  const { status, focusTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
 
-  // Notify parent of status changes
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
-
-  // Re-fit on mount with staggered timing to handle deferred rendering.
-  // The hook already does staggered fits, but TerminalView may mount after
-  // the hook's initial fits have already fired (e.g., when switching tabs).
-  useEffect(() => {
-    const timers = [
-      setTimeout(() => fitTerminal(), 50),
-      setTimeout(() => fitTerminal(), 250),
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, [fitTerminal]);
 
   // Auto-focus terminal when it becomes live so keystrokes work immediately.
   useEffect(() => {
@@ -70,7 +58,7 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
         <span className="text-text-secondary font-mono">{sessionId.slice(0, 8)}</span>
       </div>
 
-      {/* Terminal container — click to focus xterm.js so keystrokes register */}
+      {/* Terminal container */}
       <div
         ref={containerRef}
         className="flex-1 min-h-0"
