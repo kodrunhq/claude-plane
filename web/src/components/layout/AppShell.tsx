@@ -34,7 +34,7 @@ export function AppShell({ children }: AppShellProps) {
               onClick={() => setSidebarOpen(false)}
               aria-hidden="true"
             />
-            <div className="fixed inset-y-0 left-0 z-50 w-64 max-w-[80vw]">
+            <div className="fixed inset-y-0 left-0 z-50 w-60 max-w-[80vw]">
               <Sidebar onNavigate={() => setSidebarOpen(false)} />
             </div>
           </>
