@@ -95,7 +95,7 @@ func wsURL(srv *httptest.Server, sessionID string) string {
 }
 
 // dialWithAuth connects to the WebSocket, performs first-message auth, and
-// sends an initial resize (the server waits for a resize before attaching).
+// sends an initial resize so the agent PTY gets the correct terminal dimensions.
 func dialWithAuth(t *testing.T, ctx context.Context, srv *httptest.Server, sessionID string, recorder *commandRecorder, token string) *websocket.Conn {
 	t.Helper()
 	conn, _, err := websocket.Dial(ctx, wsURL(srv, sessionID), nil)
