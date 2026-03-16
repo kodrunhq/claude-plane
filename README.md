@@ -49,7 +49,7 @@ Three components, each a single Go binary:
 
 ```bash
 docker run -d --name claude-plane \
-  -p 8080:8080 -p 9090:9090 \
+  -p 4200:4200 -p 4201:4201 \
   -v claude-plane-data:/data \
   jurel89/claude-plane:latest
 ```
@@ -64,14 +64,14 @@ Default admin: `admin@localhost` / `changeme123`. Customize with environment var
 
 ```bash
 docker run -d --name claude-plane \
-  -p 8080:8080 -p 9090:9090 \
+  -p 4200:4200 -p 4201:4201 \
   -v claude-plane-data:/data \
   -e ADMIN_EMAIL=me@example.com \
   -e ADMIN_PASSWORD=mysecret \
   jurel89/claude-plane:latest
 ```
 
-Dashboard at **http://localhost:8080**. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
+Dashboard at **http://localhost:4200**. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
 
 ### Build from source
 

@@ -8,5 +8,5 @@ RUN mkdir -p /data && \
     chown claude:claude /data
 USER claude
 VOLUME /data
-EXPOSE 8080 9090
+EXPOSE 4200 4201
 ENTRYPOINT ["docker-entrypoint.sh"]

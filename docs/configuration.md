@@ -8,7 +8,7 @@ Both the server and agent use TOML configuration files.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `listen` | string | Yes | Bind address for the HTTP server (e.g., `"0.0.0.0:8443"`) |
+| `listen` | string | Yes | Bind address for the HTTP server (e.g., `"0.0.0.0:4200"`) |
 | `tls_cert` | string | No | Path to TLS certificate for HTTPS |
 | `tls_key` | string | No | Path to TLS private key for HTTPS |
 
@@ -16,7 +16,7 @@ Both the server and agent use TOML configuration files.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `listen` | string | Yes | Bind address for the gRPC server (e.g., `"0.0.0.0:9443"`) |
+| `listen` | string | Yes | Bind address for the gRPC server (e.g., `"0.0.0.0:4201"`) |
 
 ### `[tls]` — mTLS Configuration
 
@@ -45,12 +45,12 @@ The database file is created automatically if it doesn't exist. Migrations run o
 
 ```toml
 [http]
-listen = "0.0.0.0:8443"
+listen = "0.0.0.0:4200"
 tls_cert = "/etc/claude-plane/server-cert/server.pem"
 tls_key = "/etc/claude-plane/server-cert/server-key.pem"
 
 [grpc]
-listen = "0.0.0.0:9443"
+listen = "0.0.0.0:4201"
 
 [tls]
 ca_cert = "/etc/claude-plane/ca/ca.pem"
@@ -73,7 +73,7 @@ token_ttl = "60m"
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `address` | string | Yes | Server gRPC address (e.g., `"server.example.com:9443"`) |
+| `address` | string | Yes | Server gRPC address (e.g., `"server.example.com:4201"`) |
 
 ### `[tls]` — mTLS Configuration
 
@@ -96,7 +96,7 @@ token_ttl = "60m"
 
 ```toml
 [server]
-address = "server.example.com:9443"
+address = "server.example.com:4201"
 
 [tls]
 ca_cert = "/etc/claude-plane/ca.pem"
