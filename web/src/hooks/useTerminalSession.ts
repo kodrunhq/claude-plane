@@ -97,24 +97,10 @@ export function useTerminalSession(
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
             setStatus('live');
-            // Force a SIGWINCH on the PTY to make the CLI redraw its screen.
-            // The PTY was created at an estimated size that may match xterm.js,
-            // in which case fit() is a no-op (no resize sent, no SIGWINCH).
-            // To guarantee a redraw: resize to 1 col smaller, then back.
-            // This two-step resize always triggers SIGWINCH regardless of
-            // whether the initial PTY size matched.
             term.reset();
-            const currentCols = term.cols;
-            const currentRows = term.rows;
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'resize', cols: Math.max(1, currentCols - 1), rows: currentRows }));
-              // Restore correct size after a tick
-              setTimeout(() => {
-                fitAddon.fit();
-              }, 50);
-            } else {
-              fitAddon.fit();
-            }
+            fitAddon.fit();
+            // DEBUG: show what xterm thinks vs what was sent to PTY
+            console.warn('[TERM DEBUG] xterm cols=%d rows=%d', term.cols, term.rows);
           } else if (msg.type === 'session_ended') {
             setStatus('disconnected');
           }
@@ -143,6 +129,7 @@ export function useTerminalSession(
 
     // Resize -> server (JSON control message)
     const onResizeDisposable = term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+      console.warn('[TERM DEBUG] onResize cols=%d rows=%d ws.readyState=%d', cols, rows, ws.readyState);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
