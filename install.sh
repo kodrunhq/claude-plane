@@ -169,21 +169,25 @@ run_quickstart() {
   info "Writing server config..."
   cat > "$config_file" <<TOML
 [http]
-address = "0.0.0.0:4200"
+listen = "0.0.0.0:4200"
 
 [grpc]
-address = "0.0.0.0:4201"
+listen = "0.0.0.0:4201"
 
 [tls]
 ca_cert     = "${ca_dir}/ca.pem"
 server_cert = "${server_cert_dir}/server.pem"
 server_key  = "${server_cert_dir}/server-key.pem"
 
+[database]
+path = "${db_path}"
+
 [auth]
 jwt_secret = "${jwt_secret}"
+registration_mode = "closed"
 
-[store]
-db_path = "${db_path}"
+[ca]
+dir = "${ca_dir}"
 TOML
 
   # Admin credentials
