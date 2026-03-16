@@ -61,12 +61,22 @@ export function useTerminalSession(
 
     term.open(containerEl);
 
-    // Defer initial fit to next frame so the browser has completed layout
-    // and the container has its final dimensions. Without this, the first
-    // render can have incorrect sizing (fixed by any subsequent resize).
+    // Staggered fit strategy: xterm.js needs the container to have its final
+    // CSS dimensions before fit() can calculate correct rows/cols. In complex
+    // layouts (multi-view split panes, resizable panels), the container may not
+    // reach its final size until several frames after mount. We fit at multiple
+    // intervals to catch different layout timing scenarios:
+    //   - RAF: catches immediate layout (simple cases)
+    //   - 150ms: catches CSS transitions and panel layout calculations
+    //   - 500ms: catches slow layout engines and deferred rendering
+    // Subsequent fits are no-ops if dimensions haven't changed, so the overhead
+    // is negligible.
+    const fitTimers: ReturnType<typeof setTimeout>[] = [];
     const initialFitFrame = requestAnimationFrame(() => {
       fitAddon.fit();
     });
+    fitTimers.push(setTimeout(() => fitAddon.fit(), 150));
+    fitTimers.push(setTimeout(() => fitAddon.fit(), 500));
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -154,6 +164,7 @@ export function useTerminalSession(
     return () => {
       if (resizeTimer) clearTimeout(resizeTimer);
       cancelAnimationFrame(initialFitFrame);
+      fitTimers.forEach(clearTimeout);
       clearTimeout(scrollbackTimeout);
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
