@@ -4,6 +4,7 @@ import { Maximize2, Minimize2, Sparkles, TerminalSquare } from 'lucide-react';
 interface PaneHeaderProps {
   readonly sessionType: 'claude' | 'terminal';
   readonly machineName: string;
+  readonly sessionId?: string;
   readonly workingDir: string;
   readonly isMaximized: boolean;
   readonly onMaximize: () => void;
@@ -21,6 +22,7 @@ function truncateDir(dir: string, maxLen: number = 30): string {
 export function PaneHeader({
   sessionType,
   machineName,
+  sessionId,
   workingDir,
   isMaximized,
   onMaximize,
@@ -47,7 +49,14 @@ export function PaneHeader({
       onContextMenu={handleContextMenu}
     >
       <Icon size={12} className="shrink-0 mr-1.5" />
-      <span className="font-medium text-text-primary mr-2 shrink-0">{machineName}</span>
+      <span className="font-medium text-text-primary mr-2 shrink-0 truncate max-w-32" title={machineName}>
+        {machineName}
+      </span>
+      {sessionId && (
+        <span className="text-text-secondary/60 font-mono mr-2 shrink-0" title={sessionId}>
+          {sessionId.slice(0, 8)}
+        </span>
+      )}
       <span className="truncate" title={workingDir}>
         {truncateDir(workingDir)}
       </span>

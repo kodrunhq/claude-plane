@@ -5,6 +5,7 @@ import { PaneHeader } from './PaneHeader';
 import { PaneEmptyState } from './PaneEmptyState';
 import { useSession } from '../../hooks/useSessions';
 import { useMachines } from '../../hooks/useMachines';
+import { useUIPrefs } from '../../hooks/useUIPrefs';
 import type { Pane } from '../../types/multiview';
 
 interface TerminalPaneProps {
@@ -38,28 +39,35 @@ export function TerminalPane({
   const hasSession = pane.sessionId !== '';
   const { data: session } = useSession(hasSession ? pane.sessionId : '');
   const { data: machines } = useMachines();
+  const { terminal_font_size } = useUIPrefs();
 
   const machineName = useMemo(() => {
     if (!session || !machines) return '...';
     const machine = machines.find((m) => m.machine_id === session.machine_id);
-    return machine?.display_name ?? machine?.machine_id?.slice(0, 8) ?? 'unknown';
+    if (machine?.display_name) return machine.display_name;
+    // Show full machine_id (or a meaningful prefix) so it's distinguishable from session IDs
+    return machine?.machine_id ?? session.machine_id ?? 'unknown';
   }, [session, machines]);
 
   const isStale = session && ['completed', 'failed', 'terminated'].includes(session.status);
 
+  // Use border (not ring) for the focus indicator because the inner content
+  // needs overflow-hidden for the terminal, and ring renders as box-shadow
+  // which gets clipped by overflow-hidden.
   const borderClass = isFocused
-    ? 'ring-2 ring-accent-primary shadow-[0_0_8px_rgba(99,102,241,0.3)]'
-    : 'ring-1 ring-border-primary';
+    ? 'border-2 border-accent-primary shadow-[0_0_8px_rgba(99,102,241,0.3)]'
+    : 'border border-border-primary';
 
   return (
     <div
-      className={`flex flex-col h-full rounded overflow-hidden ${borderClass} transition-shadow`}
+      className={`flex flex-col h-full rounded overflow-hidden ${borderClass} transition-all`}
       onClick={onFocus}
     >
       {session && (
         <PaneHeader
           sessionType={detectSessionType(session.command)}
           machineName={machineName}
+          sessionId={pane.sessionId}
           workingDir={session.working_dir}
           isMaximized={isMaximized}
           onMaximize={onMaximize}
@@ -83,6 +91,7 @@ export function TerminalPane({
               sessionId={pane.sessionId}
               className="h-full opacity-50"
               useWebGL={useWebGL}
+              fontSize={terminal_font_size}
             />
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="text-center">
@@ -104,6 +113,7 @@ export function TerminalPane({
             sessionId={pane.sessionId}
             className="h-full"
             useWebGL={useWebGL}
+            fontSize={terminal_font_size}
           />
         )}
       </div>

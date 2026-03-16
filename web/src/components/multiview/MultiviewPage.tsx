@@ -106,7 +106,19 @@ export function MultiviewPage() {
   if (!activeWorkspace) {
     return (
       <div className="flex flex-col h-full">
-        <EmptyMultiview />
+        <EmptyMultiview onCreateWorkspace={() => setPickerTarget('__create__')} />
+        {pickerTarget === '__create__' && (
+          <SessionPicker
+            onSelect={(sessionId) => {
+              // Create a scratch workspace with the first selected session,
+              // then user can add more panes via toolbar.
+              useMultiviewStore.getState().createScratchWorkspace([sessionId]);
+              setPickerTarget(null);
+            }}
+            onClose={() => setPickerTarget(null)}
+            excludeSessionIds={[]}
+          />
+        )}
       </div>
     );
   }

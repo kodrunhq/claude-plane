@@ -14,6 +14,7 @@ const CARD_OPTIONS = [
   { value: 'machines', label: 'Machines' },
   { value: 'jobs', label: 'Jobs' },
   { value: 'runs', label: 'Runs' },
+  { value: 'templates', label: 'Templates' },
 ] as const;
 
 const THEME_OPTIONS: ReadonlyArray<{ value: UIPrefs['theme']; label: string }> = [
