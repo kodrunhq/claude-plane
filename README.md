@@ -59,18 +59,25 @@ See the [Quickstart Guide](docs/quickstart.md) for step-by-step setup and config
 
 ## Installation
 
-### Docker (recommended)
+### Docker
+
+The server requires a config file with TLS certificates, JWT secret, and database path. Generate these first with the built-in CA tooling, then mount them into the container:
 
 ```bash
 docker pull jurel89/claude-plane:latest
 
 docker run -d \
+  --name claude-plane \
   -p 8443:8443 \
+  -p 9090:9090 \
+  -v ./server.toml:/etc/claude-plane/server.toml:ro \
+  -v ./ca:/etc/claude-plane/ca:ro \
+  -v ./server-cert:/etc/claude-plane/server-cert:ro \
   -v claude-plane-data:/data \
   jurel89/claude-plane:latest
 ```
 
-Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
+See the [Server Installation](docs/install-server.md) guide for config file setup and certificate generation. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
 
 ### Install script
 
