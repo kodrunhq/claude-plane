@@ -26,14 +26,20 @@ export function useTerminalSession(
   }, [containerRef]);
 
   useEffect(() => {
-    if (!containerEl || !sessionId) return;
+    if (!containerEl || !sessionId) {
+      console.debug('[useTerminalSession] skipping: containerEl=%o sessionId=%s', containerEl, sessionId);
+      return;
+    }
 
     // Validate sessionId format before constructing WebSocket URL
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRe.test(sessionId)) {
+      console.warn('[useTerminalSession] invalid sessionId format:', sessionId);
       setStatus('disconnected');
       return;
     }
+
+    console.debug('[useTerminalSession] creating terminal for session=%s fontSize=%s webgl=%s', sessionId, options?.fontSize, options?.useWebGL);
 
     // 1. Create xterm.js instance
     const term = new Terminal({
@@ -93,6 +99,7 @@ export function useTerminalSession(
     setStatus('connecting');
 
     ws.onopen = () => {
+      console.debug('[useTerminalSession] ws.onopen for session=%s', sessionId);
       // Cookie-based auth: the session_token cookie is sent automatically
       // on the WebSocket upgrade request, so no first-message auth is needed.
       setStatus('replaying');
@@ -130,7 +137,8 @@ export function useTerminalSession(
       setStatus('disconnected');
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      console.debug('[useTerminalSession] ws.onclose code=%d reason=%s', e.code, e.reason);
       setStatus('disconnected');
     };
 
@@ -138,6 +146,7 @@ export function useTerminalSession(
 
     // 3. Keystrokes -> server (binary frames)
     const onDataDisposable = term.onData((data: string) => {
+      console.debug('[useTerminalSession] onData: %d bytes, ws.readyState=%d', data.length, ws.readyState);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(new TextEncoder().encode(data));
       }
@@ -162,6 +171,7 @@ export function useTerminalSession(
 
     // Cleanup
     return () => {
+      console.debug('[useTerminalSession] cleanup for session=%s', sessionId);
       if (resizeTimer) clearTimeout(resizeTimer);
       cancelAnimationFrame(initialFitFrame);
       fitTimers.forEach(clearTimeout);
@@ -187,7 +197,11 @@ export function useTerminalSession(
   }, []);
 
   const focusTerminal = useCallback(() => {
-    termRef.current?.focus();
+    const t = termRef.current;
+    if (t) {
+      t.focus();
+      console.debug('[useTerminalSession] focus called, textarea=%o activeElement=%o', t.textarea, document.activeElement);
+    }
   }, []);
 
   return { status, term: termRef, ws: wsRef, fitTerminal, focusTerminal };
