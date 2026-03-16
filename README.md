@@ -45,31 +45,33 @@ Three components, each a single Go binary:
 
 ## Quickstart
 
-### Docker Compose (recommended)
+### Docker (recommended)
 
 ```bash
-git clone https://github.com/kodrunhq/claude-plane.git
-cd claude-plane
-docker compose up -d
+docker run -d --name claude-plane \
+  -p 8080:8080 -p 9090:9090 \
+  -v claude-plane-data:/data \
+  jurel89/claude-plane:latest
 ```
 
-This automatically generates TLS certificates, creates a config file, seeds an admin account (`admin@localhost` / `changeme123`), and starts the server. Customize credentials with environment variables:
+That's it. On first run the container automatically generates TLS certificates, creates a config, and seeds an admin account. Check the logs for credentials:
 
 ```bash
-ADMIN_EMAIL=me@example.com ADMIN_PASSWORD=mysecret docker compose up -d
+docker logs claude-plane
 ```
 
-Dashboard at **http://localhost:8080** once running.
-
-### Docker (standalone)
+Default admin: `admin@localhost` / `changeme123`. Customize with environment variables:
 
 ```bash
-git clone https://github.com/kodrunhq/claude-plane.git
-cd claude-plane
-./docker-quickstart.sh
+docker run -d --name claude-plane \
+  -p 8080:8080 -p 9090:9090 \
+  -v claude-plane-data:/data \
+  -e ADMIN_EMAIL=me@example.com \
+  -e ADMIN_PASSWORD=mysecret \
+  jurel89/claude-plane:latest
 ```
 
-The script prompts for admin credentials, generates certs and config in `./claude-plane-data/`, and starts a Docker container. Run it again to restart without re-initializing.
+Dashboard at **http://localhost:8080**. Also available on GHCR: `ghcr.io/kodrunhq/claude-plane:latest`
 
 ### Build from source
 
