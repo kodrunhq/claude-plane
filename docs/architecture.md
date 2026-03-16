@@ -2,19 +2,11 @@
 
 ## System Overview
 
-claude-plane consists of three components:
+claude-plane consists of four components:
 
-```
-┌─────────────┐     HTTPS/WSS      ┌─────────────────┐      gRPC/mTLS      ┌──────────────┐
-│   Browser    │◄──────────────────►│    Server        │◄───────────────────►│    Agent      │
-│  (React SPA) │   REST + WebSocket │                  │  Bidirectional      │               │
-│              │                     │  - REST API      │  Command Stream     │  - PTY mgmt   │
-│  - xterm.js  │                     │  - WebSocket hub │                     │  - Scrollback │
-│  - React     │                     │  - gRPC server   │                     │  - Claude CLI │
-│  - Zustand   │                     │  - Job engine    │                     │               │
-│              │                     │  - SQLite        │                     │  (per worker) │
-└─────────────┘                     └─────────────────┘                     └──────────────┘
-```
+<p align="center">
+  <img src="assets/architecture.svg" alt="claude-plane architecture" width="900">
+</p>
 
 **Key principle: agents dial in, server never dials out.** Workers can be behind NATs, firewalls, or in private networks.
 
@@ -138,11 +130,13 @@ SQLite database with these core tables:
 
 React 19 SPA built with Vite and TypeScript:
 
-- **State management:** Zustand for client-side state, TanStack Query for server data
-- **Terminal:** xterm.js with WebGL renderer for full terminal emulation
+- **State management:** Zustand for client-side state (auth, UI, multiview workspaces), TanStack Query for server data
+- **Terminal:** xterm.js with WebGL renderer (canvas fallback for 5+ panes) for full terminal emulation
+- **Multi-View:** 2-6 terminal sessions in resizable split-pane layouts via `react-resizable-panels`, with saved workspace persistence in localStorage
 - **Routing:** React Router with these views:
   - Command Center — Dashboard overview
-  - Sessions — List and manage CLI sessions
+  - Sessions — List and manage CLI sessions, multi-select for Multi-View
+  - Multi-View — Simultaneous terminal sessions with configurable grid layouts
   - Machines — View connected agents
   - Jobs — Create and edit job DAGs
   - Run Detail — Monitor job execution with live DAG visualization
