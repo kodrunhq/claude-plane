@@ -28,6 +28,13 @@ export function useTerminalSession(
   useEffect(() => {
     if (!containerEl || !sessionId) return;
 
+    // Validate sessionId format before constructing WebSocket URL
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(sessionId)) {
+      setStatus('disconnected');
+      return;
+    }
+
     // 1. Create xterm.js instance
     const term = new Terminal({
       cursorBlink: true,
