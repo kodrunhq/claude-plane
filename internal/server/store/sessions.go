@@ -8,17 +8,22 @@ import (
 
 // Session represents a terminal session persisted in SQLite.
 type Session struct {
-	SessionID  string    `json:"session_id"`
-	MachineID  string    `json:"machine_id"`
-	UserID     string    `json:"user_id"`
-	TemplateID string    `json:"template_id,omitempty"`
-	Command    string    `json:"command"`
-	WorkingDir string    `json:"working_dir"`
-	Status     string    `json:"status"`
+	SessionID      string    `json:"session_id"`
+	MachineID      string    `json:"machine_id"`
+	UserID         string    `json:"user_id"`
+	TemplateID     string    `json:"template_id,omitempty"`
+	Command        string    `json:"command"`
+	WorkingDir     string    `json:"working_dir"`
+	Status         string    `json:"status"`
+	Model          string    `json:"model,omitempty"`
+	SkipPerms      string    `json:"skip_permissions,omitempty"`
+	EnvVars        string    `json:"env_vars,omitempty"`
+	Args           string    `json:"args,omitempty"`
+	InitialPrompt  string    `json:"initial_prompt,omitempty"`
 	// CreatedAt corresponds to the database column `started_at`.
-	CreatedAt  time.Time `json:"created_at"`
+	CreatedAt      time.Time `json:"created_at"`
 	// UpdatedAt corresponds to the database column `ended_at` (or CreatedAt if not ended).
-	UpdatedAt  time.Time `json:"updated_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // CreateSession inserts a new session into the sessions table.
@@ -29,10 +34,12 @@ func (s *Store) CreateSession(sess *Session) error {
 		userID = nil
 	}
 	_, err := s.writer.Exec(`
-		INSERT INTO sessions (session_id, machine_id, user_id, template_id, command, working_dir, status, started_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		INSERT INTO sessions (session_id, machine_id, user_id, template_id, command, working_dir, status,
+		                      model, skip_permissions, env_vars, args, initial_prompt, started_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		sess.SessionID, sess.MachineID, userID, nullIfEmpty(sess.TemplateID),
 		sess.Command, sess.WorkingDir, sess.Status,
+		sess.Model, sess.SkipPerms, sess.EnvVars, sess.Args, sess.InitialPrompt,
 	)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
@@ -50,11 +57,15 @@ func (s *Store) GetSession(id string) (*Session, error) {
 	err := s.reader.QueryRow(`
 		SELECT session_id, machine_id, user_id, COALESCE(template_id, ''),
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
-		       status, started_at, ended_at
+		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
+		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
+		       started_at, ended_at
 		FROM sessions WHERE session_id = ?`, id,
 	// Note: started_at -> sess.CreatedAt, ended_at -> endedAt (-> sess.UpdatedAt).
 	).Scan(&sess.SessionID, &sess.MachineID, &userID, &templateID,
-		&sess.Command, &sess.WorkingDir, &sess.Status, &sess.CreatedAt, &endedAt)
+		&sess.Command, &sess.WorkingDir, &sess.Status,
+		&sess.Model, &sess.SkipPerms, &sess.EnvVars, &sess.Args, &sess.InitialPrompt,
+		&sess.CreatedAt, &endedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("session %s: %w", id, ErrNotFound)
 	}
@@ -80,7 +91,9 @@ func (s *Store) ListSessions() ([]Session, error) {
 	rows, err := s.reader.Query(`
 		SELECT session_id, machine_id, user_id, COALESCE(template_id, ''),
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
-		       status, started_at, ended_at
+		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
+		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
+		       started_at, ended_at
 		FROM sessions ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
@@ -95,7 +108,9 @@ func (s *Store) ListSessionsByMachine(machineID string) ([]Session, error) {
 	rows, err := s.reader.Query(`
 		SELECT session_id, machine_id, user_id, COALESCE(template_id, ''),
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
-		       status, started_at, ended_at
+		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
+		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
+		       started_at, ended_at
 		FROM sessions WHERE machine_id = ? ORDER BY started_at DESC`, machineID)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions by machine: %w", err)
@@ -161,7 +176,9 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 		var userID, templateID sql.NullString
 		var endedAt sql.NullTime
 		if err := rows.Scan(&sess.SessionID, &sess.MachineID, &userID, &templateID,
-			&sess.Command, &sess.WorkingDir, &sess.Status, &sess.CreatedAt, &endedAt); err != nil {
+			&sess.Command, &sess.WorkingDir, &sess.Status,
+			&sess.Model, &sess.SkipPerms, &sess.EnvVars, &sess.Args, &sess.InitialPrompt,
+			&sess.CreatedAt, &endedAt); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		if userID.Valid {
