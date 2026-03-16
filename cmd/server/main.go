@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -325,16 +326,13 @@ func newServeCmd() *cobra.Command {
 
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
-			// Credentials vault handler — encryption key is optional.
-			// If not configured, credential endpoints return 503 with a helpful message.
-			var credentialHandler *handler.CredentialHandler
-			encryptionKey, err := cfg.Secrets.ParseEncryptionKey()
+			// Credentials vault handler — encryption key is auto-generated if not configured.
+			dataDir := filepath.Dir(cfg.Database.Path)
+			encryptionKey, err := cfg.Secrets.ParseEncryptionKey(dataDir)
 			if err != nil {
-				slog.Warn("Credentials vault disabled: encryption key not configured", "error", err)
-				credentialHandler = handler.NewDisabledCredentialHandler(handlerClaimsGetter)
-			} else {
-				credentialHandler = handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
+				return fmt.Errorf("parse encryption key: %w", err)
 			}
+			credentialHandler := handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
 
 			// Provisioning service
 			httpAddr := cfg.Provision.ExternalHTTPAddress
