@@ -3,6 +3,29 @@ import type { Workspace, Pane, LayoutPreset } from '../types/multiview';
 
 const SCRATCH_KEY = 'claude-plane:multiview:scratch';
 const WORKSPACES_KEY = 'claude-plane:multiview:workspaces';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidPane(p: unknown): p is Pane {
+  if (typeof p !== 'object' || p === null) return false;
+  const pane = p as Record<string, unknown>;
+  return (
+    typeof pane.id === 'string' && UUID_RE.test(pane.id) &&
+    typeof pane.sessionId === 'string'
+  );
+}
+
+function isValidWorkspace(w: unknown): w is Workspace {
+  if (typeof w !== 'object' || w === null) return false;
+  const ws = w as Record<string, unknown>;
+  return (
+    typeof ws.id === 'string' && UUID_RE.test(ws.id) &&
+    (ws.name === null || typeof ws.name === 'string') &&
+    typeof ws.layout === 'object' && ws.layout !== null &&
+    Array.isArray(ws.panes) && ws.panes.every(isValidPane) &&
+    typeof ws.createdAt === 'string' &&
+    typeof ws.updatedAt === 'string'
+  );
+}
 
 function defaultPresetForCount(count: number): LayoutPreset {
   switch (count) {
@@ -47,13 +70,26 @@ function persistWorkspaces(workspaces: readonly Workspace[]): void {
 }
 
 function loadScratch(): Workspace | null {
-  const raw = localStorage.getItem(SCRATCH_KEY);
-  return raw ? (JSON.parse(raw) as Workspace) : null;
+  try {
+    const raw = localStorage.getItem(SCRATCH_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isValidWorkspace(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function loadWorkspacesFromStorage(): Workspace[] {
-  const raw = localStorage.getItem(WORKSPACES_KEY);
-  return raw ? (JSON.parse(raw) as Workspace[]) : [];
+  try {
+    const raw = localStorage.getItem(WORKSPACES_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidWorkspace);
+  } catch {
+    return [];
+  }
 }
 
 function updateActiveWorkspace(

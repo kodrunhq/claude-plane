@@ -23,9 +23,10 @@ export function MultiviewPage() {
   const [maximizedPaneId, setMaximizedPaneId] = useState<string | null>(null);
   const [pickerTarget, setPickerTarget] = useState<string | null>(null);
 
-  // Load workspace from URL param
+  // Load workspace from URL param (validate UUID format first)
   useEffect(() => {
-    if (workspaceId) {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (workspaceId && uuidRe.test(workspaceId)) {
       loadWorkspace(workspaceId);
     }
   }, [workspaceId, loadWorkspace]);

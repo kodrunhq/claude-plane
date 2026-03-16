@@ -127,6 +127,7 @@ export function MultiviewToolbar() {
               if (e.key === 'Enter') handleRename();
               if (e.key === 'Escape') setIsEditing(false);
             }}
+            maxLength={100}
             className="px-2 py-0.5 text-sm bg-bg-primary border border-border-primary rounded text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
           />
         ) : (
@@ -237,6 +238,7 @@ export function MultiviewToolbar() {
               onChange={(e) => setSaveName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSaveConfirm()}
               placeholder="Workspace name"
+              maxLength={100}
               className="w-full px-3 py-2 text-sm bg-bg-primary border border-border-primary rounded text-text-primary mb-3 focus:outline-none focus:ring-1 focus:ring-accent-primary"
               autoFocus
             />
