@@ -378,12 +378,18 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 
 			// Handle session lifecycle events to update DB status.
 			if ss := res.event.GetSessionStatus(); ss != nil {
+				newStatus := ss.GetStatus()
 				if s.sessionStore != nil {
-					newStatus := ss.GetStatus()
 					if err := s.sessionStore.UpdateSessionStatus(ss.GetSessionId(), newStatus); err != nil {
 						s.logger.Warn("failed to update session status from agent event",
 							"session_id", ss.GetSessionId(), "status", newStatus, "error", err)
 					}
+				}
+				// Notify any connected browser WebSocket that the session status changed.
+				// This lets the frontend show "Session ended" instead of a dead terminal.
+				if s.registry != nil && (newStatus == status.Terminated || newStatus == status.Failed || newStatus == status.Completed) {
+					controlMsg := []byte(`{"type":"session_ended","status":"` + newStatus + `"}`)
+					s.registry.PublishControl(ss.GetSessionId(), controlMsg)
 				}
 			}
 			if se := res.event.GetSessionExit(); se != nil {
