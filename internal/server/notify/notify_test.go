@@ -322,3 +322,40 @@ func TestDefaultEventRenderer(t *testing.T) {
 		t.Errorf("body missing status, got: %s", body)
 	}
 }
+
+// --- SMTPNotifier validation tests ---
+
+func TestSMTPNotifier_Send_InvalidConfig(t *testing.T) {
+	n := &SMTPNotifier{}
+	err := n.Send(context.Background(), "not-json", "subj", "body")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON config")
+	}
+}
+
+func TestSMTPNotifier_Send_MissingHost(t *testing.T) {
+	n := &SMTPNotifier{}
+	cfg := `{"port":587,"from":"a@b.com","to":"c@d.com"}`
+	err := n.Send(context.Background(), cfg, "subj", "body")
+	if err == nil || !strings.Contains(err.Error(), "host") {
+		t.Fatalf("expected host error, got: %v", err)
+	}
+}
+
+func TestSMTPNotifier_Send_InvalidPort(t *testing.T) {
+	n := &SMTPNotifier{}
+	cfg := `{"host":"smtp.example.com","port":0,"from":"a@b.com","to":"c@d.com"}`
+	err := n.Send(context.Background(), cfg, "subj", "body")
+	if err == nil || !strings.Contains(err.Error(), "port") {
+		t.Fatalf("expected port error, got: %v", err)
+	}
+}
+
+func TestSMTPNotifier_Send_CRLFInjection(t *testing.T) {
+	n := &SMTPNotifier{}
+	cfg := `{"host":"smtp.example.com","port":587,"from":"a@b.com\r\nBcc: evil@bad.com","to":"c@d.com"}`
+	err := n.Send(context.Background(), cfg, "subj", "body")
+	if err == nil || !strings.Contains(err.Error(), "invalid characters") {
+		t.Fatalf("expected CRLF injection error, got: %v", err)
+	}
+}

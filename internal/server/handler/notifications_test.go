@@ -20,9 +20,10 @@ import (
 // --- mock notification store ---
 
 type mockNotificationStore struct {
-	channels      map[string]*store.NotificationChannel
-	subscriptions map[string][]store.NotificationSubscription // keyed by user_id
-	err           error
+	channels         map[string]*store.NotificationChannel
+	subscriptions    map[string][]store.NotificationSubscription // keyed by user_id
+	err              error
+	lastUpdateConfig string // config value received by the most recent UpdateNotificationChannel call
 }
 
 func newMockNotificationStore() *mockNotificationStore {
@@ -75,6 +76,7 @@ func (m *mockNotificationStore) UpdateNotificationChannel(_ context.Context, ch 
 	if !ok {
 		return nil, store.ErrNotFound
 	}
+	m.lastUpdateConfig = ch.Config // capture before any post-call mutation
 	ch.CreatedAt = existing.CreatedAt
 	ch.CreatedBy = existing.CreatedBy
 	ch.ChannelType = existing.ChannelType
@@ -518,5 +520,114 @@ func TestNotificationHandler_SetSubscriptions_InvalidEntry(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+// TestNotificationHandler_CreateChannel_Unauthenticated verifies that an
+// unauthenticated caller (nil claims) receives 401 from requireAdmin.
+func TestNotificationHandler_CreateChannel_Unauthenticated(t *testing.T) {
+	mock := newMockNotificationStore()
+	// claimsGetter("") returns nil claims — simulates unauthenticated request.
+	h := handler.NewNotificationHandler(mock, nil, claimsGetter(""))
+	srv := newNotificationRouter(h)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]any{
+		"channel_type": "email", "name": "Test", "config": "{}",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/notification-channels", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+// TestNotificationHandler_UpdateChannel_Unauthenticated verifies requireAdmin
+// blocks unauthenticated callers on UpdateChannel.
+func TestNotificationHandler_UpdateChannel_Unauthenticated(t *testing.T) {
+	mock := newMockNotificationStore()
+	ch := &store.NotificationChannel{
+		ChannelID:   "ch-test",
+		ChannelType: "email",
+		Name:        "test",
+		Config:      `{"host":"smtp"}`,
+		Enabled:     true,
+	}
+	mock.channels[ch.ChannelID] = ch
+
+	h := handler.NewNotificationHandler(mock, nil, claimsGetter(""))
+	srv := newNotificationRouter(h)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]any{"name": "new", "config": `{"host":"smtp"}`})
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/notification-channels/ch-test", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+// TestNotificationHandler_UpdateChannel_PreservesRedactedPassword verifies
+// that updating a channel config with "***" as the password value preserves
+// the original password stored in the channel (mergeRedactedConfig behaviour).
+func TestNotificationHandler_UpdateChannel_PreservesRedactedPassword(t *testing.T) {
+	mock := newMockNotificationStore()
+	originalConfig := `{"host":"smtp.example.com","password":"secret"}`
+	ch := &store.NotificationChannel{
+		ChannelID:   "ch-secret",
+		ChannelType: "email",
+		Name:        "original",
+		Config:      originalConfig,
+		Enabled:     true,
+		CreatedBy:   "user-1",
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	mock.channels[ch.ChannelID] = ch
+
+	// Admin user so requireAdmin passes.
+	h := handler.NewNotificationHandler(mock, nil, claimsGetter("user-1"))
+	srv := newNotificationRouter(h)
+	defer srv.Close()
+
+	// Send update with changed host but sentinel "***" for password.
+	updateBody, _ := json.Marshal(map[string]any{
+		"name":    "updated",
+		"config":  `{"host":"newhost","password":"***"}`,
+		"enabled": true,
+	})
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/notification-channels/ch-secret", bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Verify the config passed to UpdateNotificationChannel had host="newhost"
+	// and password="secret" (the original value, not the "***" sentinel).
+	var passedCfg map[string]any
+	if err := json.Unmarshal([]byte(mock.lastUpdateConfig), &passedCfg); err != nil {
+		t.Fatalf("unmarshal passed config: %v", err)
+	}
+	if passedCfg["host"] != "newhost" {
+		t.Errorf("host = %v, want newhost", passedCfg["host"])
+	}
+	if passedCfg["password"] != "secret" {
+		t.Errorf("password = %v, want secret (original preserved)", passedCfg["password"])
 	}
 }

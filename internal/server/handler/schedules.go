@@ -167,9 +167,16 @@ func (h *ScheduleHandler) authorizeScheduleByID(w http.ResponseWriter, r *http.R
 // ListAllSchedules handles GET /api/v1/schedules.
 // Non-admin users only see schedules belonging to their own jobs.
 func (h *ScheduleHandler) ListAllSchedules(w http.ResponseWriter, r *http.Request) {
-	userID := ""
-	if c := h.claims(r); c != nil && c.Role != "admin" {
-		userID = c.UserID
+	var userID string
+	if h.getClaims != nil {
+		c := h.claims(r)
+		if c == nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if c.Role != "admin" {
+			userID = c.UserID
+		}
 	}
 	schedules, err := h.store.ListAllSchedules(r.Context(), userID)
 	if err != nil {
