@@ -30,9 +30,11 @@ type TestServer struct {
 	Auth   *auth.Service
 }
 
-// NewTestServer creates a fully-wired test HTTP server backed by a real
-// SQLite database. It replicates the production wiring from cmd/server/main.go
-// but omits gRPC, WebSocket, and background workers.
+// NewTestServer creates a test HTTP server backed by a real SQLite database.
+// It wires a subset of the production stack (auth, job/template/session/user
+// handlers, machine endpoints) but omits gRPC, WebSocket, event bus fanout,
+// background workers, and some handlers (webhooks, triggers, schedules,
+// credentials, provisioning, runs). Add handlers as needed for new tests.
 //
 // The caller should call ts.Close() (or use t.Cleanup) when done.
 func NewTestServer(t *testing.T) *TestServer {
