@@ -24,6 +24,7 @@ export function useCreateTrigger() {
       triggersApi.create(jobId, params),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }
@@ -35,6 +36,7 @@ export function useUpdateTrigger() {
       triggersApi.update(triggerId, params),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }
@@ -46,6 +48,7 @@ export function useToggleTrigger() {
       triggersApi.toggle(triggerId),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }
@@ -57,6 +60,7 @@ export function useDeleteTrigger() {
       triggersApi.delete(triggerId),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ['triggers', variables.jobId] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }

@@ -38,6 +38,7 @@ export interface SMTPConfig {
   password: string;
   from: string;
   to: string;
+  tls: boolean;
 }
 
 export interface TelegramConfig {
