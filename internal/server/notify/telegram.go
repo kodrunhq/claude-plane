@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 )
@@ -56,7 +57,7 @@ func (n *TelegramNotifier) Send(ctx context.Context, channelConfig string, subje
 		return fmt.Errorf("telegram chat_id is required")
 	}
 
-	text := fmt.Sprintf("<b>%s</b>\n%s", subject, body)
+	text := fmt.Sprintf("<b>%s</b>\n%s", html.EscapeString(subject), html.EscapeString(body))
 
 	payload := map[string]any{
 		"chat_id":    cfg.ChatID,

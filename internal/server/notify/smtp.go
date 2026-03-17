@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/smtp"
 	"strings"
@@ -75,7 +76,7 @@ func (*SMTPNotifier) Send(_ context.Context, channelConfig string, subject, body
 	})
 	if renderErr != nil {
 		// Fall back to plain text body wrapped in a pre element.
-		htmlBody = "<pre>" + body + "</pre>"
+		htmlBody = "<pre>" + html.EscapeString(body) + "</pre>"
 	}
 
 	msg := fmt.Sprintf(

@@ -119,6 +119,21 @@ func mergeRedactedConfig(existingConfig, incomingConfig string) string {
 	return string(merged)
 }
 
+// requireAdmin checks that the request comes from an admin user. It writes an
+// error response and returns false if the caller is not an admin.
+func (h *NotificationHandler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	c := h.getClaims(r)
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	if c.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return false
+	}
+	return true
+}
+
 // --- Handlers ---
 
 // ListChannels handles GET /api/v1/notification-channels.
@@ -141,11 +156,10 @@ func (h *NotificationHandler) ListChannels(w http.ResponseWriter, r *http.Reques
 
 // CreateChannel handles POST /api/v1/notification-channels.
 func (h *NotificationHandler) CreateChannel(w http.ResponseWriter, r *http.Request) {
-	claims := h.getClaims(r)
-	if claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+	if !h.requireAdmin(w, r) {
 		return
 	}
+	claims := h.getClaims(r)
 
 	var req createChannelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -185,6 +199,7 @@ func (h *NotificationHandler) CreateChannel(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	created.Config = redactConfig(created.Config)
 	writeJSON(w, http.StatusCreated, created)
 }
 
@@ -207,6 +222,9 @@ func (h *NotificationHandler) GetChannel(w http.ResponseWriter, r *http.Request)
 
 // UpdateChannel handles PUT /api/v1/notification-channels/{channelID}.
 func (h *NotificationHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "channelID")
 
 	existing, err := h.store.GetNotificationChannel(r.Context(), id)
@@ -262,11 +280,15 @@ func (h *NotificationHandler) UpdateChannel(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	updated.Config = redactConfig(updated.Config)
 	writeJSON(w, http.StatusOK, updated)
 }
 
 // DeleteChannel handles DELETE /api/v1/notification-channels/{channelID}.
 func (h *NotificationHandler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "channelID")
 
 	if err := h.store.DeleteNotificationChannel(r.Context(), id); err != nil {
@@ -282,6 +304,9 @@ func (h *NotificationHandler) DeleteChannel(w http.ResponseWriter, r *http.Reque
 
 // TestChannel handles POST /api/v1/notification-channels/{channelID}/test.
 func (h *NotificationHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "channelID")
 
 	ch, err := h.store.GetNotificationChannel(r.Context(), id)
