@@ -175,13 +175,16 @@ export function RunDetail() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
+      {/* Breadcrumb */}
+      <div className="px-4 pt-2 pb-1">
         <Breadcrumb items={[
           { label: 'Runs', to: '/runs' },
           { label: `Run ${run.run_id.slice(0, 8)}` },
         ]} />
+      </div>
 
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
         <button
           onClick={() => navigate('/runs')}
           className="text-text-secondary hover:text-text-primary transition-colors"
@@ -191,9 +194,8 @@ export function RunDetail() {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text-primary">
-              Run <CopyableId id={run.run_id} className="text-xs" />
-            </span>
+            <span className="text-sm font-medium text-text-primary">Run</span>
+            <CopyableId id={run.run_id} className="text-xs" />
             <RunStatusBadge status={run.status} />
             {triggerBadge}
           </div>

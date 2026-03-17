@@ -11,11 +11,19 @@ interface CopyableIdProps {
 export function CopyableId({ id, length = 8, className }: CopyableIdProps) {
   const [copied, setCopied] = useState(false);
 
+  if (!id) {
+    return <span className="font-mono text-text-secondary/40">—</span>;
+  }
+
   async function handleCopy(e: React.MouseEvent) {
     e.stopPropagation();
-    await copyToClipboard(id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await copyToClipboard(id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Copy failed silently — don't show false positive feedback
+    }
   }
 
   return (
