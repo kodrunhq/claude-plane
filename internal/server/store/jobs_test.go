@@ -800,6 +800,126 @@ func TestJobStore_UpdateRunStepAttempt(t *testing.T) {
 	}
 }
 
+func TestJobStore_CloneJob(t *testing.T) {
+	s := mustNewStore(t)
+	ctx := context.Background()
+
+	// Create source job with description and parameters.
+	job := mustCreateJob(t, s,
+		WithJobName("Original Job"),
+		WithJobDescription("A job to clone"),
+		WithJobParameters(`{"env":"prod"}`),
+		WithJobTimeout(600),
+		WithJobMaxConcurrentRuns(3),
+	)
+
+	// Add two steps.
+	stepA, err := s.CreateStep(ctx, CreateStepParams{
+		JobID: job.JobID, Name: "Step A", Prompt: "do A",
+		WorkingDir: "/work", Command: "claude", SortOrder: 0, OnFailure: "fail_run",
+	})
+	if err != nil {
+		t.Fatalf("CreateStep A: %v", err)
+	}
+	stepB, err := s.CreateStep(ctx, CreateStepParams{
+		JobID: job.JobID, Name: "Step B", Prompt: "do B",
+		WorkingDir: "/work", Command: "claude", SortOrder: 1, OnFailure: "fail_run",
+	})
+	if err != nil {
+		t.Fatalf("CreateStep B: %v", err)
+	}
+
+	// Add dependency: B depends on A.
+	if err := s.AddDependency(ctx, stepB.StepID, stepA.StepID); err != nil {
+		t.Fatalf("AddDependency: %v", err)
+	}
+
+	// Clone with default name.
+	cloned, err := s.CloneJob(ctx, job.JobID, "")
+	if err != nil {
+		t.Fatalf("CloneJob: %v", err)
+	}
+
+	// Verify new job has different ID but same metadata.
+	if cloned.Job.JobID == job.JobID {
+		t.Error("cloned job should have a different ID")
+	}
+	if cloned.Job.Name != "Original Job (copy)" {
+		t.Errorf("Name = %q, want %q", cloned.Job.Name, "Original Job (copy)")
+	}
+	if cloned.Job.Description != "A job to clone" {
+		t.Errorf("Description = %q, want %q", cloned.Job.Description, "A job to clone")
+	}
+	if cloned.Job.Parameters != `{"env":"prod"}` {
+		t.Errorf("Parameters = %q, want %q", cloned.Job.Parameters, `{"env":"prod"}`)
+	}
+	if cloned.Job.TimeoutSeconds != 600 {
+		t.Errorf("TimeoutSeconds = %d, want 600", cloned.Job.TimeoutSeconds)
+	}
+	if cloned.Job.MaxConcurrentRuns != 3 {
+		t.Errorf("MaxConcurrentRuns = %d, want 3", cloned.Job.MaxConcurrentRuns)
+	}
+
+	// Verify steps.
+	if len(cloned.Steps) != 2 {
+		t.Fatalf("Steps count = %d, want 2", len(cloned.Steps))
+	}
+	for _, cs := range cloned.Steps {
+		if cs.StepID == stepA.StepID || cs.StepID == stepB.StepID {
+			t.Errorf("cloned step %q should have a new ID", cs.StepID)
+		}
+		if cs.JobID != cloned.Job.JobID {
+			t.Errorf("cloned step job_id = %q, want %q", cs.JobID, cloned.Job.JobID)
+		}
+	}
+	// Verify step config is preserved.
+	stepNames := map[string]bool{}
+	for _, cs := range cloned.Steps {
+		stepNames[cs.Name] = true
+	}
+	if !stepNames["Step A"] || !stepNames["Step B"] {
+		t.Errorf("expected steps named 'Step A' and 'Step B', got %v", stepNames)
+	}
+
+	// Verify dependency is remapped to new step IDs.
+	if len(cloned.Dependencies) != 1 {
+		t.Fatalf("Dependencies count = %d, want 1", len(cloned.Dependencies))
+	}
+	dep := cloned.Dependencies[0]
+	if dep.StepID == stepB.StepID || dep.DependsOn == stepA.StepID {
+		t.Error("dependency should reference new step IDs, not original ones")
+	}
+
+	// Verify the cloned job is independently readable from the store.
+	fromStore, err := s.GetJob(ctx, cloned.Job.JobID)
+	if err != nil {
+		t.Fatalf("GetJob cloned: %v", err)
+	}
+	if len(fromStore.Steps) != 2 {
+		t.Errorf("GetJob steps = %d, want 2", len(fromStore.Steps))
+	}
+	if len(fromStore.Dependencies) != 1 {
+		t.Errorf("GetJob deps = %d, want 1", len(fromStore.Dependencies))
+	}
+
+	// Clone with custom name.
+	cloned2, err := s.CloneJob(ctx, job.JobID, "My Custom Clone")
+	if err != nil {
+		t.Fatalf("CloneJob custom name: %v", err)
+	}
+	if cloned2.Job.Name != "My Custom Clone" {
+		t.Errorf("custom clone Name = %q, want %q", cloned2.Job.Name, "My Custom Clone")
+	}
+}
+
+func TestJobStore_CloneJob_NotFound(t *testing.T) {
+	s := mustNewStore(t)
+	_, err := s.CloneJob(context.Background(), "nonexistent-id", "")
+	if err == nil {
+		t.Error("expected error for nonexistent job")
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
 }

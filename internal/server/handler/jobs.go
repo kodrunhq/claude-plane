@@ -92,6 +92,8 @@ func RegisterJobRoutes(r chi.Router, h *JobHandler) {
 	r.Put("/api/v1/jobs/{jobID}", h.UpdateJob)
 	r.Delete("/api/v1/jobs/{jobID}", h.DeleteJob)
 
+	r.Post("/api/v1/jobs/{jobID}/clone", h.CloneJob)
+
 	r.Post("/api/v1/jobs/{jobID}/steps", h.AddStep)
 	r.Put("/api/v1/jobs/{jobID}/steps/{stepID}", h.UpdateStep)
 	r.Delete("/api/v1/jobs/{jobID}/steps/{stepID}", h.DeleteStep)
@@ -393,6 +395,32 @@ func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// cloneJobRequest is the optional JSON body for POST /api/v1/jobs/{jobID}/clone.
+type cloneJobRequest struct {
+	Name string `json:"name"`
+}
+
+// CloneJob handles POST /api/v1/jobs/{jobID}/clone.
+// Duplicates the job with all steps and dependencies under a new name.
+func (h *JobHandler) CloneJob(w http.ResponseWriter, r *http.Request) {
+	detail := h.authorizeJobByID(w, r)
+	if detail == nil {
+		return
+	}
+
+	var req cloneJobRequest
+	// Body is optional; ignore decode errors for empty bodies.
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	cloned, err := h.store.CloneJob(r.Context(), detail.Job.JobID, req.Name)
+	if err != nil {
+		slog.Error("clone job failed", "error", err, "job_id", detail.Job.JobID)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, cloned)
 }
 
 // addStepRequest is the JSON body for POST /api/v1/jobs/{jobID}/steps.

@@ -37,6 +37,15 @@ export function useUpdateJob() {
   });
 }
 
+export function useCloneJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name?: string }) =>
+      jobsApi.clone(id, name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  });
+}
+
 export function useDeleteJob() {
   const qc = useQueryClient();
   return useMutation({

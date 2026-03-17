@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Play, Trash2, AlertCircle, RefreshCw, Search } from 'lucide-react';
-import { useJobs, useDeleteJob, useTriggerRun } from '../hooks/useJobs.ts';
+import { Plus, Play, Trash2, AlertCircle, RefreshCw, Search, CopyPlus } from 'lucide-react';
+import { useJobs, useDeleteJob, useTriggerRun, useCloneJob } from '../hooks/useJobs.ts';
 import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
@@ -53,6 +53,7 @@ export function JobsPage() {
   const navigate = useNavigate();
   const { data: jobs, isLoading, error, refetch } = useJobs();
   const triggerRun = useTriggerRun();
+  const cloneJob = useCloneJob();
   const deleteJob = useDeleteJob();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,6 +81,17 @@ export function JobsPage() {
       navigate(`/runs/${run.run_id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to start run');
+    }
+  }
+
+  async function handleClone(e: React.MouseEvent, job: Job) {
+    e.stopPropagation();
+    try {
+      const cloned = await cloneJob.mutateAsync({ id: job.job_id });
+      toast.success('Job duplicated');
+      navigate(`/jobs/${cloned.job.job_id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate job');
     }
   }
 
@@ -233,6 +245,15 @@ export function JobsPage() {
                     >
                       <Play size={14} />
                       Run
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Duplicate job ${job.name}`}
+                      onClick={(e) => handleClone(e, job)}
+                      className="p-1.5 rounded-md text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors"
+                      title="Duplicate"
+                    >
+                      <CopyPlus size={14} />
                     </button>
                     <button
                       type="button"

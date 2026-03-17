@@ -227,6 +227,94 @@ func TestJobHandler_DeleteJob(t *testing.T) {
 	}
 }
 
+func TestJobHandler_CloneJob(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	// Create a job with a step
+	body, _ := json.Marshal(map[string]string{"name": "Clone Source", "description": "desc"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	stepBody, _ := json.Marshal(map[string]interface{}{"name": "S1", "prompt": "do thing"})
+	stepResp, _ := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/steps", "application/json", bytes.NewReader(stepBody))
+	stepResp.Body.Close()
+
+	// Clone with default name
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/clone", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	var cloned store.JobDetail
+	json.NewDecoder(resp.Body).Decode(&cloned)
+	if cloned.Job.JobID == "" {
+		t.Error("expected job_id in response")
+	}
+	if cloned.Job.JobID == created.JobID {
+		t.Error("cloned job should have different ID")
+	}
+	if cloned.Job.Name != "Clone Source (copy)" {
+		t.Errorf("expected name 'Clone Source (copy)', got %q", cloned.Job.Name)
+	}
+	if len(cloned.Steps) != 1 {
+		t.Errorf("expected 1 step, got %d", len(cloned.Steps))
+	}
+}
+
+func TestJobHandler_CloneJob_WithName(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"name": "Source"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	cloneBody, _ := json.Marshal(map[string]string{"name": "My Clone"})
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/clone", "application/json", bytes.NewReader(cloneBody))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	var cloned store.JobDetail
+	json.NewDecoder(resp.Body).Decode(&cloned)
+	if cloned.Job.Name != "My Clone" {
+		t.Errorf("expected name 'My Clone', got %q", cloned.Job.Name)
+	}
+}
+
+func TestJobHandler_CloneJob_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/nonexistent-id/clone", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestJobHandler_AddStep(t *testing.T) {
 	s := newTestStore(t)
 	srv, _ := newJobRouter(t, s)
