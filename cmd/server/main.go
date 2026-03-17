@@ -214,6 +214,7 @@ func newServeCmd() *cobra.Command {
 						ResponseCode: d.ResponseCode,
 						LastError:    d.LastError,
 						NextRetryAt:  d.NextRetryAt,
+						Payload:      d.Payload,
 					})
 				},
 				UpdateDeliveryFn: func(c context.Context, d event.WebhookDelivery) error {
@@ -226,6 +227,7 @@ func newServeCmd() *cobra.Command {
 						ResponseCode: d.ResponseCode,
 						LastError:    d.LastError,
 						NextRetryAt:  d.NextRetryAt,
+						Payload:      d.Payload,
 					})
 				},
 				PendingDeliveriesFn: func(c context.Context) ([]event.WebhookDelivery, error) {
@@ -244,6 +246,7 @@ func newServeCmd() *cobra.Command {
 							ResponseCode: sd.ResponseCode,
 							LastError:    sd.LastError,
 							NextRetryAt:  sd.NextRetryAt,
+							Payload:      sd.Payload,
 						}
 					}
 					return result, nil
@@ -357,6 +360,13 @@ func newServeCmd() *cobra.Command {
 			// Template handler
 			templateHandler := handler.NewTemplateHandler(s, handlerClaimsGetter)
 			templateHandler.SetPublisher(eventBus)
+
+			// Wire event publishers into CRUD handlers.
+			jobHandler.SetPublisher(eventBus)
+			userHandler.SetPublisher(eventBus)
+			scheduleHandler.SetPublisher(eventBus)
+			credentialHandler.SetPublisher(eventBus)
+			webhookHandler.SetPublisher(eventBus)
 
 			// API key handler — uses JWT secret as HMAC signing key
 			apiKeySigningKey := []byte(cfg.Auth.JWTSecret)

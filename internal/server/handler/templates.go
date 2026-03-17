@@ -58,11 +58,11 @@ func (h *TemplateHandler) authorizeTemplate(w http.ResponseWriter, r *http.Reque
 }
 
 // publish fires an event if a publisher is configured. Errors are logged but not propagated.
-func (h *TemplateHandler) publish(eventType, templateID, userID string) {
+func (h *TemplateHandler) publish(eventType, templateID, userID, templateName string) {
 	if h.publisher == nil {
 		return
 	}
-	evt := event.NewTemplateEvent(eventType, templateID, userID)
+	evt := event.NewTemplateEvent(eventType, templateID, userID, templateName)
 	if err := h.publisher.Publish(context.Background(), evt); err != nil {
 		slog.Warn("failed to publish template event", "type", eventType, "template_id", templateID, "error", err)
 	}
@@ -160,7 +160,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.publish(event.TypeTemplateCreated, created.TemplateID, userID)
+	h.publish(event.TypeTemplateCreated, created.TemplateID, userID, created.Name)
 	writeJSON(w, http.StatusCreated, created)
 }
 
@@ -315,7 +315,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.publish(event.TypeTemplateUpdated, templateID, existing.UserID)
+	h.publish(event.TypeTemplateUpdated, templateID, existing.UserID, updated.Name)
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -344,7 +344,7 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.publish(event.TypeTemplateDeleted, templateID, existing.UserID)
+	h.publish(event.TypeTemplateDeleted, templateID, existing.UserID, existing.Name)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -370,7 +370,7 @@ func (h *TemplateHandler) Clone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.publish(event.TypeTemplateCreated, cloned.TemplateID, existing.UserID)
+	h.publish(event.TypeTemplateCreated, cloned.TemplateID, existing.UserID, cloned.Name)
 	writeJSON(w, http.StatusCreated, cloned)
 }
 

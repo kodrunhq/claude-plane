@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
@@ -32,11 +34,29 @@ var paramKeyRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 type JobHandler struct {
 	store     store.JobStoreIface
 	getClaims ClaimsGetter
+	publisher event.Publisher
 }
 
 // NewJobHandler creates a new JobHandler.
 func NewJobHandler(s store.JobStoreIface, getClaims ClaimsGetter) *JobHandler {
 	return &JobHandler{store: s, getClaims: getClaims}
+}
+
+// SetPublisher configures the event publisher for job lifecycle events.
+func (h *JobHandler) SetPublisher(p event.Publisher) {
+	h.publisher = p
+}
+
+// publishJobEvent fires a job lifecycle event if a publisher is configured.
+// Errors are logged but not propagated.
+func (h *JobHandler) publishJobEvent(eventType, jobID, jobName, userID string) {
+	if h.publisher == nil {
+		return
+	}
+	evt := event.NewJobEvent(eventType, jobID, jobName, userID)
+	if err := h.publisher.Publish(context.Background(), evt); err != nil {
+		slog.Warn("failed to publish job event", "type", eventType, "job_id", jobID, "error", err)
+	}
 }
 
 // claims returns the current user's claims, or nil if no getter is configured.
@@ -269,6 +289,7 @@ func (h *JobHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, job)
+	h.publishJobEvent(event.TypeJobCreated, job.JobID, job.Name, userID)
 }
 
 // ListJobs handles GET /api/v1/jobs.
@@ -378,6 +399,7 @@ func (h *JobHandler) UpdateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
+	h.publishJobEvent(event.TypeJobUpdated, job.JobID, job.Name, detail.Job.UserID)
 }
 
 // DeleteJob handles DELETE /api/v1/jobs/{jobID}.
@@ -395,6 +417,7 @@ func (h *JobHandler) DeleteJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	h.publishJobEvent(event.TypeJobDeleted, detail.Job.JobID, detail.Job.Name, detail.Job.UserID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

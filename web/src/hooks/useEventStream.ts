@@ -17,6 +17,19 @@ import {
   TEMPLATE_CREATED,
   TEMPLATE_UPDATED,
   TEMPLATE_DELETED,
+  JOB_CREATED,
+  JOB_UPDATED,
+  JOB_DELETED,
+  USER_CREATED,
+  USER_DELETED,
+  SCHEDULE_CREATED,
+  SCHEDULE_PAUSED,
+  SCHEDULE_RESUMED,
+  SCHEDULE_DELETED,
+  CREDENTIAL_CREATED,
+  CREDENTIAL_DELETED,
+  WEBHOOK_CREATED,
+  WEBHOOK_DELETED,
 } from '../constants/eventTypes.ts';
 
 /** Wire format from WSFanout (internal/server/event/ws_fanout.go). */
@@ -95,6 +108,29 @@ export function useEventStream() {
             case TEMPLATE_UPDATED:
             case TEMPLATE_DELETED:
               queryClient.invalidateQueries({ queryKey: ['templates'] });
+              break;
+            case JOB_CREATED:
+            case JOB_UPDATED:
+            case JOB_DELETED:
+              queryClient.invalidateQueries({ queryKey: ['jobs'] });
+              break;
+            case USER_CREATED:
+            case USER_DELETED:
+              queryClient.invalidateQueries({ queryKey: ['users'] });
+              break;
+            case SCHEDULE_CREATED:
+            case SCHEDULE_PAUSED:
+            case SCHEDULE_RESUMED:
+            case SCHEDULE_DELETED:
+              queryClient.invalidateQueries({ queryKey: ['schedules'] });
+              break;
+            case CREDENTIAL_CREATED:
+            case CREDENTIAL_DELETED:
+              queryClient.invalidateQueries({ queryKey: ['credentials'] });
+              break;
+            case WEBHOOK_CREATED:
+            case WEBHOOK_DELETED:
+              queryClient.invalidateQueries({ queryKey: ['webhooks'] });
               break;
           }
         } catch {

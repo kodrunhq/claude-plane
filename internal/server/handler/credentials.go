@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -25,6 +27,24 @@ type CredentialHandler struct {
 	store         CredentialStore
 	getClaims     ClaimsGetter
 	encryptionKey []byte
+	publisher     event.Publisher
+}
+
+// SetPublisher configures the event publisher for credential lifecycle events.
+func (h *CredentialHandler) SetPublisher(p event.Publisher) {
+	h.publisher = p
+}
+
+// publishCredentialEvent fires a credential lifecycle event if a publisher is configured.
+// Errors are logged but not propagated.
+func (h *CredentialHandler) publishCredentialEvent(eventType, credentialID, credentialName, userID string) {
+	if h.publisher == nil {
+		return
+	}
+	evt := event.NewCredentialEvent(eventType, credentialID, credentialName, userID)
+	if err := h.publisher.Publish(context.Background(), evt); err != nil {
+		slog.Warn("failed to publish credential event", "type", eventType, "credential_id", credentialID, "error", err)
+	}
 }
 
 // NewCredentialHandler creates a new CredentialHandler.
@@ -146,6 +166,7 @@ func (h *CredentialHandler) CreateCredential(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusCreated, toCredentialResponse(*created))
+	h.publishCredentialEvent(event.TypeCredentialCreated, created.CredentialID, created.Name, c.UserID)
 }
 
 // DeleteCredential handles DELETE /api/v1/credentials/{credentialID}.
@@ -184,5 +205,6 @@ func (h *CredentialHandler) DeleteCredential(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	h.publishCredentialEvent(event.TypeCredentialDeleted, credentialID, existing.Name, existing.UserID)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -19,6 +19,7 @@ export interface WebhookDelivery {
   response_code?: number;
   last_error?: string;
   next_retry_at?: string;
+  payload?: string;
   created_at: string;
   updated_at: string;
 }
@@ -45,13 +46,32 @@ export const WEBHOOK_EVENTS = [
   'run.completed',
   'run.failed',
   'run.cancelled',
+  'run.step.completed',
+  'run.step.failed',
   'session.started',
   'session.exited',
+  'session.terminated',
   'machine.connected',
   'machine.disconnected',
   'trigger.cron',
   'trigger.webhook',
   'trigger.job_completed',
+  'template.created',
+  'template.updated',
+  'template.deleted',
+  'job.created',
+  'job.updated',
+  'job.deleted',
+  'user.created',
+  'user.deleted',
+  'schedule.created',
+  'schedule.paused',
+  'schedule.resumed',
+  'schedule.deleted',
+  'credential.created',
+  'credential.deleted',
+  'webhook.created',
+  'webhook.deleted',
 ] as const;
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];

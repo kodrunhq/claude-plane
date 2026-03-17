@@ -149,7 +149,7 @@ func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) e
 	}
 
 	cm.logger.Info("agent registered", "machine_id", machineID, "max_sessions", agent.MaxSessions)
-	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineConnected, machineID))
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineConnected, machineID, ""))
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (cm *ConnectionManager) Disconnect(machineID string) {
 	}
 
 	cm.logger.Info("agent disconnected", "machine_id", machineID)
-	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID))
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, ""))
 }
 
 // GetAgent returns the ConnectedAgent for the given machineID, or nil if not connected.

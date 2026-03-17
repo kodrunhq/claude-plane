@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { WEBHOOK_EVENTS } from '../../types/webhook.ts';
+import { EVENT_GROUPS } from '../../constants/eventTypes.ts';
 import type { Webhook, CreateWebhookParams, UpdateWebhookParams } from '../../types/webhook.ts';
 
 interface WebhookFormProps {
@@ -8,25 +9,6 @@ interface WebhookFormProps {
   onCancel: () => void;
   submitting?: boolean;
 }
-
-const EVENT_GROUPS: { label: string; events: string[] }[] = [
-  {
-    label: 'Runs',
-    events: ['run.created', 'run.started', 'run.completed', 'run.failed', 'run.cancelled'],
-  },
-  {
-    label: 'Sessions',
-    events: ['session.started', 'session.exited'],
-  },
-  {
-    label: 'Machines',
-    events: ['machine.connected', 'machine.disconnected'],
-  },
-  {
-    label: 'Triggers',
-    events: ['trigger.cron', 'trigger.webhook', 'trigger.job_completed'],
-  },
-];
 
 export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }: WebhookFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
