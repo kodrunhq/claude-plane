@@ -9,6 +9,14 @@ export function useCredentials() {
   });
 }
 
+export function useCredentialStatus() {
+  return useQuery({
+    queryKey: ['credentials', 'status'],
+    queryFn: () => credentialsApi.status(),
+    staleTime: 5 * 60 * 1000, // status rarely changes, cache for 5 min
+  });
+}
+
 export function useCreateCredential() {
   const qc = useQueryClient();
   return useMutation({
