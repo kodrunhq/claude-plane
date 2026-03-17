@@ -32,13 +32,19 @@ type ScheduleReloader interface {
 	RemoveSchedule(scheduleID string)
 }
 
+// ScheduleRunCreator is the narrow interface for creating job runs from schedule triggers.
+type ScheduleRunCreator interface {
+	CreateRun(ctx context.Context, jobID string, triggerType string, params map[string]string, triggerDetail ...string) (*store.Run, error)
+}
+
 // ScheduleHandler handles REST endpoints for cron schedule CRUD.
 type ScheduleHandler struct {
-	store     ScheduleCRUDStore
-	jobStore  store.JobStoreIface
-	scheduler ScheduleReloader
-	getClaims ClaimsGetter
-	publisher event.Publisher
+	store      ScheduleCRUDStore
+	jobStore   store.JobStoreIface
+	scheduler  ScheduleReloader
+	runCreator ScheduleRunCreator
+	getClaims  ClaimsGetter
+	publisher  event.Publisher
 }
 
 // SetPublisher configures the event publisher for schedule lifecycle events.
@@ -73,6 +79,11 @@ func NewScheduleHandler(
 	}
 }
 
+// SetRunCreator configures the run creator for manual schedule triggers.
+func (h *ScheduleHandler) SetRunCreator(rc ScheduleRunCreator) {
+	h.runCreator = rc
+}
+
 // RegisterScheduleRoutes mounts all schedule-related routes on the given router.
 func RegisterScheduleRoutes(r chi.Router, h *ScheduleHandler) {
 	r.Get("/api/v1/schedules", h.ListAllSchedules)
@@ -83,6 +94,7 @@ func RegisterScheduleRoutes(r chi.Router, h *ScheduleHandler) {
 	r.Delete("/api/v1/schedules/{scheduleID}", h.DeleteSchedule)
 	r.Post("/api/v1/schedules/{scheduleID}/pause", h.PauseSchedule)
 	r.Post("/api/v1/schedules/{scheduleID}/resume", h.ResumeSchedule)
+	r.Post("/api/v1/schedules/{scheduleID}/trigger", h.TriggerSchedule)
 }
 
 // createScheduleRequest is the JSON body for POST /api/v1/jobs/{jobID}/schedules.
@@ -391,4 +403,30 @@ func (h *ScheduleHandler) setEnabled(w http.ResponseWriter, r *http.Request, ena
 	}
 	writeJSON(w, http.StatusOK, result)
 	h.publishScheduleEvent(eventType, sc.ScheduleID, sc.JobID, jobName, sc.CronExpr)
+}
+
+// TriggerSchedule handles POST /api/v1/schedules/{scheduleID}/trigger.
+// Creates a new run for the schedule's job with trigger_type "manual_schedule".
+func (h *ScheduleHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request) {
+	sc := h.authorizeScheduleByID(w, r)
+	if sc == nil {
+		return
+	}
+
+	if h.runCreator == nil {
+		writeError(w, http.StatusInternalServerError, "run creator not configured")
+		return
+	}
+
+	run, err := h.runCreator.CreateRun(r.Context(), sc.JobID, "manual_schedule", nil)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, run)
 }
