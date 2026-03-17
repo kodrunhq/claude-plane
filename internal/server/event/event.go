@@ -1,3 +1,5 @@
+//go:generate go run ../../../cmd/generate-event-types/main.go
+
 // Package event provides the in-process event bus for claude-plane server.
 // Components publish typed events; other components subscribe using glob-style
 // patterns to react without direct coupling.
