@@ -20,12 +20,14 @@ import (
 
 type mockTriggerStore struct {
 	triggers map[string]*store.JobTrigger
+	jobNames map[string]string // jobID -> jobName
 	err      error
 }
 
 func newMockTriggerStore() *mockTriggerStore {
 	return &mockTriggerStore{
 		triggers: make(map[string]*store.JobTrigger),
+		jobNames: make(map[string]string),
 	}
 }
 
@@ -95,6 +97,24 @@ func (m *mockTriggerStore) GetJobTrigger(_ context.Context, triggerID string) (*
 	}
 	cp := *t
 	return &cp, nil
+}
+
+func (m *mockTriggerStore) ListAllTriggers(_ context.Context, _ string) ([]store.JobTriggerWithJob, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []store.JobTriggerWithJob
+	for _, t := range m.triggers {
+		jobName := m.jobNames[t.JobID]
+		if jobName == "" {
+			jobName = "job-" + t.JobID
+		}
+		result = append(result, store.JobTriggerWithJob{
+			JobTrigger: *t,
+			JobName:    jobName,
+		})
+	}
+	return result, nil
 }
 
 func (m *mockTriggerStore) DeleteJobTrigger(_ context.Context, triggerID string) error {
@@ -595,6 +615,103 @@ func TestTriggerHandler_ToggleTrigger_StoreError(t *testing.T) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST toggle: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+// --- ListAllTriggers tests ---
+
+func TestTriggerHandler_ListAllTriggers(t *testing.T) {
+	mock := newMockTriggerStore()
+	mock.triggers["t1"] = &store.JobTrigger{
+		TriggerID: "t1", JobID: "job-1", EventType: "run.completed",
+		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	mock.triggers["t2"] = &store.JobTrigger{
+		TriggerID: "t2", JobID: "job-2", EventType: "run.failed",
+		Enabled: false, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	mock.jobNames["job-1"] = "deploy-prod"
+	mock.jobNames["job-2"] = "run-tests"
+
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/triggers")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var triggers []struct {
+		TriggerID string `json:"trigger_id"`
+		JobName   string `json:"job_name"`
+		EventType string `json:"event_type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&triggers); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(triggers) != 2 {
+		t.Fatalf("expected 2 triggers, got %d", len(triggers))
+	}
+
+	// Verify job_name is populated for each trigger.
+	namesByID := make(map[string]string)
+	for _, tr := range triggers {
+		namesByID[tr.TriggerID] = tr.JobName
+	}
+	if namesByID["t1"] != "deploy-prod" {
+		t.Errorf("trigger t1 job_name = %q, want %q", namesByID["t1"], "deploy-prod")
+	}
+	if namesByID["t2"] != "run-tests" {
+		t.Errorf("trigger t2 job_name = %q, want %q", namesByID["t2"], "run-tests")
+	}
+}
+
+func TestTriggerHandler_ListAllTriggers_Empty(t *testing.T) {
+	mock := newMockTriggerStore()
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/triggers")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var triggers []store.JobTriggerWithJob
+	if err := json.NewDecoder(resp.Body).Decode(&triggers); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(triggers) != 0 {
+		t.Errorf("expected 0 triggers, got %d", len(triggers))
+	}
+}
+
+func TestTriggerHandler_ListAllTriggers_StoreError(t *testing.T) {
+	mock := newMockTriggerStore()
+	mock.err = context.DeadlineExceeded
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/triggers")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
 	}
 	defer resp.Body.Close()
 

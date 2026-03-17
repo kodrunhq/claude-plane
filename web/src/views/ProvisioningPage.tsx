@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { KeyRound, AlertCircle, RefreshCw } from 'lucide-react';
 import { useProvisioningTokens } from '../hooks/useProvisioning.ts';
 import { TokenGenerator } from '../components/provisioning/TokenGenerator.tsx';
@@ -33,7 +34,10 @@ export function ProvisioningPage() {
       <div>
         <h1 className="text-xl font-semibold text-text-primary">Provisioning</h1>
         <p className="text-sm text-text-secondary mt-0.5">
-          Generate one-time install tokens for new agent machines
+          Generate one-time install tokens for new agent machines.{' '}
+          <Link to="/docs/getting-started" className="text-accent-primary hover:underline">
+            How to install an agent
+          </Link>
         </p>
       </div>
 

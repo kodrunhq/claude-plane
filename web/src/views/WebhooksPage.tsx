@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, Link } from 'react-router';
 import { Plus, Webhook, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useWebhooks, useCreateWebhook, useUpdateWebhook } from '../hooks/useWebhooks.ts';
@@ -124,7 +124,14 @@ export function WebhooksPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-text-primary">Webhooks</h1>
+        <div>
+          <h1 className="text-xl font-semibold text-text-primary">Webhooks</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
+            <Link to="/docs/getting-started" className="text-accent-primary hover:underline">
+              Learn about webhook signing and integrations
+            </Link>
+          </p>
+        </div>
         <button
           onClick={openCreate}
           className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"

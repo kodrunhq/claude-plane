@@ -2,6 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { triggersApi } from '../api/triggers.ts';
 import type { CreateTriggerParams, UpdateTriggerParams } from '../types/trigger.ts';
 
+export function useAllTriggers() {
+  return useQuery({
+    queryKey: ['triggers', 'all'],
+    queryFn: () => triggersApi.listAll(),
+  });
+}
+
 export function useTriggers(jobId: string | undefined) {
   return useQuery({
     queryKey: ['triggers', jobId],
@@ -17,6 +24,7 @@ export function useCreateTrigger() {
       triggersApi.create(jobId, params),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }
@@ -28,6 +36,7 @@ export function useUpdateTrigger() {
       triggersApi.update(triggerId, params),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }
@@ -39,6 +48,7 @@ export function useToggleTrigger() {
       triggersApi.toggle(triggerId),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }
@@ -50,6 +60,7 @@ export function useDeleteTrigger() {
       triggersApi.delete(triggerId),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ['triggers', variables.jobId] });
+      qc.invalidateQueries({ queryKey: ['triggers', 'all'] });
     },
   });
 }

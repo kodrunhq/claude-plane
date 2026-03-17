@@ -13,10 +13,13 @@ import {
   KeyRound,
   Lock,
   Plug,
+  Zap,
+  Clock,
   Key,
   Search,
   Settings,
   LayoutGrid,
+  BookOpen,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -51,6 +54,8 @@ const navSections: NavSection[] = [
     title: 'Automation',
     items: [
       { to: '/webhooks', label: 'Webhooks', icon: Webhook },
+      { to: '/triggers', label: 'Triggers', icon: Zap },
+      { to: '/schedules', label: 'Schedules', icon: Clock },
       { to: '/connectors', label: 'Connectors', icon: Plug },
     ],
   },
@@ -68,6 +73,12 @@ const navSections: NavSection[] = [
       { to: '/users', label: 'Users', icon: Users },
       { to: '/provisioning', label: 'Provisioning', icon: KeyRound },
       { to: '/api-keys', label: 'API Keys', icon: Key },
+    ],
+  },
+  {
+    title: 'Help',
+    items: [
+      { to: '/docs', label: 'Documentation', icon: BookOpen },
     ],
   },
 ];

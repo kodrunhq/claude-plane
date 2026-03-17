@@ -176,6 +176,54 @@ func (s *Store) ListEnabledTriggers(ctx context.Context) ([]JobTrigger, error) {
 	return scanTriggers(rows)
 }
 
+// JobTriggerWithJob includes the parent job's name for display in global lists.
+type JobTriggerWithJob struct {
+	JobTrigger
+	JobName string `json:"job_name"`
+}
+
+// ListAllTriggers returns all triggers across all jobs, with job names.
+// When userID is non-empty, only triggers for jobs owned by that user are returned.
+func (s *Store) ListAllTriggers(ctx context.Context, userID string) ([]JobTriggerWithJob, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if userID != "" {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT t.trigger_id, t.job_id, t.event_type, COALESCE(t.filter, ''), t.enabled,
+			        t.created_at, t.updated_at, j.name as job_name
+			 FROM job_triggers t
+			 JOIN jobs j ON t.job_id = j.job_id
+			 WHERE j.user_id = ?
+			 ORDER BY t.created_at DESC`, userID)
+	} else {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT t.trigger_id, t.job_id, t.event_type, COALESCE(t.filter, ''), t.enabled,
+			        t.created_at, t.updated_at, j.name as job_name
+			 FROM job_triggers t
+			 JOIN jobs j ON t.job_id = j.job_id
+			 ORDER BY t.created_at DESC`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list all triggers: %w", err)
+	}
+	defer rows.Close()
+
+	var triggers []JobTriggerWithJob
+	for rows.Next() {
+		var t JobTriggerWithJob
+		if err := rows.Scan(
+			&t.TriggerID, &t.JobID, &t.EventType, &t.Filter, &t.Enabled,
+			&t.CreatedAt, &t.UpdatedAt, &t.JobName,
+		); err != nil {
+			return nil, fmt.Errorf("scan trigger: %w", err)
+		}
+		triggers = append(triggers, t)
+	}
+	return triggers, rows.Err()
+}
+
 // scanTriggers scans rows into a slice of JobTrigger.
 func scanTriggers(rows interface {
 	Next() bool

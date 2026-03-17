@@ -196,11 +196,7 @@ export function SettingsPage() {
           />
         )}
         {activeTab === 'notifications' && (
-          <NotificationsTab
-            preferences={preferences}
-            onSave={handleSave}
-            saving={updatePreferences.isPending}
-          />
+          <NotificationsTab />
         )}
         {activeTab === 'ui' && (
           <UIPreferencesTab
