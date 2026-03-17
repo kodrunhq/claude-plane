@@ -454,6 +454,16 @@ func (e *SessionStepExecutor) executeShellTask(
 	e.trackAndMonitor(ctx, runStep, sessionID, onComplete)
 }
 
+// stepTimeout returns the timeout duration for a run step.
+// If the step has a positive TimeoutSecondsSnapshot, that value is used;
+// otherwise the package-level defaultTimeout is returned.
+func stepTimeout(runStep store.RunStep) time.Duration {
+	if runStep.TimeoutSecondsSnapshot > 0 {
+		return time.Duration(runStep.TimeoutSecondsSnapshot) * time.Second
+	}
+	return defaultTimeout
+}
+
 // trackAndMonitor updates the run step to running, registers tracking state, and
 // starts the session monitor goroutine. Shared by both execution paths.
 func (e *SessionStepExecutor) trackAndMonitor(
@@ -484,7 +494,8 @@ func (e *SessionStepExecutor) trackAndMonitor(
 	e.sessionToStep[sessionID] = tracking
 	e.mu.Unlock()
 
-	go e.monitorSessionExit(monitorCtx, sessionID, runStep.MachineIDSnapshot)
+	timeout := stepTimeout(runStep)
+	go e.monitorSessionExit(monitorCtx, sessionID, runStep.MachineIDSnapshot, timeout)
 }
 
 // monitorSessionExit polls the session status until it reaches a terminal state,
@@ -493,11 +504,12 @@ func (e *SessionStepExecutor) monitorSessionExit(
 	ctx context.Context,
 	sessionID string,
 	machineID string,
+	timeout time.Duration,
 ) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	deadline := time.Now().Add(defaultTimeout)
+	deadline := time.Now().Add(timeout)
 	notFoundCount := 0
 
 	for {
@@ -516,7 +528,7 @@ func (e *SessionStepExecutor) monitorSessionExit(
 				e.logger.Warn("session timed out, sending kill",
 					"session_id", sessionID,
 					"machine_id", machineID,
-					"timeout", defaultTimeout,
+					"timeout", timeout,
 				)
 				e.sendKill(machineID, sessionID)
 				e.completeStep(sessionID, timeoutExitCode)
@@ -847,34 +859,6 @@ func (e *SessionStepExecutor) CleanupRunSessions(runID string) {
 			"machine_id", entry.machineID,
 		)
 		e.sendKill(entry.machineID, entry.sessionID)
-	}
-}
-
-// sendInput sends input data to a session via the agent.
-func (e *SessionStepExecutor) sendInput(machineID, sessionID string, data []byte) {
-	agent := e.connMgr.GetAgent(machineID)
-	if agent == nil {
-		e.logger.Warn("no agent to send input",
-			"machine_id", machineID,
-			"session_id", sessionID,
-		)
-		return
-	}
-
-	cmd := &pb.ServerCommand{
-		Command: &pb.ServerCommand_InputData{
-			InputData: &pb.InputDataCmd{
-				SessionId: sessionID,
-				Data:      data,
-			},
-		},
-	}
-	if err := agent.SendCommand(cmd); err != nil {
-		e.logger.Warn("failed to send input to agent",
-			"machine_id", machineID,
-			"session_id", sessionID,
-			"error", err,
-		)
 	}
 }
 

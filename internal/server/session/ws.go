@@ -20,6 +20,11 @@ import (
 // ErrAgentNotConnected is returned when no agent is available for a machine.
 var ErrAgentNotConnected = errors.New("agent not connected")
 
+// wsAcceptOptions restricts WebSocket upgrades to same-origin requests.
+var wsAcceptOptions = &websocket.AcceptOptions{
+	InsecureSkipVerify: false,
+}
+
 // wsControlMessage is a parsed text WebSocket frame (resize, auth, etc.).
 type wsControlMessage struct {
 	Type  string `json:"type"`
@@ -67,7 +72,7 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 				return
 			}
 
-			conn, err := websocket.Accept(w, r, nil)
+			conn, err := websocket.Accept(w, r, wsAcceptOptions)
 			if err != nil {
 				logger.Error("websocket upgrade failed", "error", err)
 				return
@@ -78,7 +83,7 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 		}
 
 		// --- First-message auth ---
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := websocket.Accept(w, r, wsAcceptOptions)
 		if err != nil {
 			logger.Error("websocket upgrade failed", "error", err)
 			return

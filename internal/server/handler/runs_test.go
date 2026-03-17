@@ -436,6 +436,102 @@ func TestRunHandler_ListRuns_LimitCapped(t *testing.T) {
 	}
 }
 
+func TestRunHandler_ListRuns_NonAdminScopedToOwnRuns(t *testing.T) {
+	s := newTestStore(t)
+	exec := newMockExecutor()
+	orch := orchestrator.NewOrchestrator(context.Background(), s, exec)
+
+	nonAdminClaims := func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "user-A", Role: "member"}
+	}
+
+	rh := handler.NewRunHandler(s, orch, nonAdminClaims)
+	jh := handler.NewJobHandler(s, nil)
+
+	r := chi.NewRouter()
+	handler.RegisterJobRoutes(r, jh)
+	handler.RegisterRunRoutes(r, rh)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	// Create a job (it will have empty UserID since JobHandler has no claims).
+	jobID, stepID := createJobWithStep(t, srv.URL)
+
+	// Trigger a run.
+	body, _ := json.Marshal(map[string]string{"trigger_type": "manual"})
+	triggerResp, _ := http.Post(srv.URL+"/api/v1/jobs/"+jobID+"/runs", "application/json", bytes.NewReader(body))
+	triggerResp.Body.Close()
+	exec.completeStep(stepID, 0)
+
+	// List runs without job_id: non-admin should only see their own.
+	resp, err := http.Get(srv.URL + "/api/v1/runs")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// The store was called with UserID="user-A", which scopes the results.
+	// Since the job was created without a user_id, this should return empty.
+	var runs []store.RunWithJobName
+	json.NewDecoder(resp.Body).Decode(&runs)
+	if len(runs) != 0 {
+		t.Errorf("expected 0 runs for user-A (scoped), got %d", len(runs))
+	}
+}
+
+func TestRunHandler_ListRuns_AdminSeesAll(t *testing.T) {
+	s := newTestStore(t)
+	exec := newMockExecutor()
+	orch := orchestrator.NewOrchestrator(context.Background(), s, exec)
+
+	adminClaims := func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-1", Role: "admin"}
+	}
+
+	rh := handler.NewRunHandler(s, orch, adminClaims)
+	jh := handler.NewJobHandler(s, nil)
+
+	r := chi.NewRouter()
+	handler.RegisterJobRoutes(r, jh)
+	handler.RegisterRunRoutes(r, rh)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	// Create two jobs with runs.
+	jobID1, stepID1 := createJobWithStep(t, srv.URL)
+	jobID2, stepID2 := createJobWithStep(t, srv.URL)
+
+	triggerAndComplete := func(jobID, stepID string) {
+		body, _ := json.Marshal(map[string]string{"trigger_type": "manual"})
+		resp, _ := http.Post(srv.URL+"/api/v1/jobs/"+jobID+"/runs", "application/json", bytes.NewReader(body))
+		resp.Body.Close()
+		exec.completeStep(stepID, 0)
+	}
+	triggerAndComplete(jobID1, stepID1)
+	triggerAndComplete(jobID2, stepID2)
+
+	// Admin lists all runs without job_id filter.
+	resp, err := http.Get(srv.URL + "/api/v1/runs")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var runs []store.RunWithJobName
+	json.NewDecoder(resp.Body).Decode(&runs)
+	if len(runs) != 2 {
+		t.Errorf("expected 2 runs for admin (sees all), got %d", len(runs))
+	}
+}
+
 func TestRunHandler_RetryStep_NonFailed(t *testing.T) {
 	srv, _, _, exec := newRunRouter(t)
 	defer srv.Close()
