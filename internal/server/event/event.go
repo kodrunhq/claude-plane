@@ -63,6 +63,7 @@ const (
 	// Webhook lifecycle events.
 	TypeWebhookCreated = "webhook.created"
 	TypeWebhookDeleted = "webhook.deleted"
+	TypeWebhookTest    = "webhook.test"
 )
 
 // Event is the envelope for all bus messages.

@@ -45,6 +45,12 @@ export function useDeleteWebhook() {
   });
 }
 
+export function useTestWebhookDelivery() {
+  return useMutation({
+    mutationFn: (id: string) => webhooksApi.testDelivery(id),
+  });
+}
+
 export function useWebhookDeliveries(webhookId: string | undefined) {
   return useQuery({
     queryKey: ['webhooks', webhookId, 'deliveries'],
