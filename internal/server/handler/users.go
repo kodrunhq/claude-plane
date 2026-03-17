@@ -19,6 +19,8 @@ type UserAdminStore interface {
 	GetUserByID(ctx context.Context, userID string) (*store.User, error)
 	CreateUser(user *store.User) error
 	UpdateUser(ctx context.Context, userID, displayName, role string) error
+	UpdatePassword(ctx context.Context, userID string, passwordHash string) error
+	UpdateDisplayName(ctx context.Context, userID, displayName string) error
 	DeleteUser(ctx context.Context, userID string) error
 }
 
@@ -34,9 +36,14 @@ func NewUserHandler(s UserAdminStore, getClaims ClaimsGetter) *UserHandler {
 }
 
 // RegisterUserRoutes mounts all user-management routes on the given router.
+// IMPORTANT: /users/me/* routes are registered before /{userID} routes so
+// Chi does not match "me" as a userID parameter.
 func RegisterUserRoutes(r chi.Router, h *UserHandler) {
+	r.Post("/api/v1/users/me/password", h.ChangePassword)
+	r.Put("/api/v1/users/me", h.UpdateProfile)
 	r.Get("/api/v1/users", h.ListUsers)
 	r.Post("/api/v1/users", h.CreateUser)
+	r.Post("/api/v1/users/{userID}/reset-password", h.ResetPassword)
 	r.Put("/api/v1/users/{userID}", h.UpdateUser)
 	r.Delete("/api/v1/users/{userID}", h.DeleteUser)
 }
@@ -202,6 +209,155 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated, err := h.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// changePasswordRequest is the JSON body for POST /api/v1/users/me/password.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// ChangePassword handles POST /api/v1/users/me/password (self-service password change).
+func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	c := h.getClaims(r)
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.CurrentPassword == "" {
+		writeError(w, http.StatusBadRequest, "current_password is required")
+		return
+	}
+	if req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "new_password is required")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+
+	user, err := h.store.GetUserByID(r.Context(), c.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	ok, err := store.VerifyPassword(req.CurrentPassword, user.PasswordHash)
+	if err != nil || !ok {
+		writeError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+
+	hash, err := store.HashPassword(req.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := h.store.UpdatePassword(r.Context(), c.UserID, hash); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// resetPasswordRequest is the JSON body for POST /api/v1/users/{userID}/reset-password.
+type resetPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+// ResetPassword handles POST /api/v1/users/{userID}/reset-password (admin-only).
+func (h *UserHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+
+	userID := chi.URLParam(r, "userID")
+
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "new_password is required")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+
+	// Verify user exists
+	if _, err := h.store.GetUserByID(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	hash, err := store.HashPassword(req.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := h.store.UpdatePassword(r.Context(), userID, hash); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// updateProfileRequest is the JSON body for PUT /api/v1/users/me.
+type updateProfileRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+// UpdateProfile handles PUT /api/v1/users/me (self-service profile edit).
+func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	c := h.getClaims(r)
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req updateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+
+	if err := h.store.UpdateDisplayName(r.Context(), c.UserID, req.DisplayName); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	updated, err := h.store.GetUserByID(r.Context(), c.UserID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
