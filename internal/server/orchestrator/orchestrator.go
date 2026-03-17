@@ -121,7 +121,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	if err != nil {
 		return nil, fmt.Errorf("create run: %w", err)
 	}
-	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCreated, run.RunID, jobID, store.StatusPending, triggerType))
+	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCreated, run.RunID, jobID, store.StatusPending, triggerType, job.Job.Name))
 
 	// Snapshot steps into run_steps
 	if err := o.store.InsertRunSteps(ctx, run.RunID, steps); err != nil {
@@ -137,6 +137,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	// Build and start DAGRunner
 	capturedJobID := jobID
 	capturedTriggerType := triggerType
+	capturedJobName := job.Job.Name
 	onComplete := func(runID string, status string) {
 		// Clean up shared sessions when the run finishes.
 		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
@@ -152,7 +153,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		if status == store.StatusFailed {
 			evType = event.TypeRunFailed
 		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType))
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType, capturedJobName))
 	}
 
 	// Build step name map from steps for template resolution
@@ -182,7 +183,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	if err := o.store.UpdateRunStatus(ctx, run.RunID, store.StatusRunning); err != nil {
 		slog.Warn("failed to mark run as running", "error", err, "run_id", run.RunID)
 	}
-	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunStarted, run.RunID, jobID, store.StatusRunning, triggerType))
+	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunStarted, run.RunID, jobID, store.StatusRunning, triggerType, job.Job.Name))
 
 	runner.Start(o.rootCtx)
 
@@ -329,6 +330,10 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 	// Build new DAGRunner from current DB state
 	rebuildJobID := detail.Run.JobID
 	rebuildTriggerType := detail.Run.TriggerType
+	rebuildJobName := ""
+	if jobDetail, err := o.store.GetJob(ctx, detail.Run.JobID); err == nil {
+		rebuildJobName = jobDetail.Job.Name
+	}
 	onComplete := func(runID string, status string) {
 		// Clean up shared sessions when the run finishes.
 		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
@@ -344,7 +349,7 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 		if status == store.StatusFailed {
 			evType = event.TypeRunFailed
 		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, rebuildTriggerType))
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, rebuildTriggerType, rebuildJobName))
 	}
 
 	// Build step name map
@@ -368,12 +373,10 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 
 	// Reconstruct job metadata from run data
 	jobMeta := JobMeta{
+		Name:        rebuildJobName,
 		RunID:       runID,
 		TriggerType: detail.Run.TriggerType,
 		StartTime:   detail.Run.CreatedAt.Format(time.RFC3339),
-	}
-	if jobDetail, err := o.store.GetJob(ctx, detail.Run.JobID); err == nil {
-		jobMeta.Name = jobDetail.Job.Name
 	}
 	// Populate RunNumber by counting existing runs for this job.
 	if existingRuns, err := o.store.ListRuns(ctx, detail.Run.JobID); err == nil {
@@ -450,7 +453,11 @@ func (o *Orchestrator) CancelRun(ctx context.Context, runID string) error {
 	}
 	cancelDetail, err := o.store.GetRunWithSteps(ctx, runID)
 	if err == nil {
-		o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCancelled, runID, cancelDetail.Run.JobID, store.StatusCancelled, cancelDetail.Run.TriggerType))
+		cancelJobName := ""
+		if cancelJob, jobErr := o.store.GetJob(ctx, cancelDetail.Run.JobID); jobErr == nil {
+			cancelJobName = cancelJob.Job.Name
+		}
+		o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCancelled, runID, cancelDetail.Run.JobID, store.StatusCancelled, cancelDetail.Run.TriggerType, cancelJobName))
 	}
 	return nil
 }

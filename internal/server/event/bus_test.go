@@ -330,7 +330,7 @@ func TestCloseDrainsPendingEvents(t *testing.T) {
 // --- Builder function tests ---
 
 func TestNewRunEvent(t *testing.T) {
-	ev := NewRunEvent(TypeRunCreated, "run-1", "job-2", "running", "manual")
+	ev := NewRunEvent(TypeRunCreated, "run-1", "job-2", "running", "manual", "")
 
 	if ev.EventID == "" {
 		t.Error("EventID must be populated")
@@ -363,7 +363,7 @@ func TestNewRunEvent(t *testing.T) {
 }
 
 func TestNewSessionEvent(t *testing.T) {
-	ev := NewSessionEvent(TypeSessionStarted, "sess-1", "machine-1")
+	ev := NewSessionEvent(TypeSessionStarted, "sess-1", "machine-1", "", "")
 
 	if ev.EventID == "" {
 		t.Error("EventID must be populated")
@@ -390,7 +390,7 @@ func TestNewSessionEvent(t *testing.T) {
 }
 
 func TestNewMachineEvent(t *testing.T) {
-	ev := NewMachineEvent(TypeMachineConnected, "machine-42")
+	ev := NewMachineEvent(TypeMachineConnected, "machine-42", "")
 
 	if ev.EventID == "" {
 		t.Error("EventID must be populated")
@@ -442,8 +442,8 @@ func TestNewTriggerEventNilPayload(t *testing.T) {
 }
 
 func TestBuilderEventIDsAreUnique(t *testing.T) {
-	ev1 := NewRunEvent(TypeRunCreated, "r1", "j1", "running", "manual")
-	ev2 := NewRunEvent(TypeRunCreated, "r1", "j1", "running", "manual")
+	ev1 := NewRunEvent(TypeRunCreated, "r1", "j1", "running", "manual", "")
+	ev2 := NewRunEvent(TypeRunCreated, "r1", "j1", "running", "manual", "")
 	if ev1.EventID == ev2.EventID {
 		t.Error("successive builder calls must produce distinct EventIDs")
 	}

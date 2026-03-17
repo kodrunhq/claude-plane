@@ -44,47 +44,194 @@ func FormatEvent(e client.Event) string {
 		return fmt.Sprintf("%v", v)
 	}
 
+	// nameOrID returns the value of nameKey if non-empty, otherwise falls back to idKey.
+	nameOrID := func(nameKey, idKey string) string {
+		if n := str(nameKey); n != "" {
+			return n
+		}
+		return str(idKey)
+	}
+
+	// optLine returns "\nLabel: `value`" if value is non-empty, or "" otherwise.
+	// Prevents empty backtick spans in Telegram messages.
+	optLine := func(label, value string) string {
+		if value == "" {
+			return ""
+		}
+		return fmt.Sprintf("\n%s: `%s`", label, escapeMarkdownV2(value))
+	}
+
 	switch e.Type {
+	// ---- session events ----
 	case "session.started":
-		return fmt.Sprintf(
-			"🟢 *Session started*\nMachine: `%s`\nSession: `%s`",
-			str("machine_id"), str("session_id"),
-		)
+		machine := nameOrID("machine_name", "machine_id")
+		msg := fmt.Sprintf("🟢 *Session started*\nMachine: `%s`\nSession: `%s`",
+			escapeMarkdownV2(machine), escapeMarkdownV2(str("session_id")))
+		if cmd := str("command"); cmd != "" {
+			msg += fmt.Sprintf("\nCommand: `%s`", escapeMarkdownV2(cmd))
+		}
+		return msg
 	case "session.exited":
-		return fmt.Sprintf(
-			"⚪ *Session exited*\nMachine: `%s`\nSession: `%s`",
-			str("machine_id"), str("session_id"),
-		)
+		machine := nameOrID("machine_name", "machine_id")
+		msg := fmt.Sprintf("⚪ *Session exited*\nMachine: `%s`\nSession: `%s`",
+			escapeMarkdownV2(machine), escapeMarkdownV2(str("session_id")))
+		if cmd := str("command"); cmd != "" {
+			msg += fmt.Sprintf("\nCommand: `%s`", escapeMarkdownV2(cmd))
+		}
+		return msg
 	case "session.terminated":
-		return fmt.Sprintf(
-			"🔴 *Session terminated*\nMachine: `%s`\nSession: `%s`",
-			str("machine_id"), str("session_id"),
-		)
+		machine := nameOrID("machine_name", "machine_id")
+		msg := fmt.Sprintf("🔴 *Session terminated*\nMachine: `%s`\nSession: `%s`",
+			escapeMarkdownV2(machine), escapeMarkdownV2(str("session_id")))
+		if cmd := str("command"); cmd != "" {
+			msg += fmt.Sprintf("\nCommand: `%s`", escapeMarkdownV2(cmd))
+		}
+		return msg
+
+	// ---- run events ----
 	case "run.created":
-		return fmt.Sprintf(
-			"📋 *Run created*\nJob: `%s`\nRun: `%s`\nTrigger: %s",
-			str("job_id"), str("run_id"), escapeMarkdownV2(str("trigger_type")),
-		)
+		job := nameOrID("job_name", "job_id")
+		msg := "📋 *Run created*"
+		msg += optLine("Job", job)
+		msg += fmt.Sprintf("\nRun: `%s`", escapeMarkdownV2(str("run_id")))
+		if t := str("trigger_type"); t != "" {
+			msg += fmt.Sprintf("\nTrigger: %s", escapeMarkdownV2(t))
+		}
+		return msg
+	case "run.started":
+		return fmt.Sprintf("▶️ *Run started*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
 	case "run.completed":
-		return fmt.Sprintf(
-			"✅ *Run completed*\nRun: `%s`",
-			str("run_id"),
-		)
+		return fmt.Sprintf("✅ *Run completed*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
 	case "run.failed":
-		return fmt.Sprintf(
-			"❌ *Run failed*\nRun: `%s`",
-			str("run_id"),
-		)
+		return fmt.Sprintf("❌ *Run failed*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
+	case "run.cancelled":
+		return fmt.Sprintf("🚫 *Run cancelled*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
+
+	// ---- run step events ----
+	case "run.step.completed":
+		return fmt.Sprintf("✅ *Step completed*%s%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Step", nameOrID("step_name", "step_id")),
+			escapeMarkdownV2(str("run_id")))
+	case "run.step.failed":
+		return fmt.Sprintf("❌ *Step failed*%s%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Step", nameOrID("step_name", "step_id")),
+			escapeMarkdownV2(str("run_id")))
+
+	// ---- machine events ----
 	case "machine.connected":
 		return fmt.Sprintf(
 			"🖥️ *Machine connected*\nMachine: `%s`",
-			str("machine_id"),
+			escapeMarkdownV2(nameOrID("display_name", "machine_id")),
 		)
 	case "machine.disconnected":
 		return fmt.Sprintf(
 			"⚠️ *Machine disconnected*\nMachine: `%s`",
-			str("machine_id"),
+			escapeMarkdownV2(nameOrID("display_name", "machine_id")),
 		)
+
+	// ---- template events ----
+	case "template.created":
+		return fmt.Sprintf(
+			"📄 *Template created*\nTemplate: `%s`",
+			escapeMarkdownV2(nameOrID("template_name", "template_id")),
+		)
+	case "template.updated":
+		return fmt.Sprintf(
+			"📄 *Template updated*\nTemplate: `%s`",
+			escapeMarkdownV2(nameOrID("template_name", "template_id")),
+		)
+	case "template.deleted":
+		return fmt.Sprintf(
+			"🗑️ *Template deleted*\nTemplate: `%s`",
+			escapeMarkdownV2(nameOrID("template_name", "template_id")),
+		)
+
+	// ---- job events ----
+	case "job.created":
+		return fmt.Sprintf(
+			"📋 *Job created*\nJob: `%s`",
+			escapeMarkdownV2(nameOrID("job_name", "job_id")),
+		)
+	case "job.updated":
+		return fmt.Sprintf(
+			"📋 *Job updated*\nJob: `%s`",
+			escapeMarkdownV2(nameOrID("job_name", "job_id")),
+		)
+	case "job.deleted":
+		return fmt.Sprintf(
+			"🗑️ *Job deleted*\nJob: `%s`",
+			escapeMarkdownV2(nameOrID("job_name", "job_id")),
+		)
+
+	// ---- user events ----
+	case "user.created":
+		return fmt.Sprintf(
+			"👤 *User created*\nUser: `%s`",
+			escapeMarkdownV2(nameOrID("email", "user_id")),
+		)
+	case "user.deleted":
+		return fmt.Sprintf(
+			"👤 *User deleted*\nUser: `%s`",
+			escapeMarkdownV2(nameOrID("email", "user_id")),
+		)
+
+	// ---- schedule events ----
+	case "schedule.created":
+		return fmt.Sprintf("🕐 *Schedule created*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
+	case "schedule.paused":
+		return fmt.Sprintf("⏸️ *Schedule paused*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
+	case "schedule.resumed":
+		return fmt.Sprintf("▶️ *Schedule resumed*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
+	case "schedule.deleted":
+		return fmt.Sprintf("🗑️ *Schedule deleted*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
+
+	// ---- credential events ----
+	case "credential.created":
+		return fmt.Sprintf(
+			"🔑 *Credential created*\nCredential: `%s`",
+			escapeMarkdownV2(nameOrID("credential_name", "credential_id")),
+		)
+	case "credential.deleted":
+		return fmt.Sprintf(
+			"🔑 *Credential deleted*\nCredential: `%s`",
+			escapeMarkdownV2(nameOrID("credential_name", "credential_id")),
+		)
+
+	// ---- webhook events ----
+	case "webhook.created":
+		return fmt.Sprintf(
+			"🔗 *Webhook created*\nWebhook: `%s`",
+			escapeMarkdownV2(nameOrID("webhook_name", "webhook_id")),
+		)
+	case "webhook.deleted":
+		return fmt.Sprintf(
+			"🔗 *Webhook deleted*\nWebhook: `%s`",
+			escapeMarkdownV2(nameOrID("webhook_name", "webhook_id")),
+		)
+
+	// ---- trigger events (JSON dump) ----
+	case "trigger.cron", "trigger.webhook", "trigger.job_completed":
+		payload, _ := json.Marshal(e.Payload)
+		return fmt.Sprintf("📢 *%s*\n%s", escapeMarkdownV2(e.Type), escapeMarkdownV2(string(payload)))
+
 	default:
 		payload, _ := json.Marshal(e.Payload)
 		return fmt.Sprintf("📢 *%s*\n%s", escapeMarkdownV2(e.Type), escapeMarkdownV2(string(payload)))

@@ -164,3 +164,12 @@ func (s *Store) GetMachine(machineID string) (*Machine, error) {
 	}
 	return &m, nil
 }
+
+// GetMachineDisplayName returns the display name of a machine, or "" if not found.
+func (s *Store) GetMachineDisplayName(machineID string) string {
+	m, err := s.GetMachine(machineID)
+	if err != nil || m == nil {
+		return ""
+	}
+	return m.DisplayName
+}

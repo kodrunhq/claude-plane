@@ -18,17 +18,6 @@ export interface UpdateTriggerParams {
   filter: string;
 }
 
-export const KNOWN_EVENT_TYPES = [
-  'run.created',
-  'run.started',
-  'run.completed',
-  'run.failed',
-  'run.cancelled',
-  'session.started',
-  'session.exited',
-  'machine.connected',
-  'machine.disconnected',
-  'trigger.cron',
-  'trigger.webhook',
-  'trigger.job_completed',
-] as const;
+import { ALL_EVENT_TYPES } from '../constants/eventTypes.ts';
+
+export const KNOWN_EVENT_TYPES = ALL_EVENT_TYPES;

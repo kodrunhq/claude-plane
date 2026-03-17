@@ -32,6 +32,29 @@ export const TEMPLATE_DELETED = 'template.deleted';
 export const RUN_STEP_COMPLETED = 'run.step.completed';
 export const RUN_STEP_FAILED = 'run.step.failed';
 
+// Job lifecycle events.
+export const JOB_CREATED = 'job.created';
+export const JOB_UPDATED = 'job.updated';
+export const JOB_DELETED = 'job.deleted';
+
+// User lifecycle events.
+export const USER_CREATED = 'user.created';
+export const USER_DELETED = 'user.deleted';
+
+// Schedule lifecycle events.
+export const SCHEDULE_CREATED = 'schedule.created';
+export const SCHEDULE_PAUSED = 'schedule.paused';
+export const SCHEDULE_RESUMED = 'schedule.resumed';
+export const SCHEDULE_DELETED = 'schedule.deleted';
+
+// Credential lifecycle events.
+export const CREDENTIAL_CREATED = 'credential.created';
+export const CREDENTIAL_DELETED = 'credential.deleted';
+
+// Webhook lifecycle events.
+export const WEBHOOK_CREATED = 'webhook.created';
+export const WEBHOOK_DELETED = 'webhook.deleted';
+
 /** All known event types. Useful for exhaustive matching or filtering. */
 export const ALL_EVENT_TYPES = [
   RUN_CREATED,
@@ -52,4 +75,67 @@ export const ALL_EVENT_TYPES = [
   TEMPLATE_DELETED,
   RUN_STEP_COMPLETED,
   RUN_STEP_FAILED,
+  JOB_CREATED,
+  JOB_UPDATED,
+  JOB_DELETED,
+  USER_CREATED,
+  USER_DELETED,
+  SCHEDULE_CREATED,
+  SCHEDULE_PAUSED,
+  SCHEDULE_RESUMED,
+  SCHEDULE_DELETED,
+  CREDENTIAL_CREATED,
+  CREDENTIAL_DELETED,
+  WEBHOOK_CREATED,
+  WEBHOOK_DELETED,
 ] as const;
+
+type EventType = (typeof ALL_EVENT_TYPES)[number];
+
+/** Grouped event types for UI selectors (webhooks, notifications). */
+export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
+  {
+    label: 'Runs',
+    events: [RUN_CREATED, RUN_STARTED, RUN_COMPLETED, RUN_FAILED, RUN_CANCELLED],
+  },
+  {
+    label: 'Steps',
+    events: [RUN_STEP_COMPLETED, RUN_STEP_FAILED],
+  },
+  {
+    label: 'Sessions',
+    events: [SESSION_STARTED, SESSION_EXITED, SESSION_TERMINATED],
+  },
+  {
+    label: 'Machines',
+    events: [MACHINE_CONNECTED, MACHINE_DISCONNECTED],
+  },
+  {
+    label: 'Jobs',
+    events: [JOB_CREATED, JOB_UPDATED, JOB_DELETED],
+  },
+  {
+    label: 'Templates',
+    events: [TEMPLATE_CREATED, TEMPLATE_UPDATED, TEMPLATE_DELETED],
+  },
+  {
+    label: 'Schedules',
+    events: [SCHEDULE_CREATED, SCHEDULE_PAUSED, SCHEDULE_RESUMED, SCHEDULE_DELETED],
+  },
+  {
+    label: 'Credentials',
+    events: [CREDENTIAL_CREATED, CREDENTIAL_DELETED],
+  },
+  {
+    label: 'Webhooks',
+    events: [WEBHOOK_CREATED, WEBHOOK_DELETED],
+  },
+  {
+    label: 'Users',
+    events: [USER_CREATED, USER_DELETED],
+  },
+  {
+    label: 'Triggers',
+    events: [TRIGGER_CRON, TRIGGER_WEBHOOK, TRIGGER_JOB_COMPLETED],
+  },
+];

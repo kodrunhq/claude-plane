@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -24,12 +26,30 @@ type WebhookCRUDStore interface {
 
 // WebhookHandler handles REST endpoints for webhook CRUD and delivery queries.
 type WebhookHandler struct {
-	store WebhookCRUDStore
+	store     WebhookCRUDStore
+	publisher event.Publisher
 }
 
 // NewWebhookHandler creates a new WebhookHandler.
 func NewWebhookHandler(store WebhookCRUDStore) *WebhookHandler {
 	return &WebhookHandler{store: store}
+}
+
+// SetPublisher configures the event publisher for webhook lifecycle events.
+func (h *WebhookHandler) SetPublisher(p event.Publisher) {
+	h.publisher = p
+}
+
+// publishWebhookEvent fires a webhook lifecycle event if a publisher is configured.
+// Errors are logged but not propagated.
+func (h *WebhookHandler) publishWebhookEvent(eventType, webhookID, webhookName string) {
+	if h.publisher == nil {
+		return
+	}
+	evt := event.NewWebhookEvent(eventType, webhookID, webhookName)
+	if err := h.publisher.Publish(context.Background(), evt); err != nil {
+		slog.Warn("failed to publish webhook event", "type", eventType, "webhook_id", webhookID, "error", err)
+	}
 }
 
 // RegisterWebhookRoutes mounts all webhook-related routes on the given router.
@@ -118,6 +138,7 @@ func (h *WebhookHandler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+	h.publishWebhookEvent(event.TypeWebhookCreated, created.WebhookID, created.Name)
 }
 
 // GetWebhook handles GET /api/v1/webhooks/{webhookID}.
@@ -208,6 +229,16 @@ func (h *WebhookHandler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "webhookID")
 
+	existing, err := h.store.GetWebhook(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "webhook not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	if err := h.store.DeleteWebhook(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "webhook not found")
@@ -216,6 +247,7 @@ func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	h.publishWebhookEvent(event.TypeWebhookDeleted, id, existing.Name)
 	w.WriteHeader(http.StatusNoContent)
 }
 

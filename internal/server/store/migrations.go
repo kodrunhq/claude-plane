@@ -504,6 +504,11 @@ ALTER TABLE sessions ADD COLUMN env_vars TEXT DEFAULT '';`,
 		Description: "machine soft-delete",
 		SQL:         `ALTER TABLE machines ADD COLUMN deleted_at DATETIME;`,
 	},
+	{
+		Version:     16,
+		Description: "add payload column to webhook_deliveries",
+		SQL:         `ALTER TABLE webhook_deliveries ADD COLUMN payload TEXT;`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

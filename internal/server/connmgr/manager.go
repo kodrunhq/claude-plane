@@ -21,6 +21,11 @@ type MachineStore interface {
 	UpdateMachineStatus(machineID, status string, lastSeenAt time.Time) error
 }
 
+// machineNameLookup is an optional interface for resolving display names.
+type machineNameLookup interface {
+	GetMachineDisplayName(machineID string) string
+}
+
 // HealthInfo holds the latest health metrics reported by an agent.
 type HealthInfo struct {
 	CPUCores       int32 `json:"cpu_cores"`
@@ -89,6 +94,14 @@ func (cm *ConnectionManager) SetPublisher(p event.Publisher) {
 	cm.publisher = p
 }
 
+// machineDisplayName resolves the display name for a machine if the store supports it.
+func (cm *ConnectionManager) machineDisplayName(machineID string) string {
+	if lookup, ok := cm.store.(machineNameLookup); ok {
+		return lookup.GetMachineDisplayName(machineID)
+	}
+	return ""
+}
+
 // publishEvent emits an event if a publisher is configured.
 func (cm *ConnectionManager) publishEvent(ctx context.Context, e event.Event) {
 	if cm.publisher != nil {
@@ -149,7 +162,7 @@ func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) e
 	}
 
 	cm.logger.Info("agent registered", "machine_id", machineID, "max_sessions", agent.MaxSessions)
-	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineConnected, machineID))
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineConnected, machineID, cm.machineDisplayName(machineID)))
 	return nil
 }
 
@@ -165,7 +178,7 @@ func (cm *ConnectionManager) Disconnect(machineID string) {
 	}
 
 	cm.logger.Info("agent disconnected", "machine_id", machineID)
-	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID))
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
 }
 
 // GetAgent returns the ConnectedAgent for the given machineID, or nil if not connected.

@@ -21,7 +21,7 @@ function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
   const [expanded, setExpanded] = useState(false);
 
   const statusColor = STATUS_COLORS[delivery.status] ?? 'text-text-secondary';
-  const hasDetails = !!(delivery.last_error || delivery.next_retry_at);
+  const hasDetails = !!(delivery.last_error || delivery.next_retry_at || delivery.payload);
 
   return (
     <>
@@ -66,6 +66,34 @@ function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
                 <div>
                   <span className="text-text-secondary font-medium">Next retry: </span>
                   <span className="text-text-primary">{formatTimeAgo(delivery.next_retry_at)}</span>
+                </div>
+              )}
+              {delivery.payload && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-text-secondary font-medium">Payload:</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard?.writeText(delivery.payload ?? '')?.catch(() => {
+                          // Clipboard API requires HTTPS; silently ignore on HTTP deployments.
+                        });
+                      }}
+                      className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <pre className="bg-bg-primary rounded p-2 text-xs font-mono text-text-primary overflow-x-auto max-h-48 whitespace-pre-wrap">
+                    {(() => {
+                      try {
+                        return JSON.stringify(JSON.parse(delivery.payload), null, 2);
+                      } catch {
+                        return delivery.payload;
+                      }
+                    })()}
+                  </pre>
                 </div>
               )}
             </div>

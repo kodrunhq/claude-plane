@@ -70,5 +70,57 @@
   {
     "name": "TypeJobRunStepFailed",
     "value": "run.step.failed"
+  },
+  {
+    "name": "TypeJobCreated",
+    "value": "job.created"
+  },
+  {
+    "name": "TypeJobUpdated",
+    "value": "job.updated"
+  },
+  {
+    "name": "TypeJobDeleted",
+    "value": "job.deleted"
+  },
+  {
+    "name": "TypeUserCreated",
+    "value": "user.created"
+  },
+  {
+    "name": "TypeUserDeleted",
+    "value": "user.deleted"
+  },
+  {
+    "name": "TypeScheduleCreated",
+    "value": "schedule.created"
+  },
+  {
+    "name": "TypeSchedulePaused",
+    "value": "schedule.paused"
+  },
+  {
+    "name": "TypeScheduleResumed",
+    "value": "schedule.resumed"
+  },
+  {
+    "name": "TypeScheduleDeleted",
+    "value": "schedule.deleted"
+  },
+  {
+    "name": "TypeCredentialCreated",
+    "value": "credential.created"
+  },
+  {
+    "name": "TypeCredentialDeleted",
+    "value": "credential.deleted"
+  },
+  {
+    "name": "TypeWebhookCreated",
+    "value": "webhook.created"
+  },
+  {
+    "name": "TypeWebhookDeleted",
+    "value": "webhook.deleted"
   }
 ]
