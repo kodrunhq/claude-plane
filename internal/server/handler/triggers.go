@@ -110,10 +110,14 @@ type createTriggerRequest struct {
 // ListAllTriggers handles GET /api/v1/triggers.
 // Non-admin users only see triggers belonging to their own jobs.
 func (h *TriggerHandler) ListAllTriggers(w http.ResponseWriter, r *http.Request) {
-	userID := ""
+	var userID string
 	if h.getClaims != nil {
 		c := h.getClaims(r)
-		if c != nil && c.Role != "admin" {
+		if c == nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if c.Role != "admin" {
 			userID = c.UserID
 		}
 	}
