@@ -4,8 +4,9 @@ import { useAuthStore } from '../../stores/auth.ts';
 import { useIsMobile } from '../../hooks/useMediaQuery.ts';
 
 function userInitials(displayName: string, email: string): string {
-  if (displayName) {
-    const parts = displayName.trim().split(/\s+/);
+  const trimmed = displayName.trim();
+  if (trimmed) {
+    const parts = trimmed.split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
