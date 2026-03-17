@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -419,5 +420,109 @@ retention_days = 14
 	}
 	if days := cfg.Events.GetRetentionDays(); days != 14 {
 		t.Errorf("Events.GetRetentionDays() = %d, want 14", days)
+	}
+}
+
+func TestParseEncryptionKey_AutoGenerate(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &SecretsConfig{}
+
+	key, err := cfg.ParseEncryptionKey(tmpDir)
+	if err != nil {
+		t.Fatalf("ParseEncryptionKey failed: %v", err)
+	}
+	if len(key) != 32 {
+		t.Fatalf("expected 32-byte key, got %d bytes", len(key))
+	}
+
+	// Verify key file was written.
+	keyPath := filepath.Join(tmpDir, "encryption.key")
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatalf("key file not created: %v", err)
+	}
+	raw := strings.TrimSpace(string(data))
+	if len(raw) != 64 {
+		t.Errorf("key file should contain 64 hex chars, got %d", len(raw))
+	}
+
+	// Verify file permissions.
+	info, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatalf("stat key file: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("key file permissions = %o, want 0600", perm)
+	}
+}
+
+func TestParseEncryptionKey_AutoGenerate_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &SecretsConfig{}
+
+	key1, err := cfg.ParseEncryptionKey(tmpDir)
+	if err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+
+	key2, err := cfg.ParseEncryptionKey(tmpDir)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+
+	if hex.EncodeToString(key1) != hex.EncodeToString(key2) {
+		t.Error("second call returned different key; expected idempotent behavior")
+	}
+}
+
+func TestParseEncryptionKey_ExplicitKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Valid 32-byte hex key (64 hex chars).
+	hexKey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	cfg := &SecretsConfig{EncryptionKey: hexKey}
+
+	key, err := cfg.ParseEncryptionKey(tmpDir)
+	if err != nil {
+		t.Fatalf("ParseEncryptionKey failed: %v", err)
+	}
+	if hex.EncodeToString(key) != hexKey {
+		t.Errorf("key = %x, want %s", key, hexKey)
+	}
+
+	// Verify no auto-generated file was created.
+	keyPath := filepath.Join(tmpDir, "encryption.key")
+	if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
+		t.Error("auto-generated key file should not exist when explicit key is configured")
+	}
+}
+
+func TestParseEncryptionKey_CorruptedKeyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	keyPath := filepath.Join(tmpDir, "encryption.key")
+
+	// Write invalid content (not 64 hex chars).
+	if err := os.WriteFile(keyPath, []byte("not-a-valid-key\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &SecretsConfig{}
+	_, err := cfg.ParseEncryptionKey(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for corrupted key file")
+	}
+	if !strings.Contains(err.Error(), "invalid content") {
+		t.Errorf("error should mention 'invalid content', got: %v", err)
+	}
+}
+
+func TestParseEncryptionKey_ExplicitKeyFileError(t *testing.T) {
+	cfg := &SecretsConfig{EncryptionKeyFile: "/nonexistent/encryption.key"}
+
+	_, err := cfg.ParseEncryptionKey(t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for missing explicit key file")
+	}
+	if !strings.Contains(err.Error(), "encryption_key_file") {
+		t.Errorf("error should mention encryption_key_file, got: %v", err)
 	}
 }

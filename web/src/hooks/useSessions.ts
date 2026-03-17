@@ -7,6 +7,7 @@ export function useSessions(filters?: Record<string, string>) {
     queryKey: ['sessions', filters],
     queryFn: () => sessionsApi.list(filters),
     refetchInterval: 30_000, // Fallback polling; WebSocket is primary
+    placeholderData: [],
   });
 }
 

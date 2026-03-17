@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -113,6 +114,38 @@ func TestListMachines(t *testing.T) {
 	}
 	if machines[2].MachineID != "m-003" {
 		t.Errorf("machines[2].MachineID = %q, want %q", machines[2].MachineID, "m-003")
+	}
+}
+
+func TestUpdateMachineDisplayName(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.UpsertMachine("m-001", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+
+	if err := s.UpdateMachineDisplayName("m-001", "My Worker"); err != nil {
+		t.Fatalf("UpdateMachineDisplayName: %v", err)
+	}
+
+	m, err := s.GetMachine("m-001")
+	if err != nil {
+		t.Fatalf("GetMachine: %v", err)
+	}
+	if m.DisplayName != "My Worker" {
+		t.Errorf("DisplayName = %q, want %q", m.DisplayName, "My Worker")
+	}
+}
+
+func TestUpdateMachineDisplayNameNotFound(t *testing.T) {
+	s := newTestStore(t)
+
+	err := s.UpdateMachineDisplayName("nonexistent", "Name")
+	if err == nil {
+		t.Fatal("expected error for non-existent machine, got nil")
+	}
+	if !errors.Is(err, ErrMachineNotFound) {
+		t.Errorf("expected ErrMachineNotFound, got %v", err)
 	}
 }
 

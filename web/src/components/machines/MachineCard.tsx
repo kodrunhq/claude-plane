@@ -1,6 +1,8 @@
-import { Cpu, MemoryStick, Terminal } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Check, Cpu, MemoryStick, Pencil, Terminal, X } from 'lucide-react';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { TimeAgo } from '../shared/TimeAgo.tsx';
+import { useUpdateMachine } from '../../hooks/useMachines.ts';
 import type { Machine } from '../../lib/types.ts';
 
 interface MachineCardProps {
@@ -21,6 +23,36 @@ function memoryPercent(totalMB: number, usedMB: number): number {
 export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
   const isConnected = machine.status === 'connected';
   const health = machine.health;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(machine.display_name || '');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const updateMachine = useUpdateMachine();
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    const trimmed = editValue.trim();
+    if (trimmed === '' || trimmed.length > 255) return;
+    updateMachine.mutate(
+      { id: machine.machine_id, params: { display_name: trimmed } },
+      { onSuccess: () => setIsEditing(false) },
+    );
+  };
+
+  const handleCancel = () => {
+    setEditValue(machine.display_name || '');
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSave();
+    if (e.key === 'Escape') handleCancel();
+  };
 
   return (
     <div
@@ -33,9 +65,58 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
       </div>
 
       <div className="mb-3">
-        <p className="text-sm text-text-primary font-medium truncate">
-          {machine.display_name || machine.machine_id}
-        </p>
+        {isEditing ? (
+          <div className="flex items-center gap-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              maxLength={255}
+              className="flex-1 min-w-0 px-1.5 py-0.5 text-sm rounded border border-border-primary bg-bg-secondary text-text-primary focus:outline-none focus:border-accent-primary"
+              disabled={updateMachine.isPending}
+            />
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={updateMachine.isPending}
+              className="p-0.5 text-accent-green hover:text-accent-green/80 disabled:opacity-50"
+              title="Save"
+              aria-label="Save machine name"
+            >
+              <Check size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={updateMachine.isPending}
+              className="p-0.5 text-text-secondary hover:text-text-primary disabled:opacity-50"
+              title="Cancel"
+              aria-label="Cancel rename"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 group">
+            <p className="text-sm text-text-primary font-medium truncate">
+              {machine.display_name || machine.machine_id}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setEditValue(machine.display_name || '');
+                setIsEditing(true);
+              }}
+              className="p-0.5 text-text-secondary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-opacity"
+              title="Rename machine"
+              aria-label="Rename machine"
+            >
+              <Pencil size={12} />
+            </button>
+          </div>
+        )}
         <span className="font-mono text-xs truncate max-w-[140px] opacity-60 text-text-secondary" title={machine.machine_id}>
           {machine.machine_id.slice(0, 12)}
         </span>

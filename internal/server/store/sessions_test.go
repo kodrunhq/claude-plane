@@ -123,6 +123,74 @@ func TestListSessions(t *testing.T) {
 	}
 }
 
+func TestCreateSession_PersistsMetadata(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer s.Close()
+
+	// Create machine for foreign key constraint
+	if err := s.UpsertMachine("machine-meta", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+
+	sess := &Session{
+		SessionID:     "sess-meta-001",
+		MachineID:     "machine-meta",
+		UserID:        "",
+		Command:       "claude",
+		WorkingDir:    "/home/user/project",
+		Status:        StatusCreated,
+		Model:         "opus",
+		SkipPerms:     "true",
+		EnvVars:       `{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}`,
+		Args:          `["--verbose","--no-cache"]`,
+		InitialPrompt: "Fix the login bug",
+	}
+
+	if err := s.CreateSession(sess); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	got, err := s.GetSession("sess-meta-001")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+
+	if got.Model != "opus" {
+		t.Errorf("Model = %q, want %q", got.Model, "opus")
+	}
+	if got.SkipPerms != "true" {
+		t.Errorf("SkipPerms = %q, want %q", got.SkipPerms, "true")
+	}
+	if got.EnvVars != `{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}` {
+		t.Errorf("EnvVars = %q, want %q", got.EnvVars, `{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}`)
+	}
+	if got.Args != `["--verbose","--no-cache"]` {
+		t.Errorf("Args = %q, want %q", got.Args, `["--verbose","--no-cache"]`)
+	}
+	if got.InitialPrompt != "Fix the login bug" {
+		t.Errorf("InitialPrompt = %q, want %q", got.InitialPrompt, "Fix the login bug")
+	}
+
+	// Verify metadata also comes through in ListSessions
+	sessions, err := s.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("ListSessions count = %d, want 1", len(sessions))
+	}
+	if sessions[0].Model != "opus" {
+		t.Errorf("ListSessions[0].Model = %q, want %q", sessions[0].Model, "opus")
+	}
+	if sessions[0].Args != `["--verbose","--no-cache"]` {
+		t.Errorf("ListSessions[0].Args = %q, want %q", sessions[0].Args, `["--verbose","--no-cache"]`)
+	}
+}
+
 func TestListSessionsByMachine(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := NewStore(dbPath)
