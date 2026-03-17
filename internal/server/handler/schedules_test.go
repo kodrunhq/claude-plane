@@ -214,6 +214,10 @@ func (m *mockJobStoreForSchedules) DeleteTaskValuesForStep(_ context.Context, ru
 	panic("not implemented")
 }
 
+func (m *mockJobStoreForSchedules) CloneJob(_ context.Context, jobID string, newName string) (*store.JobDetail, error) {
+	panic("not implemented")
+}
+
 // mockScheduleReloader records calls.
 type mockScheduleReloader struct {
 	reloaded []string
