@@ -23,4 +23,15 @@ describe('CopyableId', () => {
     render(<CopyableId id="abcdef1234567890" />);
     expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
   });
+
+  it('renders dash placeholder for empty ID', () => {
+    render(<CopyableId id="" />);
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('renders full string when ID is shorter than length', () => {
+    render(<CopyableId id="abc" />);
+    expect(screen.getByText('abc')).toBeInTheDocument();
+  });
 });
