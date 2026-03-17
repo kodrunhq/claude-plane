@@ -22,10 +22,6 @@ export function TemplateForm({ initialValues, onSubmit, onCancel, isLoading }: T
   const [envKeyInput, setEnvKeyInput] = useState('');
   const [envValueInput, setEnvValueInput] = useState('');
   const [initialPrompt, setInitialPrompt] = useState(initialValues?.initial_prompt ?? '');
-  const [terminalRows, setTerminalRows] = useState(initialValues?.terminal_rows ?? 24);
-  const [terminalCols, setTerminalCols] = useState(initialValues?.terminal_cols ?? 80);
-  const [tags, setTags] = useState<string[]>(initialValues?.tags ?? []);
-  const [tagInput, setTagInput] = useState('');
   const [timeoutSeconds, setTimeoutSeconds] = useState(initialValues?.timeout_seconds ?? 0);
 
   const addArg = useCallback(() => {
@@ -52,24 +48,6 @@ export function TemplateForm({ initialValues, onSubmit, onCancel, isLoading }: T
     setEnvVars((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const addTag = useCallback((input: string) => {
-    const trimmed = input.trim().toLowerCase();
-    if (!trimmed) return;
-    setTags((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
-    setTagInput('');
-  }, []);
-
-  const removeTag = useCallback((tag: string) => {
-    setTags((prev) => prev.filter((t) => t !== tag));
-  }, []);
-
-  function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addTag(tagInput);
-    }
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -86,9 +64,9 @@ export function TemplateForm({ initialValues, onSubmit, onCancel, isLoading }: T
       ...(workingDir ? { working_dir: workingDir } : {}),
       ...(Object.keys(envVarsObj).length > 0 ? { env_vars: envVarsObj } : {}),
       ...(initialPrompt ? { initial_prompt: initialPrompt } : {}),
-      terminal_rows: terminalRows,
-      terminal_cols: terminalCols,
-      ...(tags.length > 0 ? { tags } : {}),
+      terminal_rows: initialValues?.terminal_rows ?? 24,
+      terminal_cols: initialValues?.terminal_cols ?? 80,
+      ...(initialValues?.tags && initialValues.tags.length > 0 ? { tags: initialValues.tags } : {}),
       ...(timeoutSeconds > 0 ? { timeout_seconds: timeoutSeconds } : {}),
     };
 
@@ -256,62 +234,6 @@ export function TemplateForm({ initialValues, onSubmit, onCancel, isLoading }: T
           rows={4}
           className={`${inputClass} resize-y`}
         />
-      </div>
-
-      {/* Terminal Dimensions */}
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <label className="block text-sm text-text-secondary mb-1">Terminal Rows</label>
-          <input
-            type="number"
-            value={terminalRows}
-            onChange={(e) => setTerminalRows(Number(e.target.value))}
-            min={1}
-            className={inputClass}
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm text-text-secondary mb-1">Terminal Cols</label>
-          <input
-            type="number"
-            value={terminalCols}
-            onChange={(e) => setTerminalCols(Number(e.target.value))}
-            min={1}
-            className={inputClass}
-          />
-        </div>
-      </div>
-
-      {/* Tags */}
-      <div>
-        <label className="block text-sm text-text-secondary mb-1">Tags</label>
-        <input
-          type="text"
-          value={tagInput}
-          onChange={(e) => setTagInput(e.target.value)}
-          onKeyDown={handleTagKeyDown}
-          placeholder="Press Enter to add a tag..."
-          className={inputClass}
-        />
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 bg-bg-tertiary text-text-secondary rounded-full px-2.5 py-1 text-xs"
-              >
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="text-text-secondary/60 hover:text-text-primary"
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Timeout */}
