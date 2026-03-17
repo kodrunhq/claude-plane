@@ -6,12 +6,16 @@ import { CredentialsList } from '../components/credentials/CredentialsList.tsx';
 import { CreateCredentialModal } from '../components/credentials/CreateCredentialModal.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { Pagination } from '../components/shared/Pagination.tsx';
+import { usePagination } from '../hooks/usePagination.ts';
 
 export function CredentialsPage() {
   const { data: credentials, isLoading, error, refetch } = useCredentials();
   const { data: status } = useCredentialStatus();
   const createCredential = useCreateCredential();
   const [showModal, setShowModal] = useState(false);
+
+  const { paged: pagedCredentials, page, pageSize, total, setPage, setPageSize } = usePagination(credentials ?? []);
 
   async function handleCreate(name: string, value: string) {
     try {
@@ -88,7 +92,16 @@ export function CredentialsPage() {
           }
         />
       ) : (
-        <CredentialsList credentials={credentials} />
+        <>
+          <CredentialsList credentials={pagedCredentials} />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
 
       {showModal && (

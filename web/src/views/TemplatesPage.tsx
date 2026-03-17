@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Plus, CopyPlus, Trash2, Search, Play } from 'lucide-react';
 import { toast } from 'sonner';
@@ -6,6 +6,8 @@ import { useTemplates, useDeleteTemplate, useCloneTemplate } from '../hooks/useT
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { LaunchTemplateModal } from '../components/templates/LaunchTemplateModal.tsx';
+import { Pagination } from '../components/shared/Pagination.tsx';
+import { usePagination } from '../hooks/usePagination.ts';
 import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import type { SessionTemplate } from '../types/template.ts';
 
@@ -41,6 +43,10 @@ export function TemplatesPage() {
       );
     });
   }, [templates, searchQuery]);
+
+  const { paged: pagedTemplates, page, pageSize, total, setPage, setPageSize } = usePagination(filteredTemplates);
+
+  useEffect(() => { setPage(1); }, [searchQuery, setPage]);
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -120,7 +126,7 @@ export function TemplatesPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredTemplates.map((template) => (
+            {pagedTemplates.map((template) => (
               <tr
                 key={template.template_id}
                 onClick={() => navigate(`/templates/${template.template_id}/edit`)}
@@ -184,6 +190,13 @@ export function TemplatesPage() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         </div>
       )}
 

@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Play, Trash2, AlertCircle, RefreshCw, Search, CopyPlus } from 'lucide-react';
 import { useJobs, useDeleteJob, useTriggerRun, useCloneJob } from '../hooks/useJobs.ts';
 import { useSortableTable } from '../hooks/useSortableTable.ts';
+import { usePagination } from '../hooks/usePagination.ts';
 import { formatTimeAgo } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { RefreshButton } from '../components/shared/RefreshButton.tsx';
 import { CopyableId } from '../components/shared/CopyableId.tsx';
 import { SortableHeader } from '../components/shared/SortableHeader.tsx';
+import { Pagination } from '../components/shared/Pagination.tsx';
 import { toast } from 'sonner';
 import type { Job } from '../types/job.ts';
 
@@ -78,6 +80,10 @@ export function JobsPage() {
   }, [jobs, searchQuery, statusFilter]);
 
   const { sorted: sortedJobs, sort, dir, handleSort } = useSortableTable(filteredJobs, 'created_at', 'desc');
+
+  const { paged: pagedJobs, page, pageSize, total, setPage, setPageSize } = usePagination(sortedJobs);
+
+  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, setPage]);
 
   async function handleRun(e: React.MouseEvent, jobId: string) {
     e.stopPropagation();
@@ -200,7 +206,7 @@ export function JobsPage() {
             </tr>
           </thead>
           <tbody>
-            {sortedJobs.map((job: Job) => (
+            {pagedJobs.map((job: Job) => (
               <tr
                 key={job.job_id}
                 onClick={() => navigate(`/jobs/${job.job_id}`)}
@@ -278,6 +284,13 @@ export function JobsPage() {
             ))}
           </tbody>
         </table>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
         </div>
       )}
 
