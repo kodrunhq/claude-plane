@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -411,8 +412,11 @@ func (h *JobHandler) CloneJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req cloneJobRequest
-	// Body is optional; ignore decode errors for empty bodies.
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	// Body is optional (empty body is fine), but malformed JSON is rejected.
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
 
 	cloned, err := h.store.CloneJob(r.Context(), detail.Job.JobID, req.Name)
 	if err != nil {

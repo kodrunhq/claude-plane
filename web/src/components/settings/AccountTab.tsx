@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth.ts';
 import { useChangePassword, useUpdateProfile } from '../../hooks/useUsers.ts';
@@ -8,8 +8,17 @@ export function AccountTab() {
   const changePassword = useChangePassword();
   const updateProfile = useUpdateProfile();
 
+  const prevDisplayNameRef = useRef(user?.displayName);
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [profileDirty, setProfileDirty] = useState(false);
+
+  // Sync displayName from auth store when it changes (e.g., after save).
+  // Uses ref comparison in render to avoid useEffect + setState lint violation.
+  if (user?.displayName !== prevDisplayNameRef.current) {
+    prevDisplayNameRef.current = user?.displayName;
+    setDisplayName(user?.displayName ?? '');
+    setProfileDirty(false);
+  }
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');

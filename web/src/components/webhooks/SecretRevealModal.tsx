@@ -13,12 +13,6 @@ interface SecretRevealModalProps {
 export function SecretRevealModal({ open, secret, onClose }: SecretRevealModalProps) {
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
-      setCopied(false);
-    }
-  }, [open]);
-
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
