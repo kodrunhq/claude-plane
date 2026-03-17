@@ -416,6 +416,10 @@ func (h *JobHandler) CloneJob(w http.ResponseWriter, r *http.Request) {
 
 	cloned, err := h.store.CloneJob(r.Context(), detail.Job.JobID, req.Name)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return
+		}
 		slog.Error("clone job failed", "error", err, "job_id", detail.Job.JobID)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return

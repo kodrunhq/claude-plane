@@ -85,6 +85,18 @@ func (m *mockTriggerStore) ToggleJobTrigger(_ context.Context, triggerID string)
 	return &toggled, nil
 }
 
+func (m *mockTriggerStore) GetJobTrigger(_ context.Context, triggerID string) (*store.JobTrigger, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	t, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	cp := *t
+	return &cp, nil
+}
+
 func (m *mockTriggerStore) DeleteJobTrigger(_ context.Context, triggerID string) error {
 	if m.err != nil {
 		return m.err

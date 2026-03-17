@@ -16,9 +16,9 @@ export function ResetPasswordModal({ open, user, onClose, onSubmit, submitting }
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="reset-password-title" className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
-          <h2 className="text-lg font-semibold text-text-primary">Reset Password</h2>
+          <h2 id="reset-password-title" className="text-lg font-semibold text-text-primary">Reset Password</h2>
           <button
             onClick={onClose}
             className="text-text-secondary hover:text-text-primary transition-colors text-xl leading-none"
@@ -75,10 +75,11 @@ function ResetPasswordForm({
       </p>
 
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-1.5">
+        <label htmlFor="reset-new-password" className="block text-sm font-medium text-text-secondary mb-1.5">
           New Password
         </label>
         <input
+          id="reset-new-password"
           type="password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
@@ -90,10 +91,11 @@ function ResetPasswordForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-1.5">
+        <label htmlFor="reset-confirm-password" className="block text-sm font-medium text-text-secondary mb-1.5">
           Confirm Password
         </label>
         <input
+          id="reset-confirm-password"
           type="password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
