@@ -5,7 +5,7 @@
 
 export type StatusVariant = 'success' | 'error' | 'running' | 'warning' | 'pending';
 
-export type StatusIconType = 'check' | 'x' | 'spinner' | 'none';
+export type StatusIconType = 'check' | 'x' | 'spinner' | 'clock' | 'none';
 
 interface StatusMeta {
   variant: StatusVariant;
@@ -30,12 +30,12 @@ const STATUS_META: Record<string, StatusMeta> = {
 
   pending: { variant: 'warning', iconType: 'spinner', pulse: false },
 
-  created: { variant: 'pending', iconType: 'none', pulse: false },
+  created: { variant: 'pending', iconType: 'clock', pulse: false },
 };
 
 const DEFAULT_META: StatusMeta = {
   variant: 'pending',
-  iconType: 'none',
+  iconType: 'clock',
   pulse: false,
 };
 
