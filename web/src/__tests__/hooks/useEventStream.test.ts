@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
@@ -35,7 +35,17 @@ class MockWebSocket {
     mockWs = this as unknown as MockWs;
   }
 }
-vi.stubGlobal('WebSocket', MockWebSocket);
+
+// Stub WebSocket after MSW's beforeAll has run (setup file's beforeAll runs
+// first, so this beforeAll runs second and safely overrides MSW's interceptor).
+let savedWebSocket: typeof globalThis.WebSocket;
+beforeAll(() => {
+  savedWebSocket = globalThis.WebSocket;
+  vi.stubGlobal('WebSocket', MockWebSocket);
+});
+afterAll(() => {
+  globalThis.WebSocket = savedWebSocket;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

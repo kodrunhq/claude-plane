@@ -30,6 +30,11 @@ jobs:
       - name: Stub frontend dist for embed
         run: mkdir -p internal/server/frontend/dist && touch internal/server/frontend/dist/.gitkeep
 
+      - name: Verify generated files are up to date
+        run: |
+          go generate ./internal/server/event/...
+          git diff --exit-code internal/server/event/event_types.json
+
       - name: Vet
         run: go vet ./...
 
