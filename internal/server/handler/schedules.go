@@ -424,7 +424,7 @@ func (h *ScheduleHandler) TriggerSchedule(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusNotFound, "job not found")
 			return
 		}
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to create run")
 		return
 	}
 
