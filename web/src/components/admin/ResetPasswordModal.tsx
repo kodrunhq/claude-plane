@@ -65,7 +65,11 @@ function ResetPasswordForm({
       return;
     }
 
-    await onSubmit(user.user_id, newPassword);
+    try {
+      await onSubmit(user.user_id, newPassword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password');
+    }
   }
 
   return (

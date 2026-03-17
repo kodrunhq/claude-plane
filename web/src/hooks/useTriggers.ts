@@ -35,7 +35,7 @@ export function useUpdateTrigger() {
 export function useToggleTrigger() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ triggerId }: { triggerId: string; jobId: string }) =>
+    mutationFn: ({ triggerId }: { triggerId: string }) =>
       triggersApi.toggle(triggerId),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['triggers', data.job_id] });

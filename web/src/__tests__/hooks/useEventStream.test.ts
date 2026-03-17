@@ -31,7 +31,6 @@ class MockWebSocket {
   readyState = 1;
 
   constructor() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
     mockWs = this as unknown as MockWs;
   }
 }

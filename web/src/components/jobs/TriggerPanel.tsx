@@ -215,7 +215,7 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
 
   function handleToggle(triggerId: string) {
     toggleTrigger.mutate(
-      { triggerId, jobId },
+      { triggerId },
       {
         onSuccess: (data) => toast.success(`Trigger ${data.enabled ? 'enabled' : 'disabled'}`),
         onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to toggle trigger'),
@@ -274,6 +274,7 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
 
         {editingTrigger && (
           <TriggerBuilder
+            key={editingTrigger.trigger_id}
             onSave={handleUpdate}
             onCancel={handleCancelForm}
             isSaving={updateTrigger.isPending}

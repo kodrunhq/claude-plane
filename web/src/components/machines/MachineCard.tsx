@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Check, Cpu, MemoryStick, Pencil, Terminal, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { TimeAgo } from '../shared/TimeAgo.tsx';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
@@ -181,6 +182,10 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
         onConfirm={() => {
           deleteMachine.mutate(machine.machine_id, {
             onSuccess: () => setShowDeleteConfirm(false),
+            onError: (err) => {
+              const message = err instanceof Error ? err.message : 'Failed to delete machine';
+              toast.error(message);
+            },
           });
         }}
         onCancel={() => setShowDeleteConfirm(false)}
