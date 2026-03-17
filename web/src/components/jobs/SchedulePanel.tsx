@@ -221,6 +221,7 @@ function ScheduleRow({ schedule, onPause, onResume, onDelete, onEdit, onTrigger,
             disabled={isTriggering}
             className="p-1 text-text-secondary hover:text-accent-primary transition-colors disabled:opacity-40"
             title="Run now"
+            aria-label="Run now"
           >
             <PlayCircle size={13} />
           </button>

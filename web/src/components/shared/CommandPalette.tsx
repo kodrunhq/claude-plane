@@ -100,8 +100,9 @@ export function CommandPalette() {
 
     const sessionsEntries = queryClient.getQueriesData<Session[]>({ queryKey: ['sessions'] });
     const sessions = sessionsEntries.flatMap(([, data]) => data ?? []);
-    if (sessions) {
-      for (const session of sessions) {
+    const uniqueSessions = [...new Map(sessions.map(s => [s.session_id, s])).values()];
+    if (uniqueSessions) {
+      for (const session of uniqueSessions) {
         results.push({
           id: session.session_id,
           label: `Session ${session.session_id.slice(0, 8)}`,
@@ -127,8 +128,9 @@ export function CommandPalette() {
 
     const templateEntries = queryClient.getQueriesData<SessionTemplate[]>({ queryKey: ['templates'] });
     const templates = templateEntries.flatMap(([, data]) => data ?? []);
-    if (templates) {
-      for (const template of templates) {
+    const uniqueTemplates = [...new Map(templates.map(t => [t.template_id, t])).values()];
+    if (uniqueTemplates) {
+      for (const template of uniqueTemplates) {
         results.push({
           id: template.template_id,
           label: template.name,
