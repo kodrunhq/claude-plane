@@ -309,6 +309,13 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		sessions = filtered
 	}
 
+	// Strip sensitive fields from list responses to avoid leaking secrets.
+	for i := range sessions {
+		sessions[i].EnvVars = ""
+		sessions[i].Args = ""
+		sessions[i].InitialPrompt = ""
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, sessions)
 }
 
@@ -530,7 +537,7 @@ func marshalJSON(v any) string {
 		return ""
 	}
 	b, err := json.Marshal(v)
-	if err != nil {
+	if err != nil || string(b) == "null" {
 		return ""
 	}
 	return string(b)

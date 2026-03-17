@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -143,7 +144,7 @@ func TestUpdateMachineDisplayNameNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent machine, got nil")
 	}
-	if err != ErrMachineNotFound {
+	if !errors.Is(err, ErrMachineNotFound) {
 		t.Errorf("expected ErrMachineNotFound, got %v", err)
 	}
 }

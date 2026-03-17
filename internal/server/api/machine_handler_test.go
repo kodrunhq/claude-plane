@@ -2,10 +2,72 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/kodrunhq/claude-plane/internal/server/api"
+	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
+	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
+
+// testAPIEnv bundles the test server with underlying store for direct seeding.
+type testAPIEnv struct {
+	Server *httptest.Server
+	Store  *store.Store
+}
+
+// setupTestAPIWithStore creates a test API server and exposes the store for seeding.
+func setupTestAPIWithStore(t *testing.T) *testAPIEnv {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	dbPath := tmpDir + "/test.db"
+
+	s, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	blocklist, err := auth.NewBlocklist(s)
+	if err != nil {
+		t.Fatalf("create blocklist: %v", err)
+	}
+
+	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
+	cm := connmgr.NewConnectionManager(s, nil)
+
+	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
+	router := api.NewRouter(api.RouterDeps{Handlers: handlers})
+	srv := httptest.NewServer(router)
+	t.Cleanup(srv.Close)
+
+	return &testAPIEnv{Server: srv, Store: s}
+}
+
+// registerAndLoginAdmin registers a user, promotes them to admin, and returns the token.
+func registerAndLoginAdmin(t *testing.T, env *testAPIEnv, email, password, name string) string {
+	t.Helper()
+	resp := registerUser(t, env.Server, email, password, name)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("register admin user: expected 201, got %d", resp.StatusCode)
+	}
+	var regResult map[string]string
+	json.NewDecoder(resp.Body).Decode(&regResult)
+	userID := regResult["user_id"]
+
+	if err := env.Store.UpdateUser(context.Background(), userID, name, "admin"); err != nil {
+		t.Fatalf("promote user to admin: %v", err)
+	}
+
+	return loginUser(t, env.Server, email, password)
+}
 
 func TestListMachinesAuthenticated(t *testing.T) {
 	srv := setupTestAPI(t)
@@ -38,18 +100,12 @@ func TestListMachinesAuthenticated(t *testing.T) {
 	}
 }
 
-func TestUpdateMachineSuccess(t *testing.T) {
-	srv := setupTestAPI(t)
-	defer srv.Close()
+func TestUpdateMachine_NotFound(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-notfound@example.com", "password123", "Admin User")
 
-	resp := registerUser(t, srv, "update@example.com", "password123", "Update User")
-	resp.Body.Close()
-	token := loginUser(t, srv, "update@example.com", "password123")
-
-	// Seed a machine by calling the store directly is not possible via HTTP,
-	// so we PUT against a non-existent machine first to verify 404.
 	body, _ := json.Marshal(map[string]string{"display_name": "My Worker"})
-	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/machines/test-machine", bytes.NewReader(body))
+	req, _ := http.NewRequest("PUT", env.Server.URL+"/api/v1/machines/nonexistent", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	putResp, err := http.DefaultClient.Do(req)
@@ -63,15 +119,69 @@ func TestUpdateMachineSuccess(t *testing.T) {
 	}
 }
 
-func TestUpdateMachineInvalidBody(t *testing.T) {
+func TestUpdateMachine_HappyPath(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-happy@example.com", "password123", "Admin User")
+
+	// Seed a machine in the store.
+	if err := env.Store.UpsertMachine("test-machine-1", 5); err != nil {
+		t.Fatalf("seed machine: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"display_name": "My Worker"})
+	req, _ := http.NewRequest("PUT", env.Server.URL+"/api/v1/machines/test-machine-1", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	putResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT request: %v", err)
+	}
+	defer putResp.Body.Close()
+
+	if putResp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", putResp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(putResp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if result["display_name"] != "My Worker" {
+		t.Errorf("expected display_name 'My Worker', got %v", result["display_name"])
+	}
+	if result["machine_id"] != "test-machine-1" {
+		t.Errorf("expected machine_id 'test-machine-1', got %v", result["machine_id"])
+	}
+}
+
+func TestUpdateMachine_ForbiddenForNonAdmin(t *testing.T) {
 	srv := setupTestAPI(t)
 	defer srv.Close()
 
-	resp := registerUser(t, srv, "invalid@example.com", "password123", "Invalid User")
+	resp := registerUser(t, srv, "regular@example.com", "password123", "Regular User")
 	resp.Body.Close()
-	token := loginUser(t, srv, "invalid@example.com", "password123")
+	token := loginUser(t, srv, "regular@example.com", "password123")
 
-	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/machines/test-machine", bytes.NewReader([]byte("not json")))
+	body, _ := json.Marshal(map[string]string{"display_name": "Hacked"})
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/machines/test-machine", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	putResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT request: %v", err)
+	}
+	defer putResp.Body.Close()
+
+	if putResp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for non-admin user, got %d", putResp.StatusCode)
+	}
+}
+
+func TestUpdateMachineInvalidBody(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-invalid@example.com", "password123", "Admin User")
+
+	req, _ := http.NewRequest("PUT", env.Server.URL+"/api/v1/machines/test-machine", bytes.NewReader([]byte("not json")))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	putResp, err := http.DefaultClient.Do(req)
@@ -86,15 +196,11 @@ func TestUpdateMachineInvalidBody(t *testing.T) {
 }
 
 func TestUpdateMachineMissingDisplayName(t *testing.T) {
-	srv := setupTestAPI(t)
-	defer srv.Close()
-
-	resp := registerUser(t, srv, "missing@example.com", "password123", "Missing User")
-	resp.Body.Close()
-	token := loginUser(t, srv, "missing@example.com", "password123")
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-missing@example.com", "password123", "Admin User")
 
 	body, _ := json.Marshal(map[string]string{})
-	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/machines/test-machine", bytes.NewReader(body))
+	req, _ := http.NewRequest("PUT", env.Server.URL+"/api/v1/machines/test-machine", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	putResp, err := http.DefaultClient.Do(req)
@@ -105,6 +211,25 @@ func TestUpdateMachineMissingDisplayName(t *testing.T) {
 
 	if putResp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400 for missing display_name, got %d", putResp.StatusCode)
+	}
+}
+
+func TestUpdateMachineEmptyDisplayName(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-empty@example.com", "password123", "Admin User")
+
+	body, _ := json.Marshal(map[string]string{"display_name": "   "})
+	req, _ := http.NewRequest("PUT", env.Server.URL+"/api/v1/machines/test-machine", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	putResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT request: %v", err)
+	}
+	defer putResp.Body.Close()
+
+	if putResp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for whitespace-only display_name, got %d", putResp.StatusCode)
 	}
 }
 

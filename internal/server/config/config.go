@@ -4,6 +4,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -217,7 +218,7 @@ func (s *SecretsConfig) autoGenerateKey(dataDir string) (string, error) {
 		return raw, nil
 	}
 
-	if !os.IsNotExist(err) {
+	if !errors.Is(err, os.ErrNotExist) {
 		return "", fmt.Errorf("read encryption key file %q: %w", keyPath, err)
 	}
 
