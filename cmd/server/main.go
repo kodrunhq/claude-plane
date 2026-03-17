@@ -376,6 +376,7 @@ func newServeCmd() *cobra.Command {
 			jobHandler.SetPublisher(eventBus)
 			userHandler.SetPublisher(eventBus)
 			scheduleHandler.SetPublisher(eventBus)
+			scheduleHandler.SetRunCreator(orch)
 			credentialHandler.SetPublisher(eventBus)
 			webhookHandler.SetPublisher(eventBus)
 

@@ -38,8 +38,8 @@ function getLayoutedElements(
   edges: Edge[],
   isMobile: boolean,
 ): { nodes: Node<TaskNodeData>[]; edges: Edge[] } {
-  const nodeWidth = isMobile ? 120 : 180;
-  const nodeHeight = isMobile ? 44 : 60;
+  const nodeWidth = isMobile ? 160 : 180;
+  const nodeHeight = isMobile ? 56 : 60;
 
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
@@ -179,8 +179,10 @@ export function DAGCanvas({
     [editable, onDeleteEdge],
   );
 
+  const minHeight = isMobile ? '220px' : undefined;
+
   return (
-    <div className={`w-full h-full ${className}`}>
+    <div className={`w-full h-full ${className}`} style={{ minHeight }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

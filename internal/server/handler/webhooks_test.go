@@ -581,6 +581,98 @@ func TestWebhookHandler_CreateWebhook_PublishesEvent(t *testing.T) {
 	}
 }
 
+func TestWebhookHandler_TestDelivery(t *testing.T) {
+	mock := newMockWebhookStore()
+	pub := &mockPublisher{}
+	h := handler.NewWebhookHandler(mock)
+	h.SetPublisher(pub)
+	srv := newWebhookRouter(h)
+	defer srv.Close()
+
+	wh := store.Webhook{
+		WebhookID: uuid.New().String(),
+		Name:      "test-hook",
+		URL:       "https://example.com/hook",
+		Events:    []string{"run.*"},
+		Enabled:   true,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mock.webhooks[wh.WebhookID] = &wh
+
+	resp, err := http.Post(srv.URL+"/api/v1/webhooks/"+wh.WebhookID+"/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	events := pub.published()
+	if len(events) < 1 {
+		t.Fatalf("expected at least 1 published event, got %d", len(events))
+	}
+	evt := events[0]
+	if evt.Type != "webhook.test" {
+		t.Errorf("event type = %q, want %q", evt.Type, "webhook.test")
+	}
+	if evt.Source != "test" {
+		t.Errorf("event source = %q, want %q", evt.Source, "test")
+	}
+	if evt.Payload["webhook_id"] != wh.WebhookID {
+		t.Errorf("payload webhook_id = %v, want %q", evt.Payload["webhook_id"], wh.WebhookID)
+	}
+}
+
+func TestWebhookHandler_TestDelivery_NotFound(t *testing.T) {
+	mock := newMockWebhookStore()
+	pub := &mockPublisher{}
+	h := handler.NewWebhookHandler(mock)
+	h.SetPublisher(pub)
+	srv := newWebhookRouter(h)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/v1/webhooks/nonexistent/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestWebhookHandler_TestDelivery_NoPublisher(t *testing.T) {
+	mock := newMockWebhookStore()
+	h := handler.NewWebhookHandler(mock) // no publisher set
+	srv := newWebhookRouter(h)
+	defer srv.Close()
+
+	wh := store.Webhook{
+		WebhookID: uuid.New().String(),
+		Name:      "no-pub-hook",
+		URL:       "https://example.com/hook",
+		Events:    []string{"run.*"},
+		Enabled:   true,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mock.webhooks[wh.WebhookID] = &wh
+
+	resp, err := http.Post(srv.URL+"/api/v1/webhooks/"+wh.WebhookID+"/test", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
 func TestWebhookHandler_ListWebhooks_StoreError(t *testing.T) {
 	mock := newMockWebhookStore()
 	mock.err = context.DeadlineExceeded

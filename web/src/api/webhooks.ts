@@ -28,4 +28,9 @@ export const webhooksApi = {
 
   listDeliveries: (id: string) =>
     request<WebhookDelivery[]>(`/webhooks/${encodeURIComponent(id)}/deliveries`),
+
+  testDelivery: (id: string) =>
+    request<{ status: string }>(`/webhooks/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+    }),
 };

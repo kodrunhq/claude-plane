@@ -1,12 +1,14 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, RefreshCw, AlertCircle, LayoutGrid } from 'lucide-react';
+import { Plus, RefreshCw, AlertCircle, LayoutGrid, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSessions, useTerminateSession } from '../hooks/useSessions.ts';
 import { useMachines } from '../hooks/useMachines.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import { Pagination } from '../components/shared/Pagination.tsx';
+import { usePagination } from '../hooks/usePagination.ts';
 import { useMultiviewStore } from '../stores/multiview.ts';
 
 const STATUS_OPTIONS = ['all', 'running', 'created', 'completed', 'failed', 'terminated'] as const;
@@ -18,6 +20,7 @@ export function SessionsPage() {
   const [machineFilter, setMachineFilter] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [terminateId, setTerminateId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const createScratchWorkspace = useMultiviewStore((s) => s.createScratchWorkspace);
@@ -32,6 +35,22 @@ export function SessionsPage() {
   const { data: sessions, isLoading, error, refetch } = useSessions(filters);
   const { data: machines } = useMachines();
   const terminateSession = useTerminateSession();
+
+  const filteredSessions = useMemo(() => {
+    const list = sessions ?? [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(
+      (s) =>
+        s.session_id.toLowerCase().includes(q) ||
+        s.command?.toLowerCase().includes(q) ||
+        s.working_dir?.toLowerCase().includes(q),
+    );
+  }, [sessions, search]);
+
+  const { paged: pagedSessions, page, pageSize, total, setPage, setPageSize } = usePagination(filteredSessions);
+
+  useEffect(() => { setPage(1); }, [search, statusFilter, machineFilter, setPage]);
 
   function handleAttach(id: string) {
     navigate(`/sessions/${id}`);
@@ -101,8 +120,19 @@ export function SessionsPage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Search & Filters */}
       <div className="flex flex-wrap items-center gap-4">
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search sessions..."
+            aria-label="Search sessions by ID, command, or directory"
+            className="rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary w-56"
+          />
+        </div>
         <div>
           <label className="block text-xs text-text-secondary mb-1">Status</label>
           <select
@@ -166,14 +196,23 @@ export function SessionsPage() {
 
       {/* Session List */}
       {!isLoading && !error && (
-        <SessionList
-          sessions={sessions ?? []}
-          onAttach={handleAttach}
-          onTerminate={handleTerminate}
-          selectable={multiSelectMode}
-          selectedIds={selectedIds}
-          onSelect={handleSelect}
-        />
+        <>
+          <SessionList
+            sessions={pagedSessions}
+            onAttach={handleAttach}
+            onTerminate={handleTerminate}
+            selectable={multiSelectMode}
+            selectedIds={selectedIds}
+            onSelect={handleSelect}
+          />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
 
       <NewSessionModal open={modalOpen} onClose={() => setModalOpen(false)} />

@@ -122,5 +122,9 @@
   {
     "name": "TypeWebhookDeleted",
     "value": "webhook.deleted"
+  },
+  {
+    "name": "TypeWebhookTest",
+    "value": "webhook.test"
   }
 ]

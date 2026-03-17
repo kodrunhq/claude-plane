@@ -35,6 +35,7 @@ import { useSession, useTerminateSession } from './hooks/useSessions.ts'
 import { useAuthStore } from './stores/auth.ts'
 import { useThemeEffect } from './hooks/useThemeEffect.ts'
 import { useUIPrefs } from './hooks/useUIPrefs.ts'
+import { CommandPalette } from './components/shared/CommandPalette.tsx'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,6 +102,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeApplier />
       <BrowserRouter>
+        <CommandPalette />
         <AppShell>
           <ErrorBoundary>
           <Routes>
