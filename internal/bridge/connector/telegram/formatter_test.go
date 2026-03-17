@@ -447,6 +447,18 @@ func TestFormatEvent_ScheduleResumed(t *testing.T) {
 	}
 }
 
+func TestFormatEvent_ScheduleCreated_FallbackToJobID(t *testing.T) {
+	e := makeEvent("schedule.created", map[string]interface{}{
+		"schedule_id": "s-1",
+		"job_id":      "j-1",
+		"cron_expr":   "0 9 * * *",
+	})
+	got := FormatEvent(e)
+	if !strings.Contains(got, "j\\-1") {
+		t.Errorf("expected job_id fallback, got: %s", got)
+	}
+}
+
 func TestFormatEvent_ScheduleDeleted(t *testing.T) {
 	e := makeEvent("schedule.deleted", map[string]interface{}{
 		"job_name":  "old-job",

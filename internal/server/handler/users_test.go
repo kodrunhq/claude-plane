@@ -187,6 +187,47 @@ func TestResetPassword_UserNotFound(t *testing.T) {
 	}
 }
 
+func TestUserHandler_CreateUser_PublishesEvent(t *testing.T) {
+	s := newTestStore(t)
+	pub := &mockPublisher{}
+
+	claims := testClaimsGetter("admin-pub", "admin")
+	h := handler.NewUserHandler(s, claims)
+	h.SetPublisher(pub)
+	r := chi.NewRouter()
+	handler.RegisterUserRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{
+		"email":        "newuser@example.com",
+		"password":     "password123",
+		"display_name": "New User",
+		"role":         "user",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/users", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	events := pub.published()
+	if len(events) < 1 {
+		t.Fatalf("expected at least 1 published event, got %d", len(events))
+	}
+	evt := events[0]
+	if evt.Type != "user.created" {
+		t.Errorf("event type = %q, want %q", evt.Type, "user.created")
+	}
+	if evt.Payload["email"] != "newuser@example.com" {
+		t.Errorf("payload email = %v, want %q", evt.Payload["email"], "newuser@example.com")
+	}
+}
+
 func TestUpdateProfile_Success(t *testing.T) {
 	srv, s := newUserRouter(t, "user-1", "user")
 	defer srv.Close()
