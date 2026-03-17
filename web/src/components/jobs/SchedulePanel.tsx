@@ -77,6 +77,13 @@ interface ScheduleFormProps {
   isSaving: boolean;
 }
 
+const CRON_PRESETS = [
+  { label: 'Every hour', expr: '0 * * * *' },
+  { label: 'Daily at 9am', expr: '0 9 * * *' },
+  { label: 'Every Monday', expr: '0 9 * * MON' },
+  { label: 'Every 5 min', expr: '*/5 * * * *' },
+];
+
 function ScheduleForm({ initial, onSave, onCancel, isSaving }: ScheduleFormProps) {
   const [form, setForm] = useState<ScheduleFormState>(initial);
 
@@ -107,6 +114,22 @@ function ScheduleForm({ initial, onSave, onCancel, isSaving }: ScheduleFormProps
         <p className={`text-xs ${isValid ? 'text-text-secondary' : 'text-red-400'}`}>
           {description}
         </p>
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {CRON_PRESETS.map((preset) => (
+            <button
+              key={preset.expr}
+              type="button"
+              onClick={() => setForm((prev) => ({ ...prev, cron_expr: preset.expr }))}
+              className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                form.cron_expr === preset.expr
+                  ? 'border-accent-primary bg-accent-primary/10 text-accent-primary'
+                  : 'border-border-primary text-text-secondary hover:text-text-primary hover:border-text-secondary'
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-1">
