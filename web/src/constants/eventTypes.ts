@@ -97,7 +97,7 @@ export const EVENT_GROUPS: { label: string; events: string[] }[] = [
     events: ['run.created', 'run.started', 'run.completed', 'run.failed', 'run.cancelled'],
   },
   {
-    label: 'Tasks',
+    label: 'Steps',
     events: ['run.step.completed', 'run.step.failed'],
   },
   {
