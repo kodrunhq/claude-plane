@@ -146,6 +146,7 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
           <button
             onClick={onClose}
             className="p-1 rounded-lg hover:bg-bg-tertiary transition-colors text-text-secondary"
+            aria-label="Close"
           >
             <X size={20} />
           </button>

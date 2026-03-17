@@ -122,6 +122,10 @@ func mergeRedactedConfig(existingConfig, incomingConfig string) string {
 // requireAdmin checks that the request comes from an admin user. It writes an
 // error response and returns false if the caller is not an admin.
 func (h *NotificationHandler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if h.getClaims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
