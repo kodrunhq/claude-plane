@@ -13,6 +13,11 @@ export interface CreateTriggerParams {
   filter: string;
 }
 
+export interface UpdateTriggerParams {
+  event_type: string;
+  filter: string;
+}
+
 export const KNOWN_EVENT_TYPES = [
   'run.created',
   'run.started',

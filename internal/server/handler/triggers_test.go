@@ -54,6 +54,37 @@ func (m *mockTriggerStore) ListJobTriggers(_ context.Context, jobID string) ([]s
 	return result, nil
 }
 
+func (m *mockTriggerStore) UpdateJobTrigger(_ context.Context, triggerID, eventType, filter string) (*store.JobTrigger, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	t, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	updated := *t
+	updated.EventType = eventType
+	updated.Filter = filter
+	updated.UpdatedAt = time.Now().UTC()
+	m.triggers[triggerID] = &updated
+	return &updated, nil
+}
+
+func (m *mockTriggerStore) ToggleJobTrigger(_ context.Context, triggerID string) (*store.JobTrigger, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	t, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	toggled := *t
+	toggled.Enabled = !toggled.Enabled
+	toggled.UpdatedAt = time.Now().UTC()
+	m.triggers[triggerID] = &toggled
+	return &toggled, nil
+}
+
 func (m *mockTriggerStore) DeleteJobTrigger(_ context.Context, triggerID string) error {
 	if m.err != nil {
 		return m.err
@@ -339,6 +370,219 @@ func TestTriggerHandler_DeleteTrigger_StoreError(t *testing.T) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+// --- UpdateTrigger tests ---
+
+func TestTriggerHandler_UpdateTrigger(t *testing.T) {
+	mock := newMockTriggerStore()
+	triggerID := uuid.New().String()
+	mock.triggers[triggerID] = &store.JobTrigger{
+		TriggerID: triggerID, JobID: "job-1", EventType: "run.completed",
+		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	body := map[string]interface{}{
+		"event_type": "run.failed",
+		"filter":     `{"job_id":"abc"}`,
+	}
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/triggers/"+triggerID, bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var updated store.JobTrigger
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if updated.EventType != "run.failed" {
+		t.Errorf("EventType = %q, want %q", updated.EventType, "run.failed")
+	}
+	if updated.Filter != `{"job_id":"abc"}` {
+		t.Errorf("Filter = %q, want %q", updated.Filter, `{"job_id":"abc"}`)
+	}
+}
+
+func TestTriggerHandler_UpdateTrigger_NotFound(t *testing.T) {
+	mock := newMockTriggerStore()
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	body := map[string]interface{}{"event_type": "run.completed"}
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/triggers/ghost", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerHandler_UpdateTrigger_MissingEventType(t *testing.T) {
+	mock := newMockTriggerStore()
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	body := map[string]interface{}{"filter": "{}"}
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/triggers/any-id", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerHandler_UpdateTrigger_InvalidBody(t *testing.T) {
+	mock := newMockTriggerStore()
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/triggers/any-id", bytes.NewBufferString("not-json"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerHandler_UpdateTrigger_StoreError(t *testing.T) {
+	mock := newMockTriggerStore()
+	mock.err = context.DeadlineExceeded
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	body := map[string]interface{}{"event_type": "run.completed"}
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/triggers/any-id", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+// --- ToggleTrigger tests ---
+
+func TestTriggerHandler_ToggleTrigger(t *testing.T) {
+	mock := newMockTriggerStore()
+	triggerID := uuid.New().String()
+	mock.triggers[triggerID] = &store.JobTrigger{
+		TriggerID: triggerID, JobID: "job-1", EventType: "run.completed",
+		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/triggers/"+triggerID+"/toggle", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST toggle: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var toggled store.JobTrigger
+	if err := json.NewDecoder(resp.Body).Decode(&toggled); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if toggled.Enabled {
+		t.Error("expected Enabled = false after toggle")
+	}
+
+	// Toggle again — should be true
+	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/triggers/"+triggerID+"/toggle", nil)
+	resp2, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("POST toggle 2: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	var toggled2 store.JobTrigger
+	if err := json.NewDecoder(resp2.Body).Decode(&toggled2); err != nil {
+		t.Fatalf("decode 2: %v", err)
+	}
+	if !toggled2.Enabled {
+		t.Error("expected Enabled = true after second toggle")
+	}
+}
+
+func TestTriggerHandler_ToggleTrigger_NotFound(t *testing.T) {
+	mock := newMockTriggerStore()
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/triggers/ghost/toggle", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST toggle: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerHandler_ToggleTrigger_StoreError(t *testing.T) {
+	mock := newMockTriggerStore()
+	mock.err = context.DeadlineExceeded
+	h := handler.NewTriggerHandler(mock)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/triggers/any-id/toggle", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST toggle: %v", err)
 	}
 	defer resp.Body.Close()
 

@@ -77,6 +77,63 @@ func (s *Store) DeleteJobTrigger(ctx context.Context, triggerID string) error {
 	return nil
 }
 
+// UpdateJobTrigger updates the event_type and filter of an existing trigger.
+// Returns the updated trigger or ErrNotFound if it doesn't exist.
+func (s *Store) UpdateJobTrigger(ctx context.Context, triggerID, eventType, filter string) (*JobTrigger, error) {
+	now := time.Now().UTC()
+
+	result, err := s.writer.ExecContext(ctx,
+		`UPDATE job_triggers SET event_type = ?, filter = ?, updated_at = ? WHERE trigger_id = ?`,
+		eventType, nullStringIfEmpty(filter), now, triggerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update job trigger: %w", err)
+	}
+
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return nil, fmt.Errorf("trigger %s: %w", triggerID, ErrNotFound)
+	}
+
+	row := s.reader.QueryRowContext(ctx,
+		`SELECT trigger_id, job_id, event_type, COALESCE(filter, ''), enabled, created_at, updated_at
+		 FROM job_triggers WHERE trigger_id = ?`, triggerID,
+	)
+	var t JobTrigger
+	if err := row.Scan(&t.TriggerID, &t.JobID, &t.EventType, &t.Filter, &t.Enabled, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("read updated trigger: %w", err)
+	}
+	return &t, nil
+}
+
+// ToggleJobTrigger flips the enabled flag of a trigger and returns the updated trigger.
+func (s *Store) ToggleJobTrigger(ctx context.Context, triggerID string) (*JobTrigger, error) {
+	now := time.Now().UTC()
+
+	result, err := s.writer.ExecContext(ctx,
+		`UPDATE job_triggers SET enabled = NOT enabled, updated_at = ? WHERE trigger_id = ?`,
+		now, triggerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("toggle job trigger: %w", err)
+	}
+
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return nil, fmt.Errorf("trigger %s: %w", triggerID, ErrNotFound)
+	}
+
+	row := s.reader.QueryRowContext(ctx,
+		`SELECT trigger_id, job_id, event_type, COALESCE(filter, ''), enabled, created_at, updated_at
+		 FROM job_triggers WHERE trigger_id = ?`, triggerID,
+	)
+	var t JobTrigger
+	if err := row.Scan(&t.TriggerID, &t.JobID, &t.EventType, &t.Filter, &t.Enabled, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("read toggled trigger: %w", err)
+	}
+	return &t, nil
+}
+
 // ListEnabledTriggers returns all enabled triggers across all jobs.
 // Used by the trigger subscriber to match incoming events.
 func (s *Store) ListEnabledTriggers(ctx context.Context) ([]JobTrigger, error) {

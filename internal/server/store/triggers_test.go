@@ -180,6 +180,91 @@ func TestDeleteJobTrigger_NotFound(t *testing.T) {
 	}
 }
 
+// --- UpdateJobTrigger ---
+
+func TestUpdateJobTrigger(t *testing.T) {
+	s := newTestStoreForTriggers(t)
+	ctx := context.Background()
+	jobID := "job-upd"
+	insertTestJob(t, s, jobID)
+
+	trig, err := s.CreateJobTrigger(ctx, makeTrigger(jobID, "run.completed"))
+	if err != nil {
+		t.Fatalf("CreateJobTrigger: %v", err)
+	}
+
+	updated, err := s.UpdateJobTrigger(ctx, trig.TriggerID, "run.failed", `{"job_id":"xyz"}`)
+	if err != nil {
+		t.Fatalf("UpdateJobTrigger: %v", err)
+	}
+
+	if updated.EventType != "run.failed" {
+		t.Errorf("EventType = %q, want %q", updated.EventType, "run.failed")
+	}
+	if updated.Filter != `{"job_id":"xyz"}` {
+		t.Errorf("Filter = %q, want %q", updated.Filter, `{"job_id":"xyz"}`)
+	}
+	if !updated.Enabled {
+		t.Error("expected Enabled unchanged (true)")
+	}
+	if !updated.UpdatedAt.After(trig.UpdatedAt) {
+		t.Error("expected UpdatedAt to advance")
+	}
+}
+
+func TestUpdateJobTrigger_NotFound(t *testing.T) {
+	s := newTestStoreForTriggers(t)
+	ctx := context.Background()
+
+	_, err := s.UpdateJobTrigger(ctx, "nonexistent", "run.completed", "")
+	if err == nil {
+		t.Fatal("expected error for nonexistent trigger")
+	}
+}
+
+// --- ToggleJobTrigger ---
+
+func TestToggleJobTrigger(t *testing.T) {
+	s := newTestStoreForTriggers(t)
+	ctx := context.Background()
+	jobID := "job-toggle"
+	insertTestJob(t, s, jobID)
+
+	trig, err := s.CreateJobTrigger(ctx, makeTrigger(jobID, "run.completed"))
+	if err != nil {
+		t.Fatalf("CreateJobTrigger: %v", err)
+	}
+	if !trig.Enabled {
+		t.Fatal("expected initial Enabled = true")
+	}
+
+	toggled, err := s.ToggleJobTrigger(ctx, trig.TriggerID)
+	if err != nil {
+		t.Fatalf("ToggleJobTrigger: %v", err)
+	}
+	if toggled.Enabled {
+		t.Error("expected Enabled = false after toggle")
+	}
+
+	toggled2, err := s.ToggleJobTrigger(ctx, trig.TriggerID)
+	if err != nil {
+		t.Fatalf("ToggleJobTrigger 2: %v", err)
+	}
+	if !toggled2.Enabled {
+		t.Error("expected Enabled = true after second toggle")
+	}
+}
+
+func TestToggleJobTrigger_NotFound(t *testing.T) {
+	s := newTestStoreForTriggers(t)
+	ctx := context.Background()
+
+	_, err := s.ToggleJobTrigger(ctx, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent trigger")
+	}
+}
+
 // --- ListEnabledTriggers ---
 
 func TestListEnabledTriggers(t *testing.T) {

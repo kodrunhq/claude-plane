@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Info, Link, Save, X } from 'lucide-react';
-import type { CreateTriggerParams } from '../../types/trigger.ts';
+import type { CreateTriggerParams, JobTrigger } from '../../types/trigger.ts';
 import { KNOWN_EVENT_TYPES } from '../../types/trigger.ts';
 import { useJobs } from '../../hooks/useJobs.ts';
 
@@ -8,6 +8,7 @@ interface TriggerBuilderProps {
   onSave: (params: CreateTriggerParams) => Promise<void>;
   onCancel: () => void;
   isSaving: boolean;
+  editingTrigger?: JobTrigger;
 }
 
 interface FormState {
@@ -43,8 +44,36 @@ function isJobChainingEvent(eventType: string): boolean {
   return JOB_CHAINING_EVENT_TYPES.includes(eventType);
 }
 
-export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderProps) {
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+function buildInitialForm(trigger?: JobTrigger): FormState {
+  if (!trigger) return DEFAULT_FORM;
+
+  const knownTypes: readonly string[] = KNOWN_EVENT_TYPES;
+  const isKnown = knownTypes.includes(trigger.event_type);
+  const sourceJobId = parseSourceJobId(trigger.filter);
+
+  return {
+    event_type: isKnown ? trigger.event_type : CUSTOM_OPTION,
+    custom_event_type: isKnown ? '' : trigger.event_type,
+    filter: trigger.filter,
+    source_job_id: sourceJobId ?? NO_JOB_SELECTED,
+  };
+}
+
+function parseSourceJobId(filter: string): string | null {
+  if (!filter.trim()) return null;
+  try {
+    const parsed = JSON.parse(filter);
+    if (typeof parsed === 'object' && parsed !== null && typeof parsed.job_id === 'string') {
+      return parsed.job_id;
+    }
+  } catch {
+    // not valid JSON
+  }
+  return null;
+}
+
+export function TriggerBuilder({ onSave, onCancel, isSaving, editingTrigger }: TriggerBuilderProps) {
+  const [form, setForm] = useState<FormState>(() => buildInitialForm(editingTrigger));
   const { data: jobs } = useJobs();
 
   const isCustom = form.event_type === CUSTOM_OPTION;
@@ -168,7 +197,7 @@ export function TriggerBuilder({ onSave, onCancel, isSaving }: TriggerBuilderPro
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Save size={12} />
-          {isSaving ? 'Saving...' : 'Save'}
+          {isSaving ? 'Saving...' : editingTrigger ? 'Update' : 'Save'}
         </button>
         <button
           onClick={onCancel}
