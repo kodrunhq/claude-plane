@@ -26,6 +26,7 @@ const defaultSMTPConfig: SMTPConfig = {
   password: '',
   from: '',
   to: '',
+  tls: true,
 };
 
 const defaultTelegramConfig: TelegramConfig = {
@@ -263,6 +264,28 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
                     placeholder="team@example.com"
                     className={inputClass}
                   />
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <span className="text-sm font-medium text-text-primary">TLS / STARTTLS</span>
+                    <p className="text-xs text-text-secondary">Required for Gmail, SendGrid, and most providers</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSMTPConfig({ ...smtpConfig, tls: !smtpConfig.tls })}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                      smtpConfig.tls ? 'bg-accent-primary' : 'bg-gray-600'
+                    }`}
+                    role="switch"
+                    aria-checked={smtpConfig.tls}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        smtpConfig.tls ? 'translate-x-[18px]' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
             </div>
