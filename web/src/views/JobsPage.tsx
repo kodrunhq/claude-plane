@@ -83,7 +83,7 @@ export function JobsPage() {
 
   const { paged: pagedJobs, page, pageSize, total, setPage, setPageSize } = usePagination(sortedJobs);
 
-  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, setPage]);
+  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, sort, dir, setPage]);
 
   async function handleRun(e: React.MouseEvent, jobId: string) {
     e.stopPropagation();
