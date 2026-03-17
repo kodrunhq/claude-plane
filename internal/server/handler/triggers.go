@@ -91,6 +91,36 @@ func (h *TriggerHandler) authorizeTrigger(w http.ResponseWriter, r *http.Request
 	return true
 }
 
+// authorizeJobByID verifies the requesting user owns the given job or is admin.
+// Returns true if authorized; writes an error response and returns false otherwise.
+func (h *TriggerHandler) authorizeJobByID(w http.ResponseWriter, r *http.Request, jobID string) bool {
+	if h.getClaims == nil || h.jobStore == nil {
+		return true // ownership checks not configured
+	}
+	c := h.getClaims(r)
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return false
+	}
+	if c.Role == "admin" {
+		return true
+	}
+	job, err := h.jobStore.GetJob(r.Context(), jobID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "job not found")
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return false
+	}
+	if job.Job.UserID != c.UserID {
+		writeError(w, http.StatusNotFound, "job not found")
+		return false
+	}
+	return true
+}
+
 // RegisterTriggerRoutes mounts all trigger-related routes on the given router.
 func RegisterTriggerRoutes(r chi.Router, h *TriggerHandler) {
 	r.Get("/api/v1/triggers", h.ListAllTriggers)
@@ -136,6 +166,10 @@ func (h *TriggerHandler) ListAllTriggers(w http.ResponseWriter, r *http.Request)
 func (h *TriggerHandler) ListTriggers(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
 
+	if !h.authorizeJobByID(w, r, jobID) {
+		return
+	}
+
 	triggers, err := h.store.ListJobTriggers(r.Context(), jobID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -150,6 +184,10 @@ func (h *TriggerHandler) ListTriggers(w http.ResponseWriter, r *http.Request) {
 // CreateTrigger handles POST /api/v1/jobs/{jobID}/triggers.
 func (h *TriggerHandler) CreateTrigger(w http.ResponseWriter, r *http.Request) {
 	jobID := chi.URLParam(r, "jobID")
+
+	if !h.authorizeJobByID(w, r, jobID) {
+		return
+	}
 
 	var req createTriggerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -248,6 +286,10 @@ func (h *TriggerHandler) ToggleTrigger(w http.ResponseWriter, r *http.Request) {
 // DeleteTrigger handles DELETE /api/v1/triggers/{triggerID}.
 func (h *TriggerHandler) DeleteTrigger(w http.ResponseWriter, r *http.Request) {
 	triggerID := chi.URLParam(r, "triggerID")
+
+	if !h.authorizeTrigger(w, r, triggerID) {
+		return
+	}
 
 	if err := h.store.DeleteJobTrigger(r.Context(), triggerID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

@@ -57,7 +57,7 @@ func HandleEventsWS(authSvc *auth.Service, fanout *event.WSFanout, logger *slog.
 				return
 			}
 
-			conn, err := websocket.Accept(w, r, nil)
+			conn, err := websocket.Accept(w, r, wsAcceptOptions)
 			if err != nil {
 				logger.Error("events websocket upgrade failed", "error", err)
 				return
@@ -68,7 +68,7 @@ func HandleEventsWS(authSvc *auth.Service, fanout *event.WSFanout, logger *slog.
 		}
 
 		// --- First-message auth ---
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := websocket.Accept(w, r, wsAcceptOptions)
 		if err != nil {
 			logger.Error("events websocket upgrade failed", "error", err)
 			return

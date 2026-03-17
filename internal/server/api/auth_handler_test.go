@@ -63,7 +63,10 @@ func loginUser(t *testing.T, srv *httptest.Server, email, password string) strin
 		"email":    email,
 		"password": password,
 	})
-	resp, err := http.Post(srv.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
+	// Use a client that does NOT follow redirects and does NOT auto-store cookies,
+	// so we can inspect the Set-Cookie header directly.
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Post(srv.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("login request: %v", err)
 	}
@@ -73,9 +76,14 @@ func loginUser(t *testing.T, srv *httptest.Server, email, password string) strin
 		t.Fatalf("login failed: status %d", resp.StatusCode)
 	}
 
-	var result map[string]string
-	json.NewDecoder(resp.Body).Decode(&result)
-	return result["token"]
+	// Extract JWT from the session_token cookie.
+	for _, c := range resp.Cookies() {
+		if c.Name == "session_token" && c.Value != "" {
+			return c.Value
+		}
+	}
+	t.Fatal("login response did not contain session_token cookie")
+	return ""
 }
 
 func TestRegisterSuccess(t *testing.T) {
@@ -158,9 +166,6 @@ func TestLoginSuccess(t *testing.T) {
 	var result map[string]string
 	json.NewDecoder(loginResp.Body).Decode(&result)
 
-	if result["token"] == "" {
-		t.Error("expected token in response")
-	}
 	if result["user_id"] == "" {
 		t.Error("expected user_id in response")
 	}

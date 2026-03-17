@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
@@ -46,6 +47,29 @@ func (o *Orchestrator) publishEvent(ctx context.Context, e event.Event) {
 	}
 }
 
+// buildOnComplete creates the run-completion callback that cleans up shared
+// sessions, persists the terminal status, removes the runner from activeRuns,
+// and publishes the appropriate lifecycle event.
+func (o *Orchestrator) buildOnComplete(jobID, triggerType, jobName string) func(string, string) {
+	return func(runID, status string) {
+		// Clean up shared sessions when the run finishes.
+		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
+			cleanup.CleanupRunSessions(runID)
+		}
+		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
+			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
+		}
+		o.mu.Lock()
+		delete(o.activeRuns, runID)
+		o.mu.Unlock()
+		evType := event.TypeRunCompleted
+		if status == store.StatusFailed {
+			evType = event.TypeRunFailed
+		}
+		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, jobID, status, triggerType, jobName))
+	}
+}
+
 // NewOrchestrator creates an Orchestrator. The provided context is used as the
 // parent for all DAGRunner contexts, tying their lifetime to the server.
 func NewOrchestrator(ctx context.Context, s store.JobStoreIface, executor StepExecutor) *Orchestrator {
@@ -80,23 +104,37 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		return nil, fmt.Errorf("get job: %w", err)
 	}
 
-	// Check max concurrent runs
+	// Check max concurrent runs and reserve a slot atomically to prevent
+	// a TOCTOU race where two goroutines both pass the count check before
+	// either registers its runner.
 	o.mu.Lock()
 	activeCount := o.countActiveRunsForJob(jobID)
 	if job.Job.MaxConcurrentRuns > 0 && activeCount >= job.Job.MaxConcurrentRuns {
 		o.mu.Unlock()
 		return nil, ErrMaxConcurrentRuns
 	}
+	reserveKey := "pending-" + jobID + "-" + uuid.New().String()
+	o.activeRuns[reserveKey] = &DAGRunner{jobID: jobID}
 	o.mu.Unlock()
+
+	// removeReservation cleans up the placeholder entry. Called on both
+	// success (replaced by real runner) and failure (early return).
+	removeReservation := func() {
+		o.mu.Lock()
+		delete(o.activeRuns, reserveKey)
+		o.mu.Unlock()
+	}
 
 	// Get steps and dependencies
 	steps, deps, err := o.store.GetStepsWithDeps(ctx, jobID)
 	if err != nil {
+		removeReservation()
 		return nil, fmt.Errorf("get steps: %w", err)
 	}
 
 	// Validate DAG
 	if err := ValidateDAG(steps, deps); err != nil {
+		removeReservation()
 		return nil, fmt.Errorf("validate DAG: %w", err)
 	}
 
@@ -104,6 +142,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 	resolvedParams := resolveParameters(job.Job.Parameters, params)
 	paramsJSON, err := json.Marshal(resolvedParams)
 	if err != nil {
+		removeReservation()
 		return nil, fmt.Errorf("marshal parameters: %w", err)
 	}
 
@@ -119,42 +158,26 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		Parameters:    string(paramsJSON),
 	})
 	if err != nil {
+		removeReservation()
 		return nil, fmt.Errorf("create run: %w", err)
 	}
 	o.publishEvent(ctx, event.NewRunEvent(event.TypeRunCreated, run.RunID, jobID, store.StatusPending, triggerType, job.Job.Name))
 
 	// Snapshot steps into run_steps
 	if err := o.store.InsertRunSteps(ctx, run.RunID, steps); err != nil {
+		removeReservation()
 		return nil, fmt.Errorf("insert run steps: %w", err)
 	}
 
 	// Read back the run steps to get generated IDs
 	detail, err := o.store.GetRunWithSteps(ctx, run.RunID)
 	if err != nil {
+		removeReservation()
 		return nil, fmt.Errorf("get run steps: %w", err)
 	}
 
 	// Build and start DAGRunner
-	capturedJobID := jobID
-	capturedTriggerType := triggerType
-	capturedJobName := job.Job.Name
-	onComplete := func(runID string, status string) {
-		// Clean up shared sessions when the run finishes.
-		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
-			cleanup.CleanupRunSessions(runID)
-		}
-		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
-			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
-		}
-		o.mu.Lock()
-		delete(o.activeRuns, runID)
-		o.mu.Unlock()
-		evType := event.TypeRunCompleted
-		if status == store.StatusFailed {
-			evType = event.TypeRunFailed
-		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, capturedJobID, status, capturedTriggerType, capturedJobName))
-	}
+	onComplete := o.buildOnComplete(jobID, triggerType, job.Job.Name)
 
 	// Build step name map from steps for template resolution
 	stepNameMap := make(map[string]string, len(steps))
@@ -175,7 +198,9 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 
 	runner := NewDAGRunner(run.RunID, jobID, detail.RunSteps, deps, o.executor, o.store, o.publisher, onComplete, resolvedParams, jobMeta, stepNameMap)
 
+	// Replace the reservation placeholder with the real runner.
 	o.mu.Lock()
+	delete(o.activeRuns, reserveKey)
 	o.activeRuns[run.RunID] = runner
 	o.mu.Unlock()
 
@@ -328,29 +353,11 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 	}
 
 	// Build new DAGRunner from current DB state
-	rebuildJobID := detail.Run.JobID
-	rebuildTriggerType := detail.Run.TriggerType
 	rebuildJobName := ""
 	if jobDetail, err := o.store.GetJob(ctx, detail.Run.JobID); err == nil {
 		rebuildJobName = jobDetail.Job.Name
 	}
-	onComplete := func(runID string, status string) {
-		// Clean up shared sessions when the run finishes.
-		if cleanup, ok := o.executor.(interface{ CleanupRunSessions(string) }); ok {
-			cleanup.CleanupRunSessions(runID)
-		}
-		if err := o.store.UpdateRunStatus(o.rootCtx, runID, status); err != nil {
-			slog.Warn("failed to update run status on completion", "error", err, "run_id", runID, "status", status)
-		}
-		o.mu.Lock()
-		delete(o.activeRuns, runID)
-		o.mu.Unlock()
-		evType := event.TypeRunCompleted
-		if status == store.StatusFailed {
-			evType = event.TypeRunFailed
-		}
-		o.publishEvent(o.rootCtx, event.NewRunEvent(evType, runID, rebuildJobID, status, rebuildTriggerType, rebuildJobName))
-	}
+	onComplete := o.buildOnComplete(detail.Run.JobID, detail.Run.TriggerType, rebuildJobName)
 
 	// Build step name map
 	stepNames := make(map[string]string)
