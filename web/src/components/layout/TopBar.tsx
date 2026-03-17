@@ -1,12 +1,31 @@
 import { Menu } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
+import { useAuthStore } from '../../stores/auth.ts';
 import { useIsMobile } from '../../hooks/useMediaQuery.ts';
+
+function userInitials(displayName: string, email: string): string {
+  const trimmed = displayName.trim();
+  if (trimmed) {
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0][0].toUpperCase();
+  }
+  if (email) {
+    return email[0].toUpperCase();
+  }
+  return 'U';
+}
 
 export function TopBar() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useIsMobile();
+  const user = useAuthStore((s) => s.user);
+
+  const initials = user ? userInitials(user.displayName, user.email) : 'U';
 
   function handleMenuClick() {
     if (isMobile) {
@@ -43,8 +62,9 @@ export function TopBar() {
       <div
         className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-accent-purple flex items-center justify-center text-xs text-white font-medium"
         aria-label="User avatar"
+        title={user?.displayName || user?.email || 'User'}
       >
-        CP
+        {initials}
       </div>
     </header>
   );

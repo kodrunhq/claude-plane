@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router';
 import { ArrowLeft, Monitor, FolderOpen, Square } from 'lucide-react';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
+import { Breadcrumb } from '../shared/Breadcrumb.tsx';
+import { CopyableId } from '../shared/CopyableId.tsx';
 import type { Session } from '../../types/session.ts';
 
 interface SessionHeaderProps {
@@ -26,6 +28,13 @@ export function SessionHeader({ session, isLoading, onTerminate }: SessionHeader
 
   return (
     <>
+      <div className="px-3 pt-2 pb-1 bg-bg-secondary">
+        <Breadcrumb items={[
+          { label: 'Sessions', to: '/sessions' },
+          { label: session ? `Session ${session.session_id.slice(0, 8)}` : 'Session' },
+        ]} />
+      </div>
+
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 bg-bg-secondary border-b border-border-primary text-xs">
         {/* Back link */}
         <Link
@@ -45,12 +54,7 @@ export function SessionHeader({ session, isLoading, onTerminate }: SessionHeader
         ) : session ? (
           <>
             {/* Session ID */}
-            <span
-              className="font-mono text-text-secondary opacity-60 shrink-0"
-              title={session.session_id}
-            >
-              {session.session_id.slice(0, 8)}
-            </span>
+            <CopyableId id={session.session_id} className="text-xs opacity-60 shrink-0" />
 
             {/* Status */}
             <StatusBadge status={session.status} size="sm" />

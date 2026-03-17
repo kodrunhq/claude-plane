@@ -12,6 +12,7 @@ import { ParameterEditor } from '../components/jobs/ParameterEditor.tsx';
 import { JobSettingsPanel } from '../components/jobs/JobSettingsPanel.tsx';
 import { RunNowModal } from '../components/jobs/RunNowModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import { Breadcrumb } from '../components/shared/Breadcrumb.tsx';
 import {
   useJob,
   useCreateJob,
@@ -297,6 +298,14 @@ export function JobEditor() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Breadcrumb */}
+      <div className="px-4 pt-2 pb-1">
+        <Breadcrumb items={[
+          { label: 'Jobs', to: '/jobs' },
+          { label: jobName || (isNew ? 'New Job' : 'Job') },
+        ]} />
+      </div>
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
         <button

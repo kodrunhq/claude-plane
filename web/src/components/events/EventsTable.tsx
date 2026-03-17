@@ -54,7 +54,7 @@ function EventRow({ event, expanded, onToggle }: EventRowProps) {
   return (
     <>
       <tr
-        className="border-t border-border-primary hover:bg-bg-tertiary/30 transition-colors"
+        className="border-t border-border-primary hover:bg-bg-tertiary/50 transition-colors"
         onClick={hasPayload ? onToggle : undefined}
         style={{ cursor: hasPayload ? 'pointer' : 'default' }}
       >
