@@ -18,11 +18,13 @@ export function useThemeEffect(): ThemeSetting {
     const root = document.documentElement;
 
     function apply(effective: 'light' | 'dark') {
+      root.classList.add('transition-colors', 'duration-200');
       if (effective === 'light') {
         root.setAttribute('data-theme', 'light');
       } else {
         root.removeAttribute('data-theme');
       }
+      setTimeout(() => root.classList.remove('transition-colors', 'duration-200'), 300);
     }
 
     if (theme === 'light') {
