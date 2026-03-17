@@ -31,22 +31,13 @@ You need the following from your email provider:
 
 ## Step 2: Configure the Notification Channel
 
-In the claude-plane web UI:
+Notification channels are configured through the web UI (not TOML files):
 
 1. Navigate to **Settings** in the sidebar.
 2. Open the **Notifications** tab.
-3. Configure SMTP settings:
-
-```toml
-# Example server.toml notification section
-[notifications.smtp]
-host = "smtp.gmail.com"
-port = 587
-username = "claude-plane-alerts@example.com"
-password = "app-specific-password"
-from = "claude-plane@example.com"
-tls = true
-```
+3. Click **Add Channel** and select **Email**.
+4. Fill in the SMTP fields (host, port, username, password, from address, recipient address) and enable TLS if required.
+5. Click **Save** to create the channel.
 
 > For Gmail, you must create an **App Password** at https://myaccount.google.com/apppasswords. Regular passwords are rejected when 2FA is enabled.
 
@@ -97,17 +88,13 @@ If using SendGrid as your email provider:
 
 1. Sign up at https://sendgrid.com and verify your sender domain.
 2. Go to **Settings > API Keys** and create a key with **Mail Send** permission.
-3. Configure SMTP:
-
-```toml
-[notifications.smtp]
-host = "smtp.sendgrid.net"
-port = 587
-username = "apikey"
-password = "SG.your-sendgrid-api-key"
-from = "notifications@yourdomain.com"
-tls = true
-```
+3. In the claude-plane web UI, go to **Settings > Notifications > Add Channel > Email** and enter:
+   - **Host:** `smtp.sendgrid.net`
+   - **Port:** `587`
+   - **Username:** `apikey`
+   - **Password:** your SendGrid API key (e.g., `SG.your-sendgrid-api-key`)
+   - **From:** `notifications@yourdomain.com`
+   - **TLS:** enabled
 
 ## Troubleshooting
 
