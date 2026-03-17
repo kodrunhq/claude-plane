@@ -76,12 +76,15 @@ func NewTestServer(t *testing.T) *TestServer {
 	registry := session.NewRegistry(slog.Default())
 	sessionHandler := session.NewSessionHandler(s, cm, registry, sessionClaimsGetter, slog.Default())
 
+	userHandler := handler.NewUserHandler(s, handlerClaimsGetter)
+
 	// Core router (auth endpoints, machines, sessions)
 	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
 	router := api.NewRouter(api.RouterDeps{
 		Handlers:       handlers,
 		SessionHandler: sessionHandler,
 		JobHandler:     jobHandler,
+		UserHandler:    userHandler,
 	})
 
 	// Template routes — JWT-protected, matching production wiring
