@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <p className="text-sm text-text-secondary max-w-md mb-4">
             An unexpected error occurred. You can try going back to the home page.
           </p>
-          {this.state.error?.message && (
+          {import.meta.env.DEV && this.state.error?.message && (
             <pre className="text-xs font-mono text-text-secondary bg-bg-tertiary border border-border-primary rounded-lg px-4 py-3 mb-6 max-w-lg overflow-auto">
               {this.state.error.message}
             </pre>

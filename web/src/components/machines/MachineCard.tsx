@@ -37,7 +37,7 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
 
   const handleSave = () => {
     const trimmed = editValue.trim();
-    if (trimmed.length > 255) return;
+    if (trimmed === '' || trimmed.length > 255) return;
     updateMachine.mutate(
       { id: machine.machine_id, params: { display_name: trimmed } },
       { onSuccess: () => setIsEditing(false) },

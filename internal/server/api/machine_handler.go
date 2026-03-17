@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,36 @@ type machineHealthResponse struct {
 	MaxSessions    int32 `json:"max_sessions"`
 }
 
+// buildMachineResponse constructs a machineResponse from a store.Machine,
+// overlaying live connection status and health data from the connection manager.
+func (h *Handlers) buildMachineResponse(m store.Machine) machineResponse {
+	resp := machineResponse{
+		MachineID:   m.MachineID,
+		DisplayName: m.DisplayName,
+		Status:      m.Status,
+		MaxSessions: m.MaxSessions,
+		LastSeenAt:  m.LastSeenAt,
+		CreatedAt:   m.CreatedAt,
+	}
+
+	if agent := h.connMgr.GetAgent(m.MachineID); agent != nil {
+		resp.Status = "connected"
+		now := time.Now()
+		resp.LastSeenAt = &now
+		if hi := agent.GetHealth(); hi != nil {
+			resp.Health = &machineHealthResponse{
+				CPUCores:       hi.CPUCores,
+				MemoryTotalMB:  hi.MemoryTotalMB,
+				MemoryUsedMB:   hi.MemoryUsedMB,
+				ActiveSessions: hi.ActiveSessions,
+				MaxSessions:    hi.MaxSessions,
+			}
+		}
+	}
+
+	return resp
+}
+
 // ListMachines handles GET /api/v1/machines.
 // Returns all machines with live status overlay from connection manager.
 func (h *Handlers) ListMachines(w http.ResponseWriter, r *http.Request) {
@@ -40,32 +71,7 @@ func (h *Handlers) ListMachines(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]machineResponse, 0, len(machines))
 	for _, m := range machines {
-		resp := machineResponse{
-			MachineID:   m.MachineID,
-			DisplayName: m.DisplayName,
-			Status:      m.Status,
-			MaxSessions: m.MaxSessions,
-			LastSeenAt:  m.LastSeenAt,
-			CreatedAt:   m.CreatedAt,
-		}
-
-		// Overlay live status and health from connection manager
-		if agent := h.connMgr.GetAgent(m.MachineID); agent != nil {
-			resp.Status = "connected"
-			now := time.Now()
-			resp.LastSeenAt = &now
-			if hi := agent.GetHealth(); hi != nil {
-				resp.Health = &machineHealthResponse{
-					CPUCores:       hi.CPUCores,
-					MemoryTotalMB:  hi.MemoryTotalMB,
-					MemoryUsedMB:   hi.MemoryUsedMB,
-					ActiveSessions: hi.ActiveSessions,
-					MaxSessions:    hi.MaxSessions,
-				}
-			}
-		}
-
-		result = append(result, resp)
+		result = append(result, h.buildMachineResponse(m))
 	}
 
 	writeJSON(w, http.StatusOK, result)
@@ -86,32 +92,7 @@ func (h *Handlers) GetMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := machineResponse{
-		MachineID:   machine.MachineID,
-		DisplayName: machine.DisplayName,
-		Status:      machine.Status,
-		MaxSessions: machine.MaxSessions,
-		LastSeenAt:  machine.LastSeenAt,
-		CreatedAt:   machine.CreatedAt,
-	}
-
-	// Overlay live status and health from connection manager
-	if agent := h.connMgr.GetAgent(machine.MachineID); agent != nil {
-		resp.Status = "connected"
-		now := time.Now()
-		resp.LastSeenAt = &now
-		if hi := agent.GetHealth(); hi != nil {
-			resp.Health = &machineHealthResponse{
-				CPUCores:       hi.CPUCores,
-				MemoryTotalMB:  hi.MemoryTotalMB,
-				MemoryUsedMB:   hi.MemoryUsedMB,
-				ActiveSessions: hi.ActiveSessions,
-				MaxSessions:    hi.MaxSessions,
-			}
-		}
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, h.buildMachineResponse(*machine))
 }
 
 // updateMachineRequest is the JSON body for PUT /api/v1/machines/{machineID}.
@@ -120,8 +101,14 @@ type updateMachineRequest struct {
 }
 
 // UpdateMachine handles PUT /api/v1/machines/{machineID}.
-// Updates mutable machine fields (currently display_name).
+// Updates mutable machine fields (currently display_name). Admin-only.
 func (h *Handlers) UpdateMachine(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
 	machineID := chi.URLParam(r, "machineID")
 
 	var req updateMachineRequest
@@ -135,12 +122,18 @@ func (h *Handlers) UpdateMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(*req.DisplayName) > 255 {
+	trimmed := strings.TrimSpace(*req.DisplayName)
+	if trimmed == "" {
+		writeError(w, http.StatusBadRequest, "display_name must not be empty")
+		return
+	}
+
+	if len(trimmed) > 255 {
 		writeError(w, http.StatusBadRequest, "display_name must be 255 characters or fewer")
 		return
 	}
 
-	if err := h.store.UpdateMachineDisplayName(machineID, *req.DisplayName); err != nil {
+	if err := h.store.UpdateMachineDisplayName(machineID, trimmed); err != nil {
 		if errors.Is(err, store.ErrMachineNotFound) {
 			writeError(w, http.StatusNotFound, "machine not found")
 		} else {
@@ -156,29 +149,5 @@ func (h *Handlers) UpdateMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := machineResponse{
-		MachineID:   machine.MachineID,
-		DisplayName: machine.DisplayName,
-		Status:      machine.Status,
-		MaxSessions: machine.MaxSessions,
-		LastSeenAt:  machine.LastSeenAt,
-		CreatedAt:   machine.CreatedAt,
-	}
-
-	if agent := h.connMgr.GetAgent(machine.MachineID); agent != nil {
-		resp.Status = "connected"
-		now := time.Now()
-		resp.LastSeenAt = &now
-		if hi := agent.GetHealth(); hi != nil {
-			resp.Health = &machineHealthResponse{
-				CPUCores:       hi.CPUCores,
-				MemoryTotalMB:  hi.MemoryTotalMB,
-				MemoryUsedMB:   hi.MemoryUsedMB,
-				ActiveSessions: hi.ActiveSessions,
-				MaxSessions:    hi.MaxSessions,
-			}
-		}
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, h.buildMachineResponse(*machine))
 }
