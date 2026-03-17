@@ -54,21 +54,22 @@ func maxBytesMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 // RouterDeps holds all dependencies required by NewRouter, replacing the
 // previous 15 positional parameters with named fields.
 type RouterDeps struct {
-	Handlers           *Handlers
-	SessionHandler     *session.SessionHandler
-	WSHandler          http.HandlerFunc
-	EventsWSHandler    http.HandlerFunc
-	JobHandler         *handler.JobHandler
-	RunHandler         *handler.RunHandler
-	EventHandler       *handler.EventHandler
-	WebhookHandler     *handler.WebhookHandler
-	TriggerHandler     *handler.TriggerHandler
-	IngestHandler      *handler.IngestHandler
-	ScheduleHandler    *handler.ScheduleHandler
-	UserHandler        *handler.UserHandler
-	CredentialHandler  *handler.CredentialHandler
-	PreferencesHandler *handler.PreferencesHandler
-	APIKeyAuth         *APIKeyAuth
+	Handlers            *Handlers
+	SessionHandler      *session.SessionHandler
+	WSHandler           http.HandlerFunc
+	EventsWSHandler     http.HandlerFunc
+	JobHandler          *handler.JobHandler
+	RunHandler          *handler.RunHandler
+	EventHandler        *handler.EventHandler
+	WebhookHandler      *handler.WebhookHandler
+	TriggerHandler      *handler.TriggerHandler
+	IngestHandler       *handler.IngestHandler
+	ScheduleHandler     *handler.ScheduleHandler
+	UserHandler         *handler.UserHandler
+	CredentialHandler   *handler.CredentialHandler
+	PreferencesHandler  *handler.PreferencesHandler
+	NotificationHandler *handler.NotificationHandler
+	APIKeyAuth          *APIKeyAuth
 }
 
 // NewRouter creates a chi router with all API routes configured.
@@ -132,7 +133,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 	})
 
 	// Job system routes (flat paths, JWT + optional API key protected)
-	if deps.JobHandler != nil || deps.RunHandler != nil || deps.EventHandler != nil || deps.WebhookHandler != nil || deps.TriggerHandler != nil || deps.ScheduleHandler != nil || deps.UserHandler != nil || deps.CredentialHandler != nil || deps.PreferencesHandler != nil {
+	if deps.JobHandler != nil || deps.RunHandler != nil || deps.EventHandler != nil || deps.WebhookHandler != nil || deps.TriggerHandler != nil || deps.ScheduleHandler != nil || deps.UserHandler != nil || deps.CredentialHandler != nil || deps.PreferencesHandler != nil || deps.NotificationHandler != nil {
 		r.Group(func(r chi.Router) {
 			r.Use(JWTAuthMiddleware(h.authSvc, aka))
 			if deps.JobHandler != nil {
@@ -161,6 +162,9 @@ func NewRouter(deps RouterDeps) chi.Router {
 			}
 			if deps.PreferencesHandler != nil {
 				handler.RegisterPreferencesRoutes(r, deps.PreferencesHandler)
+			}
+			if deps.NotificationHandler != nil {
+				handler.RegisterNotificationRoutes(r, deps.NotificationHandler)
 			}
 		})
 	}
