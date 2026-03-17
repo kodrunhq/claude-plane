@@ -160,3 +160,65 @@ func TestGetMachineNotFound(t *testing.T) {
 		t.Errorf("expected nil machine, got %+v", m)
 	}
 }
+
+func TestSoftDeleteMachine(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create three machines.
+	for _, id := range []string{"m-001", "m-002", "m-003"} {
+		if err := s.UpsertMachine(id, 5); err != nil {
+			t.Fatalf("UpsertMachine(%q): %v", id, err)
+		}
+	}
+
+	// Soft-delete m-002.
+	if err := s.SoftDeleteMachine("m-002"); err != nil {
+		t.Fatalf("SoftDeleteMachine: %v", err)
+	}
+
+	// ListMachines should exclude deleted machine.
+	machines, err := s.ListMachines()
+	if err != nil {
+		t.Fatalf("ListMachines: %v", err)
+	}
+	if len(machines) != 2 {
+		t.Fatalf("len(machines) = %d, want 2", len(machines))
+	}
+	for _, m := range machines {
+		if m.MachineID == "m-002" {
+			t.Error("soft-deleted machine m-002 should not appear in ListMachines")
+		}
+	}
+
+	// GetMachine should return not found for deleted machine.
+	_, err = s.GetMachine("m-002")
+	if !errors.Is(err, ErrMachineNotFound) {
+		t.Errorf("GetMachine for deleted machine: expected ErrMachineNotFound, got %v", err)
+	}
+}
+
+func TestSoftDeleteMachineNotFound(t *testing.T) {
+	s := newTestStore(t)
+
+	err := s.SoftDeleteMachine("nonexistent")
+	if !errors.Is(err, ErrMachineNotFound) {
+		t.Errorf("expected ErrMachineNotFound, got %v", err)
+	}
+}
+
+func TestSoftDeleteMachineIdempotent(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.UpsertMachine("m-001", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	if err := s.SoftDeleteMachine("m-001"); err != nil {
+		t.Fatalf("SoftDeleteMachine (first): %v", err)
+	}
+
+	// Second delete should return not found (already deleted).
+	err := s.SoftDeleteMachine("m-001")
+	if !errors.Is(err, ErrMachineNotFound) {
+		t.Errorf("expected ErrMachineNotFound on double-delete, got %v", err)
+	}
+}
