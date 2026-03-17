@@ -104,6 +104,24 @@ func (m *mockScheduleCRUDStore) SetScheduleEnabled(_ context.Context, scheduleID
 	return nil
 }
 
+func (m *mockScheduleCRUDStore) ListAllSchedules(_ context.Context, _ string) ([]store.CronScheduleWithJob, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []store.CronScheduleWithJob
+	for _, sc := range m.schedules {
+		result = append(result, store.CronScheduleWithJob{
+			CronSchedule: *sc,
+			JobName:      m.jobNameFor(sc.JobID),
+		})
+	}
+	return result, nil
+}
+
+func (m *mockScheduleCRUDStore) jobNameFor(jobID string) string {
+	return "job-" + jobID
+}
+
 func (m *mockScheduleCRUDStore) DeleteSchedule(_ context.Context, scheduleID string) error {
 	if m.err != nil {
 		return m.err
@@ -842,6 +860,87 @@ func TestScheduleHandler_DeleteSchedule_StoreError(t *testing.T) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+// --- ListAllSchedules tests ---
+
+func TestScheduleHandler_ListAllSchedules(t *testing.T) {
+	fix := newScheduleFixture()
+	defer fix.close()
+
+	fix.addJob("job-1")
+	fix.addJob("job-2")
+	fix.addSchedule("s1", "job-1", "0 * * * *")
+	fix.addSchedule("s2", "job-2", "0 0 * * *")
+
+	resp, err := http.Get(fix.srv.URL + "/api/v1/schedules")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var schedules []struct {
+		ScheduleID string `json:"schedule_id"`
+		JobName    string `json:"job_name"`
+		CronExpr   string `json:"cron_expr"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&schedules); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(schedules) != 2 {
+		t.Fatalf("expected 2 schedules, got %d", len(schedules))
+	}
+
+	// Verify job_name is populated.
+	for _, sc := range schedules {
+		if sc.JobName == "" {
+			t.Errorf("schedule %s has empty job_name", sc.ScheduleID)
+		}
+	}
+}
+
+func TestScheduleHandler_ListAllSchedules_Empty(t *testing.T) {
+	fix := newScheduleFixture()
+	defer fix.close()
+
+	resp, err := http.Get(fix.srv.URL + "/api/v1/schedules")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var schedules []store.CronScheduleWithJob
+	if err := json.NewDecoder(resp.Body).Decode(&schedules); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(schedules) != 0 {
+		t.Errorf("expected 0 schedules, got %d", len(schedules))
+	}
+}
+
+func TestScheduleHandler_ListAllSchedules_StoreError(t *testing.T) {
+	fix := newScheduleFixture()
+	defer fix.close()
+
+	fix.schedStore.err = context.DeadlineExceeded
+
+	resp, err := http.Get(fix.srv.URL + "/api/v1/schedules")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
 	}
 	defer resp.Body.Close()
 

@@ -19,6 +19,7 @@ type TriggerCRUDStore interface {
 	UpdateJobTrigger(ctx context.Context, triggerID, eventType, filter string) (*store.JobTrigger, error)
 	ToggleJobTrigger(ctx context.Context, triggerID string) (*store.JobTrigger, error)
 	DeleteJobTrigger(ctx context.Context, triggerID string) error
+	ListAllTriggers(ctx context.Context, userID string) ([]store.JobTriggerWithJob, error)
 }
 
 // TriggerJobStore allows looking up jobs to verify trigger ownership.
@@ -92,6 +93,7 @@ func (h *TriggerHandler) authorizeTrigger(w http.ResponseWriter, r *http.Request
 
 // RegisterTriggerRoutes mounts all trigger-related routes on the given router.
 func RegisterTriggerRoutes(r chi.Router, h *TriggerHandler) {
+	r.Get("/api/v1/triggers", h.ListAllTriggers)
 	r.Get("/api/v1/jobs/{jobID}/triggers", h.ListTriggers)
 	r.Post("/api/v1/jobs/{jobID}/triggers", h.CreateTrigger)
 	r.Put("/api/v1/triggers/{triggerID}", h.UpdateTrigger)
@@ -103,6 +105,31 @@ func RegisterTriggerRoutes(r chi.Router, h *TriggerHandler) {
 type createTriggerRequest struct {
 	EventType string `json:"event_type"`
 	Filter    string `json:"filter"`
+}
+
+// ListAllTriggers handles GET /api/v1/triggers.
+// Non-admin users only see triggers belonging to their own jobs.
+func (h *TriggerHandler) ListAllTriggers(w http.ResponseWriter, r *http.Request) {
+	var userID string
+	if h.getClaims != nil {
+		c := h.getClaims(r)
+		if c == nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		if c.Role != "admin" {
+			userID = c.UserID
+		}
+	}
+	triggers, err := h.store.ListAllTriggers(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if triggers == nil {
+		triggers = []store.JobTriggerWithJob{}
+	}
+	writeJSON(w, http.StatusOK, triggers)
 }
 
 // ListTriggers handles GET /api/v1/jobs/{jobID}/triggers.

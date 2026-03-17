@@ -28,6 +28,7 @@ import (
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
+	"github.com/kodrunhq/claude-plane/internal/server/notify"
 	"github.com/kodrunhq/claude-plane/internal/server/retention"
 	"github.com/kodrunhq/claude-plane/internal/server/executor"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
@@ -287,6 +288,14 @@ func newServeCmd() *cobra.Command {
 			triggerSub := event.NewTriggerSubscriber(triggerStore, orchAdapter, slog.Default())
 			eventBus.Subscribe("*", triggerSub.Handler(), event.SubscriberOptions{Concurrency: 2, BufferSize: 256})
 
+			// Notification dispatcher — fans out event bus events to configured notification channels.
+			notifiers := map[string]notify.Notifier{
+				"email":    &notify.SMTPNotifier{},
+				"telegram": notify.NewTelegramNotifier(nil),
+			}
+			notifyDispatcher := notify.NewDispatcher(s, notifiers, notify.DefaultEventRenderer, slog.Default())
+			eventBus.Subscribe("*", notifyDispatcher.Handler(), event.SubscriberOptions{Concurrency: 2, BufferSize: 256})
+
 			// Wire event publisher into components.
 			connMgr.SetPublisher(eventBus)
 			orch.SetPublisher(eventBus)
@@ -329,6 +338,8 @@ func newServeCmd() *cobra.Command {
 			preferencesHandler := handler.NewPreferencesHandler(s, handlerClaimsGetter)
 
 			searchHandler := handler.NewSearchHandler(s, handlerClaimsGetter)
+
+			notificationHandler := handler.NewNotificationHandler(s, notifiers, handlerClaimsGetter)
 
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
@@ -398,7 +409,8 @@ func newServeCmd() *cobra.Command {
 				ScheduleHandler:    scheduleHandler,
 				UserHandler:        userHandler,
 				CredentialHandler:  credentialHandler,
-				PreferencesHandler: preferencesHandler,
+				PreferencesHandler:  preferencesHandler,
+				NotificationHandler: notificationHandler,
 				APIKeyAuth:         apiKeyAuth,
 			})
 

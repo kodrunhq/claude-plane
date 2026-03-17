@@ -2,6 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { schedulesApi } from '../api/schedules.ts';
 import type { CreateScheduleParams, UpdateScheduleParams } from '../types/schedule.ts';
 
+export function useAllSchedules() {
+  return useQuery({
+    queryKey: ['schedules', 'all'],
+    queryFn: () => schedulesApi.listAll(),
+  });
+}
+
 export function useSchedules(jobId: string | undefined) {
   return useQuery({
     queryKey: ['schedules', jobId],
@@ -17,6 +24,7 @@ export function useCreateSchedule() {
       schedulesApi.create(jobId, params),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['schedules', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['schedules', 'all'] });
     },
   });
 }
@@ -28,6 +36,7 @@ export function useUpdateSchedule() {
       schedulesApi.update(id, params),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['schedules', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['schedules', 'all'] });
     },
   });
 }
@@ -39,6 +48,7 @@ export function useDeleteSchedule() {
       schedulesApi.delete(id),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ['schedules', variables.jobId] });
+      qc.invalidateQueries({ queryKey: ['schedules', 'all'] });
     },
   });
 }
@@ -49,6 +59,7 @@ export function usePauseSchedule() {
     mutationFn: (id: string) => schedulesApi.pause(id),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['schedules', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['schedules', 'all'] });
     },
   });
 }
@@ -59,6 +70,7 @@ export function useResumeSchedule() {
     mutationFn: (id: string) => schedulesApi.resume(id),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['schedules', data.job_id] });
+      qc.invalidateQueries({ queryKey: ['schedules', 'all'] });
     },
   });
 }

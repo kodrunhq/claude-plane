@@ -509,6 +509,29 @@ ALTER TABLE sessions ADD COLUMN env_vars TEXT DEFAULT '';`,
 		Description: "add payload column to webhook_deliveries",
 		SQL:         `ALTER TABLE webhook_deliveries ADD COLUMN payload TEXT;`,
 	},
+	{
+		Version:     17,
+		Description: "notification channels and subscriptions",
+		SQL: `
+		CREATE TABLE IF NOT EXISTS notification_channels (
+			channel_id   TEXT PRIMARY KEY,
+			channel_type TEXT NOT NULL,
+			name         TEXT NOT NULL,
+			config       TEXT NOT NULL,
+			enabled      INTEGER NOT NULL DEFAULT 1,
+			created_by   TEXT NOT NULL,
+			created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS notification_subscriptions (
+			user_id    TEXT NOT NULL,
+			channel_id TEXT NOT NULL REFERENCES notification_channels(channel_id) ON DELETE CASCADE,
+			event_type TEXT NOT NULL,
+			PRIMARY KEY (user_id, channel_id, event_type)
+		);
+		`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.
