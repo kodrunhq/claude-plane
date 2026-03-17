@@ -26,3 +26,11 @@ export function useUpdateMachine() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['machines'] }),
   });
 }
+
+export function useDeleteMachine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => machinesApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['machines'] }),
+  });
+}

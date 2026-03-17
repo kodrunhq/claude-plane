@@ -117,6 +117,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 			r.Get("/machines", h.ListMachines)
 			r.Get("/machines/{machineID}", h.GetMachine)
 			r.Put("/machines/{machineID}", h.UpdateMachine)
+			r.Delete("/machines/{machineID}", h.DeleteMachine)
 
 			// Session routes
 			if deps.SessionHandler != nil {

@@ -71,12 +71,32 @@ func (s *Store) UpdateMachineDisplayName(machineID, displayName string) error {
 	return nil
 }
 
-// ListMachines returns all machines ordered by machine_id.
+// SoftDeleteMachine sets the deleted_at timestamp for the given machine.
+// Returns ErrMachineNotFound if no matching row exists.
+func (s *Store) SoftDeleteMachine(machineID string) error {
+	result, err := s.writer.Exec(
+		`UPDATE machines SET deleted_at = CURRENT_TIMESTAMP WHERE machine_id = ? AND deleted_at IS NULL`,
+		machineID,
+	)
+	if err != nil {
+		return fmt.Errorf("soft delete machine %q: %w", machineID, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("soft delete machine rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrMachineNotFound
+	}
+	return nil
+}
+
+// ListMachines returns all non-deleted machines ordered by machine_id.
 func (s *Store) ListMachines() ([]Machine, error) {
 	rows, err := s.reader.Query(`
 		SELECT machine_id, display_name, status, max_sessions,
 		       last_health, last_seen_at, cert_expires_at, created_at
-		FROM machines ORDER BY machine_id
+		FROM machines WHERE deleted_at IS NULL ORDER BY machine_id
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list machines: %w", err)
@@ -111,7 +131,7 @@ func (s *Store) ListMachines() ([]Machine, error) {
 	return machines, rows.Err()
 }
 
-// GetMachine returns a single machine by ID, or an error if not found.
+// GetMachine returns a single non-deleted machine by ID, or an error if not found.
 func (s *Store) GetMachine(machineID string) (*Machine, error) {
 	var m Machine
 	var displayName, lastHealth sql.NullString
@@ -119,7 +139,7 @@ func (s *Store) GetMachine(machineID string) (*Machine, error) {
 	err := s.reader.QueryRow(`
 		SELECT machine_id, display_name, status, max_sessions,
 		       last_health, last_seen_at, cert_expires_at, created_at
-		FROM machines WHERE machine_id = ?
+		FROM machines WHERE machine_id = ? AND deleted_at IS NULL
 	`, machineID).Scan(
 		&m.MachineID, &displayName, &m.Status, &m.MaxSessions,
 		&lastHealth, &lastSeenAt, &certExpires, &m.CreatedAt,

@@ -151,3 +151,31 @@ func (h *Handlers) UpdateMachine(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, h.buildMachineResponse(*machine))
 }
+
+// DeleteMachine handles DELETE /api/v1/machines/{machineID}.
+// Soft-deletes the machine. Admin-only. Rejects if machine is currently connected.
+func (h *Handlers) DeleteMachine(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	machineID := chi.URLParam(r, "machineID")
+
+	if agent := h.connMgr.GetAgent(machineID); agent != nil {
+		writeError(w, http.StatusConflict, "cannot delete connected machine")
+		return
+	}
+
+	if err := h.store.SoftDeleteMachine(machineID); err != nil {
+		if errors.Is(err, store.ErrMachineNotFound) {
+			writeError(w, http.StatusNotFound, "machine not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal error")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
