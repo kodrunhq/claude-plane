@@ -499,6 +499,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_tokens_short_code ON provisio
 ALTER TABLE sessions ADD COLUMN skip_permissions TEXT DEFAULT '';
 ALTER TABLE sessions ADD COLUMN env_vars TEXT DEFAULT '';`,
 	},
+	{
+		Version:     15,
+		Description: "machine soft-delete",
+		SQL:         `ALTER TABLE machines ADD COLUMN deleted_at DATETIME;`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

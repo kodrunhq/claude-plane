@@ -233,6 +233,81 @@ func TestUpdateMachineEmptyDisplayName(t *testing.T) {
 	}
 }
 
+func TestDeleteMachine_Disconnected(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-del@example.com", "password123", "Admin User")
+
+	if err := env.Store.UpsertMachine("del-machine", 5); err != nil {
+		t.Fatalf("seed machine: %v", err)
+	}
+
+	req, _ := http.NewRequest("DELETE", env.Server.URL+"/api/v1/machines/del-machine", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("expected 204 for disconnected machine, got %d", resp.StatusCode)
+	}
+
+	// Verify machine is no longer listed.
+	getReq, _ := http.NewRequest("GET", env.Server.URL+"/api/v1/machines/del-machine", nil)
+	getReq.Header.Set("Authorization", "Bearer "+token)
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("GET request: %v", err)
+	}
+	defer getResp.Body.Close()
+
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for deleted machine, got %d", getResp.StatusCode)
+	}
+}
+
+func TestDeleteMachine_ForbiddenForNonAdmin(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+
+	resp := registerUser(t, env.Server, "regular-del@example.com", "password123", "Regular User")
+	resp.Body.Close()
+	token := loginUser(t, env.Server, "regular-del@example.com", "password123")
+
+	if err := env.Store.UpsertMachine("del-machine-2", 5); err != nil {
+		t.Fatalf("seed machine: %v", err)
+	}
+
+	req, _ := http.NewRequest("DELETE", env.Server.URL+"/api/v1/machines/del-machine-2", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	delResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE request: %v", err)
+	}
+	defer delResp.Body.Close()
+
+	if delResp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for non-admin, got %d", delResp.StatusCode)
+	}
+}
+
+func TestDeleteMachine_NotFound(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-del-nf@example.com", "password123", "Admin User")
+
+	req, _ := http.NewRequest("DELETE", env.Server.URL+"/api/v1/machines/nonexistent", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestListMachinesUnauthenticated(t *testing.T) {
 	srv := setupTestAPI(t)
 	defer srv.Close()

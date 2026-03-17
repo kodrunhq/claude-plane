@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Play, AlertCircle, RefreshCw, Search } from 'lucide-react';
-import { useJobs, useTriggerRun } from '../hooks/useJobs.ts';
+import { Plus, Play, Trash2, AlertCircle, RefreshCw, Search, CopyPlus } from 'lucide-react';
+import { useJobs, useDeleteJob, useTriggerRun, useCloneJob } from '../hooks/useJobs.ts';
 import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { toast } from 'sonner';
 import type { Job } from '../types/job.ts';
 
@@ -52,9 +53,12 @@ export function JobsPage() {
   const navigate = useNavigate();
   const { data: jobs, isLoading, error, refetch } = useJobs();
   const triggerRun = useTriggerRun();
+  const cloneJob = useCloneJob();
+  const deleteJob = useDeleteJob();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
 
   const filteredJobs = useMemo(() => {
     if (!jobs) return [];
@@ -78,6 +82,28 @@ export function JobsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to start run');
     }
+  }
+
+  async function handleClone(e: React.MouseEvent, job: Job) {
+    e.stopPropagation();
+    try {
+      const cloned = await cloneJob.mutateAsync({ id: job.job_id });
+      toast.success('Job duplicated');
+      navigate(`/jobs/${cloned.job.job_id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate job');
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    try {
+      await deleteJob.mutateAsync(deleteTarget.job_id);
+      toast.success('Job deleted');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete job');
+    }
+    setDeleteTarget(null);
   }
 
   if (error) {
@@ -210,14 +236,35 @@ export function JobsPage() {
                   {formatTimeAgo(job.created_at)}
                 </td>
                 <td className="px-4 py-2">
-                  <button
-                    onClick={(e) => handleRun(e, job.job_id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors shrink-0"
-                    title="Run job"
-                  >
-                    <Play size={14} />
-                    Run
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => handleRun(e, job.job_id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors"
+                      title="Run job"
+                    >
+                      <Play size={14} />
+                      Run
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Duplicate job ${job.name}`}
+                      onClick={(e) => handleClone(e, job)}
+                      className="p-1.5 rounded-md text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors"
+                      title="Duplicate"
+                    >
+                      <CopyPlus size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete job ${job.name}`}
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(job); }}
+                      className="p-1.5 rounded-md text-text-secondary hover:text-status-error hover:bg-status-error/10 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -225,6 +272,16 @@ export function JobsPage() {
         </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete Job"
+        message={`Are you sure you want to delete "${deleteTarget?.name ?? ''}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

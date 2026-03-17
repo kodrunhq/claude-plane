@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Plus, Users, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useUsers, useCreateUser, useUpdateUser } from '../hooks/useUsers.ts';
+import { useUsers, useCreateUser, useUpdateUser, useResetPassword } from '../hooks/useUsers.ts';
 import { UsersList } from '../components/admin/UsersList.tsx';
 import { CreateUserModal } from '../components/admin/CreateUserModal.tsx';
 import { EditUserModal } from '../components/admin/EditUserModal.tsx';
+import { ResetPasswordModal } from '../components/admin/ResetPasswordModal.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import type { User, CreateUserParams, UpdateUserParams } from '../types/user.ts';
@@ -13,9 +14,11 @@ export function AdminPage() {
   const { data: users, isLoading, error, refetch } = useUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
+  const resetPassword = useResetPassword();
 
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
 
   async function handleCreate(params: CreateUserParams) {
     try {
@@ -35,6 +38,17 @@ export function AdminPage() {
       setEditingUser(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update user');
+    }
+  }
+
+  async function handleResetPassword(userId: string, newPassword: string) {
+    try {
+      await resetPassword.mutateAsync({ id: userId, params: { new_password: newPassword } });
+      toast.success('Password reset successfully');
+      setResetPasswordUser(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reset password');
+      throw err;
     }
   }
 
@@ -92,7 +106,7 @@ export function AdminPage() {
           }
         />
       ) : (
-        <UsersList users={users} onEdit={setEditingUser} />
+        <UsersList users={users} onEdit={setEditingUser} onResetPassword={setResetPasswordUser} />
       )}
 
       <CreateUserModal
@@ -108,6 +122,14 @@ export function AdminPage() {
         onClose={() => setEditingUser(null)}
         onSubmit={handleUpdate}
         submitting={updateUser.isPending}
+      />
+
+      <ResetPasswordModal
+        open={!!resetPasswordUser}
+        user={resetPasswordUser}
+        onClose={() => setResetPasswordUser(null)}
+        onSubmit={handleResetPassword}
+        submitting={resetPassword.isPending}
       />
     </div>
   );

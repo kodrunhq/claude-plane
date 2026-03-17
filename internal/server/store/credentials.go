@@ -21,18 +21,27 @@ type Credential struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// CreateCredential encrypts value with encryptionKey and stores the credential.
-// Returns the new credential record (without the plaintext value).
+// CreateCredential stores a credential. When encryptionKey is non-nil (32 bytes),
+// the value is encrypted with AES-256-GCM. When encryptionKey is nil, the value
+// is stored as plaintext (graceful degradation for unconfigured encryption).
 func (s *Store) CreateCredential(ctx context.Context, userID, name string, value []byte, encryptionKey []byte) (*Credential, error) {
-	encrypted, nonce, err := Encrypt(value, encryptionKey)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt credential: %w", err)
+	var encrypted, nonce []byte
+	if len(encryptionKey) > 0 {
+		var err error
+		encrypted, nonce, err = Encrypt(value, encryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt credential: %w", err)
+		}
+	} else {
+		// Plaintext fallback — store value directly with empty nonce.
+		encrypted = value
+		nonce = []byte{}
 	}
 
 	id := uuid.New().String()
 	now := time.Now().UTC()
 
-	_, err = s.writer.ExecContext(ctx,
+	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO credentials (credential_id, user_id, name, encrypted_value, nonce, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		id, userID, name, encrypted, nonce, now, now,

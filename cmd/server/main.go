@@ -313,7 +313,10 @@ func newServeCmd() *cobra.Command {
 			// New event/webhook/trigger/ingest handlers.
 			eventHandler := handler.NewEventHandler(s)
 			webhookHandler := handler.NewWebhookHandler(s)
-			triggerHandler := handler.NewTriggerHandler(s)
+			triggerHandler := handler.NewTriggerHandler(s,
+				handler.WithTriggerJobStore(s),
+				handler.WithTriggerClaims(handlerClaimsGetter),
+			)
 			ingestSecrets := cfg.Webhooks.InboundSecrets()
 			ingestHandler := handler.NewIngestHandler(eventBus, ingestSecrets, slog.Default())
 
@@ -327,10 +330,15 @@ func newServeCmd() *cobra.Command {
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
 			// Credentials vault handler — encryption key is auto-generated if not configured.
+			// If an explicit key was configured but fails to parse, that's a hard error.
 			dataDir := filepath.Dir(cfg.Database.Path)
 			encryptionKey, err := cfg.Secrets.ParseEncryptionKey(dataDir)
 			if err != nil {
-				return fmt.Errorf("parse encryption key: %w", err)
+				if cfg.Secrets.EncryptionKey == "" && cfg.Secrets.EncryptionKeyFile == "" {
+					slog.Warn("encryption key unavailable, credentials will be stored as plaintext", "error", err)
+				} else {
+					return fmt.Errorf("parse encryption key: %w", err)
+				}
 			}
 			credentialHandler := handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
 

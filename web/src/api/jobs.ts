@@ -26,6 +26,11 @@ export const jobsApi = {
     }),
   delete: (id: string) =>
     request<void>(`/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  clone: (id: string, name?: string) =>
+    request<JobDetail>(`/jobs/${encodeURIComponent(id)}/clone`, {
+      method: 'POST',
+      body: JSON.stringify(name ? { name } : {}),
+    }),
 
   // Tasks
   addTask: (jobId: string, params: CreateTaskParams) =>

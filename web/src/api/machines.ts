@@ -13,4 +13,8 @@ export const machinesApi = {
       method: 'PUT',
       body: JSON.stringify(params),
     }),
+  delete: (id: string) =>
+    request<void>(`/machines/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 };

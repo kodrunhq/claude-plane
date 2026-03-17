@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useWebhooks, useCreateWebhook, useUpdateWebhook } from '../hooks/useWebhooks.ts';
 import { WebhooksList } from '../components/webhooks/WebhooksList.tsx';
 import { WebhookForm } from '../components/webhooks/WebhookForm.tsx';
+import { SecretRevealModal } from '../components/webhooks/SecretRevealModal.tsx';
 import { DeliveryHistory } from '../components/webhooks/DeliveryHistory.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
@@ -50,6 +51,7 @@ export function WebhooksPage() {
 
   const [drawerMode, setDrawerMode] = useState<DrawerMode>(null);
   const [editingWebhook, setEditingWebhook] = useState<WebhookType | null>(null);
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
 
   function openCreate() {
     setEditingWebhook(null);
@@ -72,9 +74,14 @@ export function WebhooksPage() {
 
   async function handleCreate(params: CreateWebhookParams | UpdateWebhookParams) {
     try {
-      await createWebhook.mutateAsync(params as CreateWebhookParams);
+      const createParams = params as CreateWebhookParams;
+      const submittedSecret = createParams.secret ?? '';
+      await createWebhook.mutateAsync(createParams);
       toast.success('Webhook created');
       closeDrawer();
+      if (submittedSecret) {
+        setRevealedSecret(submittedSecret);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create webhook');
     }
@@ -151,6 +158,12 @@ export function WebhooksPage() {
           onViewDeliveries={openDeliveries}
         />
       )}
+
+      <SecretRevealModal
+        open={revealedSecret !== null}
+        secret={revealedSecret ?? ''}
+        onClose={() => setRevealedSecret(null)}
+      />
 
       {/* Side drawer */}
       {(drawerMode === 'create' || drawerMode === 'edit') && (
