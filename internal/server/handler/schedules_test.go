@@ -236,7 +236,7 @@ func (m *mockJobStoreForSchedules) CloneJob(_ context.Context, jobID string, new
 	panic("not implemented")
 }
 
-func (m *mockJobStoreForSchedules) CountRunsForJob(_ context.Context, jobID string) (int, error) {
+func (m *mockJobStoreForSchedules) CountRunsForJobUpTo(_ context.Context, jobID string, _ time.Time) (int, error) {
 	return 0, nil
 }
 
