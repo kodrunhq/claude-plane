@@ -6,6 +6,7 @@ import { EventFilters, LIMIT_OPTIONS } from '../components/events/EventFilters.t
 import type { EventFilterValues } from '../components/events/EventFilters.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { RefreshButton } from '../components/shared/RefreshButton.tsx';
 
 const DEFAULT_FILTERS: EventFilterValues = {
   typePattern: '',
@@ -78,15 +79,7 @@ export function EventsPage() {
             Audit history of all system events
           </p>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
-          title="Refresh"
-        >
-          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <RefreshButton onClick={() => refetch()} loading={isFetching} />
       </div>
 
       <EventFilters filters={filters} onChange={handleFiltersChange} />

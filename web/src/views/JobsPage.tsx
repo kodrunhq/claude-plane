@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Play, Trash2, AlertCircle, RefreshCw, Search, CopyPlus } from 'lucide-react';
 import { useJobs, useDeleteJob, useTriggerRun, useCloneJob } from '../hooks/useJobs.ts';
-import { formatTimeAgo, truncateId } from '../lib/format.ts';
+import { formatTimeAgo } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import { RefreshButton } from '../components/shared/RefreshButton.tsx';
+import { CopyableId } from '../components/shared/CopyableId.tsx';
 import { toast } from 'sonner';
 import type { Job } from '../types/job.ts';
 
@@ -51,7 +53,7 @@ function formatMachineIds(ids: string | undefined): string {
 
 export function JobsPage() {
   const navigate = useNavigate();
-  const { data: jobs, isLoading, error, refetch } = useJobs();
+  const { data: jobs, isLoading, isFetching, error, refetch } = useJobs();
   const triggerRun = useTriggerRun();
   const cloneJob = useCloneJob();
   const deleteJob = useDeleteJob();
@@ -130,13 +132,16 @@ export function JobsPage() {
     <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Jobs</h1>
-        <button
-          onClick={() => navigate('/jobs/new')}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
-        >
-          <Plus size={16} />
-          New Job
-        </button>
+        <div className="flex items-center gap-2">
+          <RefreshButton onClick={() => refetch()} loading={isFetching} />
+          <button
+            onClick={() => navigate('/jobs/new')}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+          >
+            <Plus size={16} />
+            New Job
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -210,9 +215,7 @@ export function JobsPage() {
                   {job.description && (
                     <div className="text-xs text-text-secondary truncate mt-0.5">{job.description}</div>
                   )}
-                  <div className="font-mono text-xs text-text-secondary/60 mt-0.5" title={job.job_id}>
-                    {truncateId(job.job_id)}
-                  </div>
+                  <CopyableId id={job.job_id} className="text-xs" />
                 </td>
                 <td className="px-4 py-2">
                   {job.last_run_status ? (

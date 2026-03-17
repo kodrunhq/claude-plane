@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, Play, RefreshCw } from 'lucide-react';
 import { useRuns } from '../hooks/useRuns.ts';
 import { useJobs } from '../hooks/useJobs.ts';
 import { RunsTable } from '../components/runs/RunsTable.tsx';
 import { RunFilters } from '../components/runs/RunFilters.tsx';
+import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
+import { RefreshButton } from '../components/shared/RefreshButton.tsx';
 import type { ListRunsParams } from '../types/job.ts';
 
 export function RunsPage() {
@@ -22,7 +25,7 @@ export function RunsPage() {
     return p;
   }, [selectedJobId, selectedStatus, selectedTriggerType]);
 
-  const { data: runs, isLoading, error, refetch } = useRuns(params);
+  const { data: runs, isLoading, isFetching, error, refetch } = useRuns(params);
   const { data: jobs } = useJobs();
 
   return (
@@ -30,6 +33,7 @@ export function RunsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-text-primary">Runs</h1>
+        <RefreshButton onClick={() => refetch()} loading={isFetching} />
       </div>
 
       {/* Filters */}
@@ -61,22 +65,17 @@ export function RunsPage() {
       )}
 
       {/* Loading State */}
-      {isLoading && (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="bg-bg-tertiary rounded-lg p-4 animate-pulse">
-              <div className="h-4 bg-bg-secondary rounded w-1/4 mb-2" />
-              <div className="h-3 bg-bg-secondary rounded w-1/2" />
-            </div>
-          ))}
-        </div>
-      )}
+      {isLoading && <SkeletonTable rows={5} columns={5} />}
 
       {/* Runs Table */}
       {!isLoading && !error && (
         <>
           {(runs ?? []).length === 0 ? (
-            <p className="text-sm text-text-secondary">No runs yet</p>
+            <EmptyState
+              icon={<Play size={40} />}
+              title="No runs yet"
+              description="Runs will appear here when jobs are triggered manually or by automation."
+            />
           ) : (
             <RunsTable
               runs={runs ?? []}

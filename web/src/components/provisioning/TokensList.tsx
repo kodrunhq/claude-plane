@@ -69,7 +69,7 @@ function TokenRow({ token, onRevokeRequest }: TokenRowProps) {
   const canRevoke = status === 'active';
 
   return (
-    <tr className="border-t border-gray-800 hover:bg-bg-tertiary/20 transition-colors">
+    <tr className="border-t border-gray-800 hover:bg-bg-tertiary/50 transition-colors">
       <td className="px-4 py-3">
         <span className="text-sm font-mono text-text-primary">{token.machine_id}</span>
       </td>

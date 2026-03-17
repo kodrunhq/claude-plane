@@ -41,7 +41,7 @@ function WebhookRow({ webhook, onEdit, onViewDeliveries, onDeleteRequest }: Webh
   }
 
   return (
-    <tr className="border-t border-gray-800 hover:bg-bg-tertiary/20 transition-colors">
+    <tr className="border-t border-gray-800 hover:bg-bg-tertiary/50 transition-colors">
       <td className="px-4 py-3">
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-medium text-text-primary">{webhook.name}</span>

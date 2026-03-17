@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { formatTimeAgo } from '../../lib/format.ts';
 
 interface TimeAgoProps {
@@ -8,6 +8,18 @@ interface TimeAgoProps {
 
 export function TimeAgo({ date, className }: TimeAgoProps) {
   const [text, setText] = useState(() => formatTimeAgo(date));
+
+  const absoluteDate = useMemo(
+    () => new Date(date).toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }),
+    [date],
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with external time source
@@ -21,7 +33,7 @@ export function TimeAgo({ date, className }: TimeAgoProps) {
   }, [date]);
 
   return (
-    <time dateTime={date} className={className}>
+    <time dateTime={date} title={absoluteDate} className={className}>
       {text}
     </time>
   );

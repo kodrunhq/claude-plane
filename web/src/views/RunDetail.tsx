@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { RunDAGView } from '../components/runs/RunDAGView.tsx';
 import { RunStatusBadge } from '../components/runs/RunStatusBadge.tsx';
 import { TerminalView } from '../components/terminal/TerminalView.tsx';
+import { Breadcrumb } from '../components/shared/Breadcrumb.tsx';
+import { CopyableId } from '../components/shared/CopyableId.tsx';
 import { useRun, useCancelRun, useRetryTask, useRepairRun } from '../hooks/useRuns.ts';
 import { useJob } from '../hooks/useJobs.ts';
 import { useRunStore } from '../stores/runs.ts';
@@ -175,6 +177,11 @@ export function RunDetail() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-bg-secondary border-b border-border-primary">
+        <Breadcrumb items={[
+          { label: 'Runs', to: '/runs' },
+          { label: `Run ${run.run_id.slice(0, 8)}` },
+        ]} />
+
         <button
           onClick={() => navigate('/runs')}
           className="text-text-secondary hover:text-text-primary transition-colors"
@@ -185,7 +192,7 @@ export function RunDetail() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-text-primary">
-              Run {id?.slice(0, 8)}
+              Run <CopyableId id={run.run_id} className="text-xs" />
             </span>
             <RunStatusBadge status={run.status} />
             {triggerBadge}
