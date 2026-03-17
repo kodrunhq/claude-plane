@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, RefreshCw, AlertCircle, LayoutGrid, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -7,6 +7,8 @@ import { useMachines } from '../hooks/useMachines.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import { Pagination } from '../components/shared/Pagination.tsx';
+import { usePagination } from '../hooks/usePagination.ts';
 import { useMultiviewStore } from '../stores/multiview.ts';
 
 const STATUS_OPTIONS = ['all', 'running', 'created', 'completed', 'failed', 'terminated'] as const;
@@ -45,6 +47,10 @@ export function SessionsPage() {
         s.working_dir?.toLowerCase().includes(q),
     );
   }, [sessions, search]);
+
+  const { paged: pagedSessions, page, pageSize, total, setPage, setPageSize } = usePagination(filteredSessions);
+
+  useEffect(() => { setPage(1); }, [search, statusFilter, machineFilter, setPage]);
 
   function handleAttach(id: string) {
     navigate(`/sessions/${id}`);
@@ -189,14 +195,23 @@ export function SessionsPage() {
 
       {/* Session List */}
       {!isLoading && !error && (
-        <SessionList
-          sessions={filteredSessions}
-          onAttach={handleAttach}
-          onTerminate={handleTerminate}
-          selectable={multiSelectMode}
-          selectedIds={selectedIds}
-          onSelect={handleSelect}
-        />
+        <>
+          <SessionList
+            sessions={pagedSessions}
+            onAttach={handleAttach}
+            onTerminate={handleTerminate}
+            selectable={multiSelectMode}
+            selectedIds={selectedIds}
+            onSelect={handleSelect}
+          />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
 
       <NewSessionModal open={modalOpen} onClose={() => setModalOpen(false)} />
