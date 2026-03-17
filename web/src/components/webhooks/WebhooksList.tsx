@@ -107,6 +107,7 @@ function WebhookRow({ webhook, onEdit, onViewDeliveries, onDeleteRequest }: Webh
             disabled={testDelivery.isPending}
             className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
             title="Send test event"
+            aria-label="Send test event"
           >
             <Zap size={15} />
           </button>

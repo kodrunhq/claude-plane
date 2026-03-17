@@ -33,6 +33,7 @@ export function Pagination({
             onPageSizeChange(Number(e.target.value));
             onPageChange(1);
           }}
+          aria-label="Rows per page"
           className="bg-bg-tertiary border border-border-primary rounded px-2 py-1 text-xs text-text-primary"
         >
           {pageSizeOptions.map((s) => (

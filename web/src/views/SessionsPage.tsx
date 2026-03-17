@@ -129,6 +129,7 @@ export function SessionsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search sessions..."
+            aria-label="Search sessions by ID, command, or directory"
             className="rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary w-56"
           />
         </div>
