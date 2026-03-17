@@ -89,6 +89,55 @@ func TestCredentialHandler_StatusWithoutEncryption(t *testing.T) {
 	}
 }
 
+func TestCredentialHandler_CreateCredential_PublishesEvent(t *testing.T) {
+	s := newTestStore(t)
+
+	err := s.CreateUser(&store.User{
+		UserID:      "user-pub",
+		Email:       "pubuser@example.com",
+		DisplayName: "Pub User",
+		Role:        "user",
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	pub := &mockPublisher{}
+	claims := testClaimsGetter("user-pub", "user")
+	h := handler.NewCredentialHandler(s, claims, nil)
+	h.SetPublisher(pub)
+	r := chi.NewRouter()
+	handler.RegisterCredentialRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{
+		"name":  "my-api-key",
+		"value": "super-secret",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/credentials", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	events := pub.published()
+	if len(events) < 1 {
+		t.Fatalf("expected at least 1 published event, got %d", len(events))
+	}
+	evt := events[0]
+	if evt.Type != "credential.created" {
+		t.Errorf("event type = %q, want %q", evt.Type, "credential.created")
+	}
+	if evt.Payload["credential_name"] != "my-api-key" {
+		t.Errorf("payload credential_name = %v, want %q", evt.Payload["credential_name"], "my-api-key")
+	}
+}
+
 func TestCredentialHandler_CRUDWithEncryption(t *testing.T) {
 	key := []byte("01234567890123456789012345678901") // exactly 32 bytes
 	srv := newCredentialRouter(t, key)

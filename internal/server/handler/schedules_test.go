@@ -780,6 +780,58 @@ func TestScheduleHandler_GetSchedule_StoreErrNotFound(t *testing.T) {
 	}
 }
 
+func TestScheduleHandler_CreateSchedule_PublishesEvent(t *testing.T) {
+	schedStore := newMockScheduleCRUDStore()
+	jobStore := newMockJobStoreForSchedules()
+	reloader := &mockScheduleReloader{}
+	pub := &mockPublisher{}
+
+	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, nil)
+	h.SetPublisher(pub)
+
+	r := chi.NewRouter()
+	handler.RegisterScheduleRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	// Add a job to the mock job store so the FK check passes.
+	jobStore.jobs["job-pub"] = &store.JobDetail{
+		Job: store.Job{
+			JobID:     "job-pub",
+			Name:      "Publisher Job",
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+	}
+
+	body := map[string]interface{}{
+		"cron_expr": "0 * * * *",
+		"timezone":  "UTC",
+	}
+	b, _ := json.Marshal(body)
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/job-pub/schedules", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	events := pub.published()
+	if len(events) < 1 {
+		t.Fatalf("expected at least 1 published event, got %d", len(events))
+	}
+	evt := events[0]
+	if evt.Type != "schedule.created" {
+		t.Errorf("event type = %q, want %q", evt.Type, "schedule.created")
+	}
+	if evt.Payload["job_id"] != "job-pub" {
+		t.Errorf("payload job_id = %v, want %q", evt.Payload["job_id"], "job-pub")
+	}
+}
+
 func TestScheduleHandler_DeleteSchedule_StoreError(t *testing.T) {
 	fix := newScheduleFixture()
 	defer fix.close()
