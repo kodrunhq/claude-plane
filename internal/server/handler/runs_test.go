@@ -54,11 +54,12 @@ func (m *mockExecutor) completeStep(stepID string, exitCode int) {
 func newRunRouter(t *testing.T) (*httptest.Server, *store.Store, *orchestrator.Orchestrator, *mockExecutor) {
 	t.Helper()
 	s := newTestStore(t)
+	seedUser(t, s, "admin-test", "admin")
 	exec := newMockExecutor()
 	orch := orchestrator.NewOrchestrator(context.Background(), s, exec)
 
-	jh := handler.NewJobHandler(s, nil)
-	rh := handler.NewRunHandler(s, orch, nil)
+	jh := handler.NewJobHandler(s, adminClaims())
+	rh := handler.NewRunHandler(s, orch, adminClaims())
 
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, jh)
@@ -438,6 +439,8 @@ func TestRunHandler_ListRuns_LimitCapped(t *testing.T) {
 
 func TestRunHandler_ListRuns_NonAdminScopedToOwnRuns(t *testing.T) {
 	s := newTestStore(t)
+	seedUser(t, s, "admin-test", "admin")
+	seedUser(t, s, "user-A", "member")
 	exec := newMockExecutor()
 	orch := orchestrator.NewOrchestrator(context.Background(), s, exec)
 
@@ -446,7 +449,7 @@ func TestRunHandler_ListRuns_NonAdminScopedToOwnRuns(t *testing.T) {
 	}
 
 	rh := handler.NewRunHandler(s, orch, nonAdminClaims)
-	jh := handler.NewJobHandler(s, nil)
+	jh := handler.NewJobHandler(s, adminClaims())
 
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, jh)
@@ -454,7 +457,7 @@ func TestRunHandler_ListRuns_NonAdminScopedToOwnRuns(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	// Create a job (it will have empty UserID since JobHandler has no claims).
+	// Create a job (UserID will be "admin-test" from admin claims).
 	jobID, stepID := createJobWithStep(t, srv.URL)
 
 	// Trigger a run.
@@ -485,15 +488,16 @@ func TestRunHandler_ListRuns_NonAdminScopedToOwnRuns(t *testing.T) {
 
 func TestRunHandler_ListRuns_AdminSeesAll(t *testing.T) {
 	s := newTestStore(t)
+	seedUser(t, s, "admin-1", "admin")
 	exec := newMockExecutor()
 	orch := orchestrator.NewOrchestrator(context.Background(), s, exec)
 
-	adminClaims := func(r *http.Request) *handler.UserClaims {
+	adminClaimsLocal := func(r *http.Request) *handler.UserClaims {
 		return &handler.UserClaims{UserID: "admin-1", Role: "admin"}
 	}
 
-	rh := handler.NewRunHandler(s, orch, adminClaims)
-	jh := handler.NewJobHandler(s, nil)
+	rh := handler.NewRunHandler(s, orch, adminClaimsLocal)
+	jh := handler.NewJobHandler(s, adminClaimsLocal)
 
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, jh)

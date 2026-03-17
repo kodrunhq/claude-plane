@@ -75,6 +75,16 @@ func newServeCmd() *cobra.Command {
 				return fmt.Errorf("load config: %w", err)
 			}
 
+			// Configure structured logging from config.
+			logLevel := cfg.Log.ParseLevel()
+			var logHandler slog.Handler
+			if strings.ToLower(cfg.Log.Format) == "json" {
+				logHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+			} else {
+				logHandler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+			}
+			slog.SetDefault(slog.New(logHandler))
+
 			shutdownTimeout, err := cfg.Shutdown.ParseTimeout()
 			if err != nil {
 				return fmt.Errorf("parse shutdown timeout: %w", err)
@@ -396,6 +406,7 @@ func newServeCmd() *cobra.Command {
 
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
+			var shutdownHooks []func()
 			router := api.NewRouter(api.RouterDeps{
 				Handlers:           handlers,
 				SessionHandler:     sessionHandler,
@@ -413,6 +424,7 @@ func newServeCmd() *cobra.Command {
 				PreferencesHandler:  preferencesHandler,
 				NotificationHandler: notificationHandler,
 				APIKeyAuth:         apiKeyAuth,
+				OnShutdown: func(f func()) { shutdownHooks = append(shutdownHooks, f) },
 			})
 
 			// Agent binary download endpoint (public, no JWT required).
@@ -455,8 +467,10 @@ func newServeCmd() *cobra.Command {
 				handler.RegisterProvisionRoutes(r, provisionHandler)
 			})
 			// Provisioning: public routes (token-authenticated and short-code join).
+			provisionLimiter, stopProvisionLimiter := api.RateLimitMiddleware(10.0/60.0, 10)
+			shutdownHooks = append(shutdownHooks, stopProvisionLimiter)
 			router.Group(func(r chi.Router) {
-				r.Use(api.RateLimitMiddleware(10.0/60.0, 10)) // 10 req/min per IP
+				r.Use(provisionLimiter) // 10 req/min per IP
 				handler.RegisterProvisionPublicRoutes(r, provisionHandler)
 			})
 
@@ -488,6 +502,12 @@ func newServeCmd() *cobra.Command {
 				"timeout", shutdownTimeout,
 			)
 
+			// Notify connected WebSocket clients that the server is shutting down.
+			shutdownEvt := event.NewServerEvent(event.TypeServerShutdown, "graceful_shutdown")
+			if err := eventBus.Publish(context.Background(), shutdownEvt); err != nil {
+				slog.Warn("Failed to publish shutdown event", "error", err)
+			}
+
 			// Create a timeout context for the shutdown sequence.
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer shutdownCancel()
@@ -497,6 +517,11 @@ func newServeCmd() *cobra.Command {
 			}
 
 			sched.Stop()
+
+			// Run registered shutdown hooks (e.g., rate limiter cleanup).
+			for _, hook := range shutdownHooks {
+				hook()
+			}
 
 			// GracefulStop can block indefinitely waiting for in-flight streams.
 			// Run it in a goroutine and fall back to Stop() if the timeout expires.

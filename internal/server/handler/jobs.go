@@ -70,7 +70,11 @@ func (h *JobHandler) claims(r *http.Request) *UserClaims {
 // authorizeJob checks whether the current user can access the given job.
 func (h *JobHandler) authorizeJob(w http.ResponseWriter, r *http.Request, job *store.Job) bool {
 	c := h.claims(r)
-	if c == nil || c.Role == "admin" || c.UserID == job.UserID {
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	if c.Role == "admin" || c.UserID == job.UserID {
 		return true
 	}
 	writeError(w, http.StatusNotFound, "job not found")

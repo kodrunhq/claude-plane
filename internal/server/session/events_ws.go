@@ -74,7 +74,7 @@ func HandleEventsWS(authSvc *auth.Service, fanout *event.WSFanout, logger *slog.
 			return
 		}
 
-		authCtx, authCancel := context.WithTimeout(r.Context(), subscriptionTimeout)
+		authCtx, authCancel := context.WithTimeout(r.Context(), authTimeout)
 		defer authCancel()
 
 		_, msg, err := conn.Read(authCtx)

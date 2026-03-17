@@ -70,6 +70,7 @@ type RouterDeps struct {
 	PreferencesHandler  *handler.PreferencesHandler
 	NotificationHandler *handler.NotificationHandler
 	APIKeyAuth          *APIKeyAuth
+	OnShutdown          func(func()) // optional callback to register shutdown hooks
 }
 
 // NewRouter creates a chi router with all API routes configured.
@@ -94,6 +95,9 @@ func NewRouter(deps RouterDeps) chi.Router {
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeadersMiddleware)
 
+	// Health check — unauthenticated, for load balancers and orchestrators.
+	r.Get("/healthz", HealthzHandler())
+
 	// WebSocket routes — auth handled inside handlers (cookie or first-message)
 	if deps.WSHandler != nil {
 		r.Get("/ws/terminal/{sessionID}", deps.WSHandler)
@@ -103,7 +107,10 @@ func NewRouter(deps RouterDeps) chi.Router {
 	}
 
 	// 5 requests per minute per IP for auth endpoints
-	authLimiter := RateLimitMiddleware(rate.Limit(5.0/60.0), 5)
+	authLimiter, stopRateLimiter := RateLimitMiddleware(rate.Limit(5.0/60.0), 5)
+	if deps.OnShutdown != nil {
+		deps.OnShutdown(stopRateLimiter)
+	}
 
 	// Public routes
 	r.Route("/api/v1", func(r chi.Router) {

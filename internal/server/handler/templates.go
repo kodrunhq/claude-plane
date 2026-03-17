@@ -50,7 +50,11 @@ func (h *TemplateHandler) claims(r *http.Request) *UserClaims {
 // authorizeTemplate checks whether the current user can access the given template.
 func (h *TemplateHandler) authorizeTemplate(w http.ResponseWriter, r *http.Request, tmpl *store.SessionTemplate) bool {
 	c := h.claims(r)
-	if c == nil || c.Role == "admin" || c.UserID == tmpl.UserID {
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	if c.Role == "admin" || c.UserID == tmpl.UserID {
 		return true
 	}
 	writeError(w, http.StatusNotFound, "template not found")
