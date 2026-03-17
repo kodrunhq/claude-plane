@@ -249,7 +249,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionStarted, sessionID, req.MachineID))
+	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionStarted, sessionID, req.MachineID, "", req.Command))
 	httputil.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"session_id": sessionID,
 		"machine_id": req.MachineID,
@@ -365,7 +365,7 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 	if err := h.store.UpdateSessionStatus(sessionID, store.StatusTerminated); err != nil {
 		h.logger.Error("failed to update session status", "error", err)
 	}
-	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionTerminated, sessionID, sess.MachineID))
+	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionTerminated, sessionID, sess.MachineID, "", ""))
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": store.StatusTerminated})
 }

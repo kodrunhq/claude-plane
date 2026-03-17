@@ -644,7 +644,9 @@ func (d *DAGRunner) publishStepEvent(ctx context.Context, eventType, runStepID, 
 	if d.publisher == nil {
 		return
 	}
-	if err := d.publisher.Publish(ctx, event.NewRunStepEvent(eventType, d.runID, runStepID, stepID, status)); err != nil {
+	stepName := d.stepNames[stepID]
+	jobName := d.jobMeta.Name
+	if err := d.publisher.Publish(ctx, event.NewRunStepEvent(eventType, d.runID, runStepID, stepID, status, stepName, jobName)); err != nil {
 		slog.Warn("failed to publish step event", "event_type", eventType, "run_step_id", runStepID, "error", err)
 	}
 }

@@ -40,6 +40,7 @@ type WebhookDelivery struct {
 	ResponseCode int
 	LastError    string
 	NextRetryAt  *time.Time
+	Payload      string
 }
 
 // WebhookStore is the persistence interface required by WebhookDeliverer.
@@ -108,6 +109,8 @@ func (d *WebhookDeliverer) Handler() HandlerFunc {
 			return fmt.Errorf("webhook deliverer: list webhooks: %w", err)
 		}
 
+		payloadJSON, _ := json.Marshal(e)
+
 		var wg sync.WaitGroup
 		for _, wh := range webhooks {
 			if !wh.Enabled {
@@ -123,6 +126,7 @@ func (d *WebhookDeliverer) Handler() HandlerFunc {
 				EventID:    e.EventID,
 				Status:     "pending",
 				Attempts:   0,
+				Payload:    string(payloadJSON),
 			}
 
 			if createErr := d.store.CreateDelivery(ctx, delivery); createErr != nil {
