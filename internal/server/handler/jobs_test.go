@@ -24,10 +24,19 @@ func newTestStore(t *testing.T) *store.Store {
 	return s
 }
 
+// adminClaims returns a ClaimsGetter that always returns admin claims.
+func adminClaims() handler.ClaimsGetter {
+	return func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-test", Role: "admin"}
+	}
+}
+
 // newJobRouter creates a chi router with job routes for testing.
-func newJobRouter(t *testing.T, s store.JobStoreIface) (*httptest.Server, store.JobStoreIface) {
+// It seeds an admin user to satisfy foreign key constraints.
+func newJobRouter(t *testing.T, s *store.Store) (*httptest.Server, *store.Store) {
 	t.Helper()
-	h := handler.NewJobHandler(s, nil)
+	seedUser(t, s, "admin-test", "admin")
+	h := handler.NewJobHandler(s, adminClaims())
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, h)
 	return httptest.NewServer(r), s
@@ -499,9 +508,10 @@ func TestJobHandler_AddDependency_CycleRejected(t *testing.T) {
 
 func TestJobHandler_CreateJob_PublishesEvent(t *testing.T) {
 	s := newTestStore(t)
+	seedUser(t, s, "admin-test", "admin")
 	pub := &mockPublisher{}
 
-	h := handler.NewJobHandler(s, nil)
+	h := handler.NewJobHandler(s, adminClaims())
 	h.SetPublisher(pub)
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, h)
@@ -537,9 +547,10 @@ func TestJobHandler_CreateJob_PublishesEvent(t *testing.T) {
 
 func TestJobHandler_DeleteJob_PublishesEvent(t *testing.T) {
 	s := newTestStore(t)
+	seedUser(t, s, "admin-test", "admin")
 	pub := &mockPublisher{}
 
-	h := handler.NewJobHandler(s, nil)
+	h := handler.NewJobHandler(s, adminClaims())
 	h.SetPublisher(pub)
 	r := chi.NewRouter()
 	handler.RegisterJobRoutes(r, h)

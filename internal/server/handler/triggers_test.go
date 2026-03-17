@@ -128,6 +128,19 @@ func (m *mockTriggerStore) DeleteJobTrigger(_ context.Context, triggerID string)
 	return nil
 }
 
+// adminTriggerHandler creates a TriggerHandler with admin claims and a permissive
+// job store, suitable for tests that don't need to test authorization.
+func adminTriggerHandler(trigStore handler.TriggerCRUDStore) *handler.TriggerHandler {
+	return handler.NewTriggerHandler(trigStore,
+		handler.WithTriggerClaims(func(r *http.Request) *handler.UserClaims {
+			return &handler.UserClaims{UserID: "admin-test", Role: "admin"}
+		}),
+		handler.WithTriggerJobStore(&mockTriggerJobStore{
+			jobs: map[string]*store.JobDetail{},
+		}),
+	)
+}
+
 // --- router helper ---
 
 func newTriggerRouter(h *handler.TriggerHandler) *httptest.Server {
@@ -140,7 +153,7 @@ func newTriggerRouter(h *handler.TriggerHandler) *httptest.Server {
 
 func TestTriggerHandler_ListTriggers_Empty(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -165,7 +178,7 @@ func TestTriggerHandler_ListTriggers_Empty(t *testing.T) {
 
 func TestTriggerHandler_CreateTrigger(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -204,7 +217,7 @@ func TestTriggerHandler_CreateTrigger(t *testing.T) {
 
 func TestTriggerHandler_CreateTrigger_WithFilter(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -235,7 +248,7 @@ func TestTriggerHandler_CreateTrigger_WithFilter(t *testing.T) {
 
 func TestTriggerHandler_CreateTrigger_MissingEventType(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -254,7 +267,7 @@ func TestTriggerHandler_CreateTrigger_MissingEventType(t *testing.T) {
 
 func TestTriggerHandler_CreateTrigger_InvalidBody(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -272,7 +285,7 @@ func TestTriggerHandler_CreateTrigger_InvalidBody(t *testing.T) {
 func TestTriggerHandler_CreateTrigger_StoreError(t *testing.T) {
 	mock := newMockTriggerStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -305,7 +318,7 @@ func TestTriggerHandler_ListTriggers_ReturnsJobTriggers(t *testing.T) {
 		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
 
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -331,7 +344,7 @@ func TestTriggerHandler_ListTriggers_ReturnsJobTriggers(t *testing.T) {
 func TestTriggerHandler_ListTriggers_StoreError(t *testing.T) {
 	mock := newMockTriggerStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -354,7 +367,7 @@ func TestTriggerHandler_DeleteTrigger(t *testing.T) {
 		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
 
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -375,7 +388,7 @@ func TestTriggerHandler_DeleteTrigger(t *testing.T) {
 
 func TestTriggerHandler_DeleteTrigger_NotFound(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -394,7 +407,7 @@ func TestTriggerHandler_DeleteTrigger_NotFound(t *testing.T) {
 func TestTriggerHandler_DeleteTrigger_StoreError(t *testing.T) {
 	mock := newMockTriggerStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -420,7 +433,7 @@ func TestTriggerHandler_UpdateTrigger(t *testing.T) {
 		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
 
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -455,7 +468,7 @@ func TestTriggerHandler_UpdateTrigger(t *testing.T) {
 
 func TestTriggerHandler_UpdateTrigger_NotFound(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -476,7 +489,7 @@ func TestTriggerHandler_UpdateTrigger_NotFound(t *testing.T) {
 
 func TestTriggerHandler_UpdateTrigger_MissingEventType(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -497,7 +510,7 @@ func TestTriggerHandler_UpdateTrigger_MissingEventType(t *testing.T) {
 
 func TestTriggerHandler_UpdateTrigger_InvalidBody(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -517,7 +530,7 @@ func TestTriggerHandler_UpdateTrigger_InvalidBody(t *testing.T) {
 func TestTriggerHandler_UpdateTrigger_StoreError(t *testing.T) {
 	mock := newMockTriggerStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -546,7 +559,7 @@ func TestTriggerHandler_ToggleTrigger(t *testing.T) {
 		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
 
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -588,7 +601,7 @@ func TestTriggerHandler_ToggleTrigger(t *testing.T) {
 
 func TestTriggerHandler_ToggleTrigger_NotFound(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -607,7 +620,7 @@ func TestTriggerHandler_ToggleTrigger_NotFound(t *testing.T) {
 func TestTriggerHandler_ToggleTrigger_StoreError(t *testing.T) {
 	mock := newMockTriggerStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -638,7 +651,7 @@ func TestTriggerHandler_ListAllTriggers(t *testing.T) {
 	mock.jobNames["job-1"] = "deploy-prod"
 	mock.jobNames["job-2"] = "run-tests"
 
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -679,7 +692,7 @@ func TestTriggerHandler_ListAllTriggers(t *testing.T) {
 
 func TestTriggerHandler_ListAllTriggers_Empty(t *testing.T) {
 	mock := newMockTriggerStore()
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 
@@ -705,7 +718,7 @@ func TestTriggerHandler_ListAllTriggers_Empty(t *testing.T) {
 func TestTriggerHandler_ListAllTriggers_StoreError(t *testing.T) {
 	mock := newMockTriggerStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewTriggerHandler(mock)
+	h := adminTriggerHandler(mock)
 	srv := newTriggerRouter(h)
 	defer srv.Close()
 

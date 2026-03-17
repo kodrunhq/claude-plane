@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -15,6 +17,15 @@ import (
 
 // sessionCookieName references the canonical cookie name from the auth package.
 const sessionCookieName = auth.SessionCookieName
+
+// inviteCodesEqual performs a constant-time comparison of two invite codes.
+// It compares SHA-256 digests to ensure constant-time behavior regardless of
+// input lengths (subtle.ConstantTimeCompare short-circuits on length mismatch).
+func inviteCodesEqual(a, b string) bool {
+	ha := sha256.Sum256([]byte(a))
+	hb := sha256.Sum256([]byte(b))
+	return hmac.Equal(ha[:], hb[:])
+}
 
 func isSecureRequest(r *http.Request) bool {
 	if r.TLS != nil {
@@ -89,7 +100,7 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 
 	// Check invite code when in invite mode
 	if h.registrationMode == "invite" {
-		if req.InviteCode == "" || req.InviteCode != h.inviteCode {
+		if req.InviteCode == "" || !inviteCodesEqual(req.InviteCode, h.inviteCode) {
 			writeError(w, http.StatusForbidden, "invalid invite code")
 			return
 		}

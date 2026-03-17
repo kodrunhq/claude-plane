@@ -64,6 +64,9 @@ const (
 	TypeWebhookCreated = "webhook.created"
 	TypeWebhookDeleted = "webhook.deleted"
 	TypeWebhookTest    = "webhook.test"
+
+	// Server lifecycle events.
+	TypeServerShutdown = "server.shutdown"
 )
 
 // Event is the envelope for all bus messages.

@@ -150,7 +150,11 @@ func (h *ScheduleHandler) authorizeJobByID(w http.ResponseWriter, r *http.Reques
 		return nil
 	}
 	c := h.claims(r)
-	if c != nil && c.Role != "admin" && c.UserID != detail.Job.UserID {
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return nil
+	}
+	if c.Role != "admin" && c.UserID != detail.Job.UserID {
 		writeError(w, http.StatusNotFound, "job not found")
 		return nil
 	}

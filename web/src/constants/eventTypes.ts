@@ -56,6 +56,9 @@ export const WEBHOOK_CREATED = 'webhook.created';
 export const WEBHOOK_DELETED = 'webhook.deleted';
 export const WEBHOOK_TEST = 'webhook.test';
 
+// Server lifecycle events.
+export const SERVER_SHUTDOWN = 'server.shutdown';
+
 /** All known event types. Useful for exhaustive matching or filtering. */
 export const ALL_EVENT_TYPES = [
   RUN_CREATED,
@@ -90,6 +93,7 @@ export const ALL_EVENT_TYPES = [
   WEBHOOK_CREATED,
   WEBHOOK_DELETED,
   WEBHOOK_TEST,
+  SERVER_SHUTDOWN,
 ] as const;
 
 type EventType = (typeof ALL_EVENT_TYPES)[number];
@@ -139,5 +143,9 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   {
     label: 'Triggers',
     events: [TRIGGER_CRON, TRIGGER_WEBHOOK, TRIGGER_JOB_COMPLETED],
+  },
+  {
+    label: 'Server',
+    events: [SERVER_SHUTDOWN],
   },
 ];

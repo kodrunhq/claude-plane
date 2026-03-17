@@ -236,6 +236,10 @@ func (m *mockJobStoreForSchedules) CloneJob(_ context.Context, jobID string, new
 	panic("not implemented")
 }
 
+func (m *mockJobStoreForSchedules) CountRunsForJobUpTo(_ context.Context, jobID string, _ time.Time) (int, error) {
+	return 0, nil
+}
+
 // mockScheduleReloader records calls.
 type mockScheduleReloader struct {
 	reloaded []string
@@ -290,7 +294,9 @@ func newScheduleFixture() *scheduleTestFixture {
 	reloader := &mockScheduleReloader{}
 	runCreator := &mockScheduleRunCreator{}
 
-	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, nil)
+	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-test", Role: "admin"}
+	})
 	h.SetRunCreator(runCreator)
 
 	r := chi.NewRouter()
@@ -831,7 +837,9 @@ func TestScheduleHandler_CreateSchedule_PublishesEvent(t *testing.T) {
 	reloader := &mockScheduleReloader{}
 	pub := &mockPublisher{}
 
-	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, nil)
+	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-test", Role: "admin"}
+	})
 	h.SetPublisher(pub)
 
 	r := chi.NewRouter()

@@ -29,6 +29,7 @@ type ServerConfig struct {
 	Secrets   SecretsConfig   `toml:"secrets"`
 	Events    EventsConfig    `toml:"events"`
 	Retention RetentionConfig `toml:"retention"`
+	Log       LogConfig       `toml:"log"`
 }
 
 // EventsConfig configures event storage and retention behavior.
@@ -57,6 +58,26 @@ func (r *RetentionConfig) GetRetentionDays() int {
 		return 30
 	}
 	return r.Days
+}
+
+// LogConfig configures structured logging behavior.
+type LogConfig struct {
+	Level  string `toml:"level"`  // debug, info, warn, error (default: info)
+	Format string `toml:"format"` // text, json (default: text)
+}
+
+// ParseLevel returns the slog.Level for the configured log level string.
+func (l *LogConfig) ParseLevel() slog.Level {
+	switch strings.ToLower(l.Level) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // WebhooksConfig groups all webhook-related configuration.
