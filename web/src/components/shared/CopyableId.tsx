@@ -10,7 +10,7 @@ interface CopyableIdProps {
 
 export function CopyableId({ id, length = 8, className }: CopyableIdProps) {
   const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
