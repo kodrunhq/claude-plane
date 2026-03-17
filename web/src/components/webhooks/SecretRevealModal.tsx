@@ -51,10 +51,10 @@ export function SecretRevealModal({ open, secret, onClose }: SecretRevealModalPr
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" />
-      <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="secret-reveal-title" className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
         <div className="flex items-center gap-2 mb-4">
           <ShieldAlert size={20} className="text-status-warning" />
-          <h2 className="text-lg font-semibold text-text-primary">Webhook Secret</h2>
+          <h2 id="secret-reveal-title" className="text-lg font-semibold text-text-primary">Webhook Secret</h2>
         </div>
 
         <div className="flex flex-col gap-4">

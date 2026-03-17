@@ -232,12 +232,13 @@ export function JobEditor() {
     if (!effectiveJobId) return;
     try {
       await deleteJobMutation.mutateAsync(effectiveJobId);
+      setShowDeleteConfirm(false);
       toast.success('Job deleted');
       navigate('/jobs');
     } catch (err) {
+      setShowDeleteConfirm(false);
       toast.error(err instanceof Error ? err.message : 'Failed to delete job');
     }
-    setShowDeleteConfirm(false);
   }
 
   async function executeRun(parameters: Record<string, string>) {

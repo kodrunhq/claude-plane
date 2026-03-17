@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -205,6 +206,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	// Look up user to include display_name (not stored in JWT)
 	user, err := h.store.GetUserByID(r.Context(), claims.UserID)
 	if err != nil {
+		slog.Warn("Me: could not load user from db", "error", err, "user_id", claims.UserID)
 		// Fallback to claims-only response if user lookup fails
 		writeJSON(w, http.StatusOK, map[string]string{
 			"user_id":      claims.UserID,

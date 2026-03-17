@@ -28,7 +28,11 @@ type CredentialHandler struct {
 }
 
 // NewCredentialHandler creates a new CredentialHandler.
+// Panics if the store is nil.
 func NewCredentialHandler(s CredentialStore, getClaims ClaimsGetter, encryptionKey []byte) *CredentialHandler {
+	if s == nil {
+		panic("CredentialStore must not be nil")
+	}
 	return &CredentialHandler{
 		store:         s,
 		getClaims:     getClaims,

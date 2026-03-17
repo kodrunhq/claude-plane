@@ -20,6 +20,7 @@ export function AccountTab() {
     try {
       await updateProfile.mutateAsync({ display_name: displayName });
       setProfileDirty(false);
+      useAuthStore.getState().checkSession();
       toast.success('Display name updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update profile');
@@ -67,10 +68,11 @@ export function AccountTab() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg">
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="profile-display-name" className="block text-sm font-medium text-text-secondary mb-1.5">
               Display Name
             </label>
             <input
+              id="profile-display-name"
               type="text"
               value={displayName}
               onChange={(e) => {
@@ -83,10 +85,11 @@ export function AccountTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="profile-email" className="block text-sm font-medium text-text-secondary mb-1.5">
               Email
             </label>
             <input
+              id="profile-email"
               type="text"
               value={user?.email ?? ''}
               disabled
@@ -95,10 +98,11 @@ export function AccountTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="profile-role" className="block text-sm font-medium text-text-secondary mb-1.5">
               Role
             </label>
             <input
+              id="profile-role"
               type="text"
               value={user?.role ?? ''}
               disabled
@@ -132,10 +136,11 @@ export function AccountTab() {
 
         <form onSubmit={handlePasswordChange} className="space-y-4 max-w-sm">
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="current-password" className="block text-sm font-medium text-text-secondary mb-1.5">
               Current Password
             </label>
             <input
+              id="current-password"
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -145,10 +150,11 @@ export function AccountTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="new-password" className="block text-sm font-medium text-text-secondary mb-1.5">
               New Password
             </label>
             <input
+              id="new-password"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -159,10 +165,11 @@ export function AccountTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
+            <label htmlFor="confirm-new-password" className="block text-sm font-medium text-text-secondary mb-1.5">
               Confirm New Password
             </label>
             <input
+              id="confirm-new-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

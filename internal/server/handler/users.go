@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -33,6 +34,14 @@ type UserHandler struct {
 // NewUserHandler creates a new UserHandler.
 func NewUserHandler(s UserAdminStore, getClaims ClaimsGetter) *UserHandler {
 	return &UserHandler{store: s, getClaims: getClaims}
+}
+
+// validateNewPassword checks that a new password meets minimum requirements.
+func validateNewPassword(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("new password must be at least 8 characters")
+	}
+	return nil
 }
 
 // RegisterUserRoutes mounts all user-management routes on the given router.
@@ -101,6 +110,10 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" {
 		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	if len(req.DisplayName) > 255 {
+		writeError(w, http.StatusBadRequest, "display_name must be at most 255 characters")
 		return
 	}
 	if req.Password == "" {
@@ -174,6 +187,11 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
 
+	if len(req.DisplayName) > 255 {
+		writeError(w, http.StatusBadRequest, "display_name must be at most 255 characters")
+		return
+	}
+
 	if req.Role != "" && req.Role != "admin" && req.Role != "user" {
 		writeError(w, http.StatusBadRequest, "role must be 'admin' or 'user'")
 		return
@@ -244,8 +262,8 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "new_password is required")
 		return
 	}
-	if len(req.NewPassword) < 8 {
-		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+	if err := validateNewPassword(req.NewPassword); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -298,18 +316,26 @@ func (h *UserHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "new_password is required")
 		return
 	}
-	if len(req.NewPassword) < 8 {
-		writeError(w, http.StatusBadRequest, "new password must be at least 8 characters")
-		return
-	}
 
-	// Verify user exists
-	if _, err := h.store.GetUserByID(r.Context(), userID); err != nil {
+	// Verify user exists and check admin-to-admin protection.
+	targetUser, err := h.store.GetUserByID(r.Context(), userID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	c := h.getClaims(r)
+	if targetUser.Role == "admin" && c != nil && c.UserID != userID {
+		writeError(w, http.StatusForbidden, "cannot reset another admin's password")
+		return
+	}
+
+	if err := validateNewPassword(req.NewPassword); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -347,6 +373,11 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
+
+	if len(req.DisplayName) > 255 {
+		writeError(w, http.StatusBadRequest, "display_name must be at most 255 characters")
+		return
+	}
 
 	if err := h.store.UpdateDisplayName(r.Context(), c.UserID, req.DisplayName); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

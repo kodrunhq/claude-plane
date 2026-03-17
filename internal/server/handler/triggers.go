@@ -15,19 +15,79 @@ import (
 type TriggerCRUDStore interface {
 	CreateJobTrigger(ctx context.Context, t store.JobTrigger) (*store.JobTrigger, error)
 	ListJobTriggers(ctx context.Context, jobID string) ([]store.JobTrigger, error)
+	GetJobTrigger(ctx context.Context, triggerID string) (*store.JobTrigger, error)
 	UpdateJobTrigger(ctx context.Context, triggerID, eventType, filter string) (*store.JobTrigger, error)
 	ToggleJobTrigger(ctx context.Context, triggerID string) (*store.JobTrigger, error)
 	DeleteJobTrigger(ctx context.Context, triggerID string) error
 }
 
+// TriggerJobStore allows looking up jobs to verify trigger ownership.
+type TriggerJobStore interface {
+	GetJob(ctx context.Context, jobID string) (*store.JobDetail, error)
+}
+
 // TriggerHandler handles REST endpoints for job trigger CRUD.
 type TriggerHandler struct {
-	store TriggerCRUDStore
+	store     TriggerCRUDStore
+	jobStore  TriggerJobStore
+	getClaims ClaimsGetter
 }
 
 // NewTriggerHandler creates a new TriggerHandler.
-func NewTriggerHandler(store TriggerCRUDStore) *TriggerHandler {
-	return &TriggerHandler{store: store}
+func NewTriggerHandler(store TriggerCRUDStore, opts ...TriggerHandlerOption) *TriggerHandler {
+	h := &TriggerHandler{store: store}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// TriggerHandlerOption configures optional fields on TriggerHandler.
+type TriggerHandlerOption func(*TriggerHandler)
+
+// WithTriggerJobStore sets the job store for ownership checks.
+func WithTriggerJobStore(js TriggerJobStore) TriggerHandlerOption {
+	return func(h *TriggerHandler) { h.jobStore = js }
+}
+
+// WithTriggerClaims sets the claims getter for ownership checks.
+func WithTriggerClaims(cg ClaimsGetter) TriggerHandlerOption {
+	return func(h *TriggerHandler) { h.getClaims = cg }
+}
+
+// authorizeTrigger verifies the requesting user owns the trigger's job or is admin.
+// Returns true if authorized; writes an error response and returns false otherwise.
+func (h *TriggerHandler) authorizeTrigger(w http.ResponseWriter, r *http.Request, triggerID string) bool {
+	if h.getClaims == nil || h.jobStore == nil {
+		return true // ownership checks not configured
+	}
+	c := h.getClaims(r)
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return false
+	}
+	if c.Role == "admin" {
+		return true
+	}
+	trigger, err := h.store.GetJobTrigger(r.Context(), triggerID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "trigger not found")
+			return false
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return false
+	}
+	job, err := h.jobStore.GetJob(r.Context(), trigger.JobID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return false
+	}
+	if job.Job.UserID != c.UserID {
+		writeError(w, http.StatusNotFound, "trigger not found")
+		return false
+	}
+	return true
 }
 
 // RegisterTriggerRoutes mounts all trigger-related routes on the given router.
@@ -100,6 +160,10 @@ type updateTriggerRequest struct {
 func (h *TriggerHandler) UpdateTrigger(w http.ResponseWriter, r *http.Request) {
 	triggerID := chi.URLParam(r, "triggerID")
 
+	if !h.authorizeTrigger(w, r, triggerID) {
+		return
+	}
+
 	var req updateTriggerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -109,6 +173,17 @@ func (h *TriggerHandler) UpdateTrigger(w http.ResponseWriter, r *http.Request) {
 	if req.EventType == "" {
 		writeError(w, http.StatusBadRequest, "event_type is required")
 		return
+	}
+
+	if req.Filter != "" {
+		if len(req.Filter) > 4096 {
+			writeError(w, http.StatusBadRequest, "filter exceeds maximum length")
+			return
+		}
+		if !json.Valid([]byte(req.Filter)) {
+			writeError(w, http.StatusBadRequest, "filter must be valid JSON")
+			return
+		}
 	}
 
 	updated, err := h.store.UpdateJobTrigger(r.Context(), triggerID, req.EventType, req.Filter)
@@ -126,6 +201,10 @@ func (h *TriggerHandler) UpdateTrigger(w http.ResponseWriter, r *http.Request) {
 // ToggleTrigger handles POST /api/v1/triggers/{triggerID}/toggle.
 func (h *TriggerHandler) ToggleTrigger(w http.ResponseWriter, r *http.Request) {
 	triggerID := chi.URLParam(r, "triggerID")
+
+	if !h.authorizeTrigger(w, r, triggerID) {
+		return
+	}
 
 	toggled, err := h.store.ToggleJobTrigger(r.Context(), triggerID)
 	if err != nil {
