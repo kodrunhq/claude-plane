@@ -86,7 +86,9 @@ func (n *TelegramNotifier) Send(ctx context.Context, channelConfig string, subje
 
 	resp, err := n.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("telegram API request: %w", err)
+		// Sanitize error to avoid leaking the bot token from the URL
+		// embedded in net/http error messages.
+		return fmt.Errorf("telegram send failed: connection error")
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"strings"
 	"time"
 )
 
@@ -40,6 +41,9 @@ func (*SMTPNotifier) Send(_ context.Context, channelConfig string, subject, body
 	if cfg.Host == "" {
 		return fmt.Errorf("smtp host is required")
 	}
+	if cfg.Port <= 0 || cfg.Port > 65535 {
+		return fmt.Errorf("smtp port must be between 1 and 65535")
+	}
 	if cfg.From == "" {
 		return fmt.Errorf("smtp from address is required")
 	}
@@ -47,11 +51,36 @@ func (*SMTPNotifier) Send(_ context.Context, channelConfig string, subject, body
 		return fmt.Errorf("smtp to address is required")
 	}
 
+	for _, v := range []struct{ name, val string }{
+		{"from", cfg.From}, {"to", cfg.To}, {"subject", subject},
+	} {
+		if strings.ContainsAny(v.val, "\r\n") {
+			return fmt.Errorf("smtp %s contains invalid characters", v.name)
+		}
+	}
+
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
+
+	// Build structured email body using the HTML template.
+	var fields []KeyValue
+	for _, line := range strings.Split(body, "\n") {
+		if parts := strings.SplitN(line, ": ", 2); len(parts) == 2 {
+			fields = append(fields, KeyValue{Key: parts[0], Value: parts[1]})
+		}
+	}
+	htmlBody, renderErr := RenderEmail(EmailData{
+		Subject:   subject,
+		Fields:    fields,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	})
+	if renderErr != nil {
+		// Fall back to plain text body wrapped in a pre element.
+		htmlBody = "<pre>" + body + "</pre>"
+	}
 
 	msg := fmt.Sprintf(
 		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n%s",
-		cfg.From, cfg.To, subject, body,
+		cfg.From, cfg.To, subject, htmlBody,
 	)
 
 	if cfg.TLS {

@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, NavLink } from 'react-router';
 import { BookOpen, ChevronRight } from 'lucide-react';
 import { MarkdownRenderer } from '../components/docs/MarkdownRenderer.tsx';
 
@@ -60,22 +60,28 @@ export function DocsPage() {
           <ul className="space-y-1">
             {guides.map((guide) => (
               <li key={guide.id}>
-                <button
-                  onClick={() => navigate(`/docs/${guide.id}`)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 flex items-center gap-2 ${
-                    guide.id === activeId
-                      ? 'bg-accent-primary/10 text-accent-primary font-medium'
-                      : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60'
-                  }`}
+                <NavLink
+                  to={`/docs/${guide.id}`}
+                  className={({ isActive }) =>
+                    `w-full text-left px-3 py-2 rounded-lg text-sm transition-all duration-150 flex items-center gap-2 block ${
+                      isActive
+                        ? 'bg-accent-primary/10 text-accent-primary font-medium'
+                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60'
+                    }`
+                  }
                 >
-                  {guide.id === activeId && <ChevronRight size={14} className="shrink-0" />}
-                  <div className="min-w-0">
-                    <div className="truncate">{guide.title}</div>
-                    {guide.id === activeId && (
-                      <div className="text-xs text-text-secondary/70 mt-0.5 truncate">{guide.description}</div>
-                    )}
-                  </div>
-                </button>
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <ChevronRight size={14} className="shrink-0" />}
+                      <div className="min-w-0">
+                        <div className="truncate">{guide.title}</div>
+                        {isActive && (
+                          <div className="text-xs text-text-secondary/70 mt-0.5 truncate">{guide.description}</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </NavLink>
               </li>
             ))}
           </ul>

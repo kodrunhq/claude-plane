@@ -23,7 +23,7 @@ type ScheduleCRUDStore interface {
 	UpdateSchedule(ctx context.Context, p store.UpdateScheduleParams) (*store.CronSchedule, error)
 	SetScheduleEnabled(ctx context.Context, scheduleID string, enabled bool) error
 	DeleteSchedule(ctx context.Context, scheduleID string) error
-	ListAllSchedules(ctx context.Context) ([]store.CronScheduleWithJob, error)
+	ListAllSchedules(ctx context.Context, userID string) ([]store.CronScheduleWithJob, error)
 }
 
 // ScheduleReloader is the interface for hot-reloading cron entries after CRUD changes.
@@ -165,8 +165,13 @@ func (h *ScheduleHandler) authorizeScheduleByID(w http.ResponseWriter, r *http.R
 }
 
 // ListAllSchedules handles GET /api/v1/schedules.
+// Non-admin users only see schedules belonging to their own jobs.
 func (h *ScheduleHandler) ListAllSchedules(w http.ResponseWriter, r *http.Request) {
-	schedules, err := h.store.ListAllSchedules(r.Context())
+	userID := ""
+	if c := h.claims(r); c != nil && c.Role != "admin" {
+		userID = c.UserID
+	}
+	schedules, err := h.store.ListAllSchedules(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return

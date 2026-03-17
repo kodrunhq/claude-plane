@@ -246,14 +246,30 @@ type CronScheduleWithJob struct {
 }
 
 // ListAllSchedules returns all schedules across all jobs, with job names.
-func (s *Store) ListAllSchedules(ctx context.Context) ([]CronScheduleWithJob, error) {
-	rows, err := s.reader.QueryContext(ctx,
-		`SELECT s.schedule_id, s.job_id, s.cron_expr, s.timezone, s.enabled,
-		        s.next_run_at, s.last_triggered_at, s.created_at, s.updated_at,
-		        j.name as job_name
-		 FROM cron_schedules s
-		 JOIN jobs j ON s.job_id = j.job_id
-		 ORDER BY s.created_at DESC`)
+// When userID is non-empty, only schedules for jobs owned by that user are returned.
+func (s *Store) ListAllSchedules(ctx context.Context, userID string) ([]CronScheduleWithJob, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if userID != "" {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT s.schedule_id, s.job_id, s.cron_expr, s.timezone, s.enabled,
+			        s.next_run_at, s.last_triggered_at, s.created_at, s.updated_at,
+			        j.name as job_name
+			 FROM cron_schedules s
+			 JOIN jobs j ON s.job_id = j.job_id
+			 WHERE j.user_id = ?
+			 ORDER BY s.created_at DESC`, userID)
+	} else {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT s.schedule_id, s.job_id, s.cron_expr, s.timezone, s.enabled,
+			        s.next_run_at, s.last_triggered_at, s.created_at, s.updated_at,
+			        j.name as job_name
+			 FROM cron_schedules s
+			 JOIN jobs j ON s.job_id = j.job_id
+			 ORDER BY s.created_at DESC`)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list all schedules: %w", err)
 	}

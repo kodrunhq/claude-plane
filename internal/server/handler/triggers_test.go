@@ -99,7 +99,7 @@ func (m *mockTriggerStore) GetJobTrigger(_ context.Context, triggerID string) (*
 	return &cp, nil
 }
 
-func (m *mockTriggerStore) ListAllTriggers(_ context.Context) ([]store.JobTriggerWithJob, error) {
+func (m *mockTriggerStore) ListAllTriggers(_ context.Context, _ string) ([]store.JobTriggerWithJob, error) {
 	if m.err != nil {
 		return nil, m.err
 	}

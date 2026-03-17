@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Link } from 'react-router';
 
 interface MarkdownRendererProps {
   content: string;
@@ -22,11 +23,20 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         p: ({ children }) => (
           <p className="text-sm text-text-secondary leading-relaxed mb-3">{children}</p>
         ),
-        a: ({ href, children }) => (
-          <a href={href} className="text-accent-primary hover:underline" target="_blank" rel="noopener noreferrer">
-            {children}
-          </a>
-        ),
+        a: ({ href, children }) => {
+          if (href?.startsWith('/docs/') || href?.startsWith('/')) {
+            return (
+              <Link to={href} className="text-accent-primary hover:underline">
+                {children}
+              </Link>
+            );
+          }
+          return (
+            <a href={href} className="text-accent-primary hover:underline" target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          );
+        },
         code: ({ className, children }) => {
           const isBlock = className?.startsWith('language-');
           if (isBlock) {
