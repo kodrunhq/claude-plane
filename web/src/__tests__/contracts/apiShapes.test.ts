@@ -18,7 +18,7 @@ import {
 
 /** Assert that every item in the array has all listed keys with non-nullish values. */
 function expectRequiredFields(
-  items: Record<string, unknown>[],
+  items: readonly object[],
   requiredFields: string[],
   label: string,
 ) {
@@ -26,21 +26,23 @@ function expectRequiredFields(
   for (const [i, item] of items.entries()) {
     for (const field of requiredFields) {
       expect(item).toHaveProperty(field);
-      expect(item[field], `${label}[${i}].${field} should not be nullish`).not.toBeNull();
-      expect(item[field], `${label}[${i}].${field} should not be undefined`).not.toBeUndefined();
+      const val = (item as Record<string, unknown>)[field];
+      expect(val, `${label}[${i}].${field} should not be nullish`).not.toBeNull();
+      expect(val, `${label}[${i}].${field} should not be undefined`).not.toBeUndefined();
     }
   }
 }
 
 /** Assert that no item has any of the listed keys with a truthy value. */
 function expectAbsentFields(
-  items: Record<string, unknown>[],
+  items: readonly object[],
   absentFields: string[],
   label: string,
 ) {
   for (const [i, item] of items.entries()) {
+    const record = item as Record<string, unknown>;
     for (const field of absentFields) {
-      const val = item[field];
+      const val = record[field];
       if (val !== undefined && val !== null && val !== '') {
         throw new Error(
           `${label}[${i}].${field} should be absent or empty, got: ${JSON.stringify(val)}`,

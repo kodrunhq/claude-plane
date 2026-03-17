@@ -108,7 +108,7 @@ func sessionDefaults(n int64, machineID string) sessionConfig {
 		MachineID:  machineID,
 		Command:    "claude",
 		WorkingDir: "/tmp",
-		Status:     "created",
+		Status:     store.StatusCreated,
 	}
 }
 
