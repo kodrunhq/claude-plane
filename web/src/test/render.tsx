@@ -33,6 +33,8 @@ export function renderWithProviders(
       },
     });
 
+  // Wrapper is recreated per renderWithProviders call, which is fine:
+  // @testing-library/react preserves the wrapper across rerenders.
   function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>

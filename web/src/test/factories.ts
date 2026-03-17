@@ -13,13 +13,6 @@ function nextId(prefix: string): string {
   return `${prefix}-${counters[prefix]}`;
 }
 
-/** Reset all ID counters (call in afterEach if deterministic IDs are needed) */
-export function resetFactories(): void {
-  for (const key of Object.keys(counters)) {
-    delete counters[key];
-  }
-}
-
 const NOW = '2026-01-15T10:00:00Z';
 
 export function buildSession(overrides?: Partial<Session>): Session {
