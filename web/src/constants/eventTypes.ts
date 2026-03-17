@@ -90,50 +90,52 @@ export const ALL_EVENT_TYPES = [
   WEBHOOK_DELETED,
 ] as const;
 
+type EventType = (typeof ALL_EVENT_TYPES)[number];
+
 /** Grouped event types for UI selectors (webhooks, notifications). */
-export const EVENT_GROUPS: { label: string; events: string[] }[] = [
+export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   {
     label: 'Runs',
-    events: ['run.created', 'run.started', 'run.completed', 'run.failed', 'run.cancelled'],
+    events: [RUN_CREATED, RUN_STARTED, RUN_COMPLETED, RUN_FAILED, RUN_CANCELLED],
   },
   {
     label: 'Steps',
-    events: ['run.step.completed', 'run.step.failed'],
+    events: [RUN_STEP_COMPLETED, RUN_STEP_FAILED],
   },
   {
     label: 'Sessions',
-    events: ['session.started', 'session.exited', 'session.terminated'],
+    events: [SESSION_STARTED, SESSION_EXITED, SESSION_TERMINATED],
   },
   {
     label: 'Machines',
-    events: ['machine.connected', 'machine.disconnected'],
+    events: [MACHINE_CONNECTED, MACHINE_DISCONNECTED],
   },
   {
     label: 'Jobs',
-    events: ['job.created', 'job.updated', 'job.deleted'],
+    events: [JOB_CREATED, JOB_UPDATED, JOB_DELETED],
   },
   {
     label: 'Templates',
-    events: ['template.created', 'template.updated', 'template.deleted'],
+    events: [TEMPLATE_CREATED, TEMPLATE_UPDATED, TEMPLATE_DELETED],
   },
   {
     label: 'Schedules',
-    events: ['schedule.created', 'schedule.paused', 'schedule.resumed', 'schedule.deleted'],
+    events: [SCHEDULE_CREATED, SCHEDULE_PAUSED, SCHEDULE_RESUMED, SCHEDULE_DELETED],
   },
   {
     label: 'Credentials',
-    events: ['credential.created', 'credential.deleted'],
+    events: [CREDENTIAL_CREATED, CREDENTIAL_DELETED],
   },
   {
     label: 'Webhooks',
-    events: ['webhook.created', 'webhook.deleted'],
+    events: [WEBHOOK_CREATED, WEBHOOK_DELETED],
   },
   {
     label: 'Users',
-    events: ['user.created', 'user.deleted'],
+    events: [USER_CREATED, USER_DELETED],
   },
   {
     label: 'Triggers',
-    events: ['trigger.cron', 'trigger.webhook', 'trigger.job_completed'],
+    events: [TRIGGER_CRON, TRIGGER_WEBHOOK, TRIGGER_JOB_COMPLETED],
   },
 ];

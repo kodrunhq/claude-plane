@@ -52,6 +52,15 @@ func FormatEvent(e client.Event) string {
 		return str(idKey)
 	}
 
+	// optLine returns "\nLabel: `value`" if value is non-empty, or "" otherwise.
+	// Prevents empty backtick spans in Telegram messages.
+	optLine := func(label, value string) string {
+		if value == "" {
+			return ""
+		}
+		return fmt.Sprintf("\n%s: `%s`", label, escapeMarkdownV2(value))
+	}
+
 	switch e.Type {
 	// ---- session events ----
 	case "session.started":
@@ -81,52 +90,42 @@ func FormatEvent(e client.Event) string {
 
 	// ---- run events ----
 	case "run.created":
-		return fmt.Sprintf(
-			"📋 *Run created*\nJob: `%s`\nRun: `%s`\nTrigger: %s",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("run_id")),
-			escapeMarkdownV2(str("trigger_type")),
-		)
+		job := nameOrID("job_name", "job_id")
+		msg := "📋 *Run created*"
+		msg += optLine("Job", job)
+		msg += fmt.Sprintf("\nRun: `%s`", escapeMarkdownV2(str("run_id")))
+		if t := str("trigger_type"); t != "" {
+			msg += fmt.Sprintf("\nTrigger: %s", escapeMarkdownV2(t))
+		}
+		return msg
 	case "run.started":
-		return fmt.Sprintf(
-			"▶️ *Run started*\nJob: `%s`\nRun: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("run_id")),
-		)
+		return fmt.Sprintf("▶️ *Run started*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
 	case "run.completed":
-		return fmt.Sprintf(
-			"✅ *Run completed*\nJob: `%s`\nRun: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("run_id")),
-		)
+		return fmt.Sprintf("✅ *Run completed*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
 	case "run.failed":
-		return fmt.Sprintf(
-			"❌ *Run failed*\nJob: `%s`\nRun: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("run_id")),
-		)
+		return fmt.Sprintf("❌ *Run failed*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
 	case "run.cancelled":
-		return fmt.Sprintf(
-			"🚫 *Run cancelled*\nJob: `%s`\nRun: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("run_id")),
-		)
+		return fmt.Sprintf("🚫 *Run cancelled*%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			escapeMarkdownV2(str("run_id")))
 
 	// ---- run step events ----
 	case "run.step.completed":
-		return fmt.Sprintf(
-			"✅ *Step completed*\nJob: `%s`\nStep: `%s`\nRun: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(nameOrID("step_name", "step_id")),
-			escapeMarkdownV2(str("run_id")),
-		)
+		return fmt.Sprintf("✅ *Step completed*%s%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Step", nameOrID("step_name", "step_id")),
+			escapeMarkdownV2(str("run_id")))
 	case "run.step.failed":
-		return fmt.Sprintf(
-			"❌ *Step failed*\nJob: `%s`\nStep: `%s`\nRun: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(nameOrID("step_name", "step_id")),
-			escapeMarkdownV2(str("run_id")),
-		)
+		return fmt.Sprintf("❌ *Step failed*%s%s\nRun: `%s`",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Step", nameOrID("step_name", "step_id")),
+			escapeMarkdownV2(str("run_id")))
 
 	// ---- machine events ----
 	case "machine.connected":
@@ -188,29 +187,21 @@ func FormatEvent(e client.Event) string {
 
 	// ---- schedule events ----
 	case "schedule.created":
-		return fmt.Sprintf(
-			"🕐 *Schedule created*\nJob: `%s`\nCron: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("cron_expr")),
-		)
+		return fmt.Sprintf("🕐 *Schedule created*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
 	case "schedule.paused":
-		return fmt.Sprintf(
-			"⏸️ *Schedule paused*\nJob: `%s`\nCron: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("cron_expr")),
-		)
+		return fmt.Sprintf("⏸️ *Schedule paused*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
 	case "schedule.resumed":
-		return fmt.Sprintf(
-			"▶️ *Schedule resumed*\nJob: `%s`\nCron: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("cron_expr")),
-		)
+		return fmt.Sprintf("▶️ *Schedule resumed*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
 	case "schedule.deleted":
-		return fmt.Sprintf(
-			"🗑️ *Schedule deleted*\nJob: `%s`\nCron: `%s`",
-			escapeMarkdownV2(nameOrID("job_name", "job_id")),
-			escapeMarkdownV2(str("cron_expr")),
-		)
+		return fmt.Sprintf("🗑️ *Schedule deleted*%s%s",
+			optLine("Job", nameOrID("job_name", "job_id")),
+			optLine("Cron", str("cron_expr")))
 
 	// ---- credential events ----
 	case "credential.created":
