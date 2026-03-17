@@ -1,47 +1,30 @@
 package store
 
 import (
-	"path/filepath"
 	"testing"
 )
 
 func TestSessionCRUD(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewStore(dbPath)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	defer s.Close()
+	s := mustNewStore(t)
+	machineID := mustCreateMachine(t, s)
 
-	// Create machine for foreign key constraint
-	if err := s.UpsertMachine("machine-a", 5); err != nil {
-		t.Fatalf("UpsertMachine: %v", err)
-	}
-
-	sess := &Session{
-		SessionID:  "sess-001",
-		MachineID:  "machine-a",
-		UserID:     "",
-		Command:    "claude",
-		WorkingDir: "/tmp",
-		Status:     StatusCreated,
-	}
-
-	// Create
-	if err := s.CreateSession(sess); err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
+	sess := mustCreateSession(t, s, machineID,
+		WithSessionID("sess-001"),
+		WithSessionCommand("claude"),
+		WithSessionWorkingDir("/tmp"),
+		WithSessionStatus(StatusCreated),
+	)
 
 	// Get
-	got, err := s.GetSession("sess-001")
+	got, err := s.GetSession(sess.SessionID)
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
 	if got.SessionID != "sess-001" {
 		t.Errorf("SessionID = %q, want %q", got.SessionID, "sess-001")
 	}
-	if got.MachineID != "machine-a" {
-		t.Errorf("MachineID = %q, want %q", got.MachineID, "machine-a")
+	if got.MachineID != machineID {
+		t.Errorf("MachineID = %q, want %q", got.MachineID, machineID)
 	}
 	if got.UserID != "" {
 		t.Errorf("UserID = %q, want %q", got.UserID, "")
@@ -88,30 +71,11 @@ func TestSessionCRUD(t *testing.T) {
 }
 
 func TestListSessions(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewStore(dbPath)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	defer s.Close()
+	s := mustNewStore(t)
+	machineID := mustCreateMachine(t, s)
 
-	// Need a machine for foreign key
-	if err := s.UpsertMachine("machine-a", 5); err != nil {
-		t.Fatalf("UpsertMachine: %v", err)
-	}
-
-	for i := range 3 {
-		sess := &Session{
-			SessionID:  "sess-" + string(rune('a'+i)),
-			MachineID:  "machine-a",
-			UserID:     "",
-			Command:    "claude",
-			WorkingDir: "/tmp",
-			Status:     StatusCreated,
-		}
-		if err := s.CreateSession(sess); err != nil {
-			t.Fatalf("CreateSession %d: %v", i, err)
-		}
+	for range 3 {
+		mustCreateSession(t, s, machineID)
 	}
 
 	sessions, err := s.ListSessions()
@@ -124,37 +88,19 @@ func TestListSessions(t *testing.T) {
 }
 
 func TestCreateSession_PersistsMetadata(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewStore(dbPath)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	defer s.Close()
+	s := mustNewStore(t)
+	machineID := mustCreateMachine(t, s)
 
-	// Create machine for foreign key constraint
-	if err := s.UpsertMachine("machine-meta", 5); err != nil {
-		t.Fatalf("UpsertMachine: %v", err)
-	}
+	sess := mustCreateSession(t, s, machineID,
+		WithSessionModel("opus"),
+		WithSessionSkipPerms("true"),
+		WithSessionEnvVars(`{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}`),
+		WithSessionArgs(`["--verbose","--no-cache"]`),
+		WithSessionInitialPrompt("Fix the login bug"),
+		WithSessionWorkingDir("/home/user/project"),
+	)
 
-	sess := &Session{
-		SessionID:     "sess-meta-001",
-		MachineID:     "machine-meta",
-		UserID:        "",
-		Command:       "claude",
-		WorkingDir:    "/home/user/project",
-		Status:        StatusCreated,
-		Model:         "opus",
-		SkipPerms:     "true",
-		EnvVars:       `{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}`,
-		Args:          `["--verbose","--no-cache"]`,
-		InitialPrompt: "Fix the login bug",
-	}
-
-	if err := s.CreateSession(sess); err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-
-	got, err := s.GetSession("sess-meta-001")
+	got, err := s.GetSession(sess.SessionID)
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
@@ -192,37 +138,15 @@ func TestCreateSession_PersistsMetadata(t *testing.T) {
 }
 
 func TestListSessionsByMachine(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewStore(dbPath)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	defer s.Close()
+	s := mustNewStore(t)
+	machineA := mustCreateMachine(t, s, WithMachineID("machine-a"))
+	machineB := mustCreateMachine(t, s, WithMachineID("machine-b"))
 
-	// Create two machines
-	if err := s.UpsertMachine("machine-a", 5); err != nil {
-		t.Fatalf("UpsertMachine a: %v", err)
-	}
-	if err := s.UpsertMachine("machine-b", 5); err != nil {
-		t.Fatalf("UpsertMachine b: %v", err)
-	}
+	// Create 2 sessions on machine-a, 1 on machine-b
+	mustCreateSession(t, s, machineA)
+	mustCreateSession(t, s, machineA)
+	mustCreateSession(t, s, machineB)
 
-	// Create sessions on both machines
-	for i, mid := range []string{"machine-a", "machine-a", "machine-b"} {
-		sess := &Session{
-			SessionID:  "sess-" + string(rune('a'+i)),
-			MachineID:  mid,
-			UserID:     "",
-			Command:    "claude",
-			WorkingDir: "/tmp",
-			Status:     StatusCreated,
-		}
-		if err := s.CreateSession(sess); err != nil {
-			t.Fatalf("CreateSession %d: %v", i, err)
-		}
-	}
-
-	// Filter by machine-a
 	sessions, err := s.ListSessionsByMachine("machine-a")
 	if err != nil {
 		t.Fatalf("ListSessionsByMachine: %v", err)
@@ -231,7 +155,6 @@ func TestListSessionsByMachine(t *testing.T) {
 		t.Errorf("ListSessionsByMachine count = %d, want 2", len(sessions))
 	}
 
-	// Filter by machine-b
 	sessions, err = s.ListSessionsByMachine("machine-b")
 	if err != nil {
 		t.Fatalf("ListSessionsByMachine: %v", err)
