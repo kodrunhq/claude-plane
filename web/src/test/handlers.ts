@@ -82,4 +82,15 @@ export const handlers = [
   http.get('/api/v1/templates', () => HttpResponse.json(mockTemplates)),
 
   http.get('/api/v1/events', () => HttpResponse.json(mockEvents)),
+
+  http.get('/api/v1/users/me/preferences', () =>
+    HttpResponse.json({
+      ui: {
+        theme: 'system',
+        terminal_font_size: 14,
+        auto_attach_session: false,
+        command_center_cards: ['sessions', 'machines', 'jobs', 'runs', 'templates'],
+      },
+    }),
+  ),
 ];
