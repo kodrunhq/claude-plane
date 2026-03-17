@@ -51,6 +51,26 @@ func (s *Store) UpdateMachineStatus(machineID, status string, lastSeenAt time.Ti
 	return nil
 }
 
+// UpdateMachineDisplayName sets the display_name for the given machine.
+// Returns ErrMachineNotFound if no matching row exists.
+func (s *Store) UpdateMachineDisplayName(machineID, displayName string) error {
+	result, err := s.writer.Exec(
+		`UPDATE machines SET display_name = ? WHERE machine_id = ?`,
+		displayName, machineID,
+	)
+	if err != nil {
+		return fmt.Errorf("update machine display name: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update machine display name rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrMachineNotFound
+	}
+	return nil
+}
+
 // ListMachines returns all machines ordered by machine_id.
 func (s *Store) ListMachines() ([]Machine, error) {
 	rows, err := s.reader.Query(`

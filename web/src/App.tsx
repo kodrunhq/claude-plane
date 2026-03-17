@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useParams } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { AppShell } from './components/layout/AppShell.tsx'
+import { ErrorBoundary } from './components/shared/ErrorBoundary.tsx'
 import { CommandCenter } from './views/CommandCenter.tsx'
 import { SessionsPage } from './views/SessionsPage.tsx'
 import { MachinesPage } from './views/MachinesPage.tsx'
@@ -22,6 +23,7 @@ import { ConnectorsPage } from './views/ConnectorsPage.tsx'
 import { ConnectorDetailPage } from './views/ConnectorDetailPage.tsx'
 import { SearchPage } from './views/SearchPage.tsx'
 import { SettingsPage } from './views/SettingsPage.tsx'
+import { NotFoundPage } from './views/NotFoundPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { MultiviewPage } from './components/multiview/MultiviewPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
@@ -86,6 +88,7 @@ function App() {
       <ThemeApplier />
       <BrowserRouter>
         <AppShell>
+          <ErrorBoundary>
           <Routes>
             <Route path="/" element={<CommandCenter />} />
             <Route path="/sessions" element={<SessionsPage />} />
@@ -112,7 +115,9 @@ function App() {
             <Route path="/connectors/:connectorId" element={<ConnectorDetailPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
+          </ErrorBoundary>
         </AppShell>
       </BrowserRouter>
       <Toaster theme="system" />

@@ -116,6 +116,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 			r.Post("/auth/logout", h.Logout)
 			r.Get("/machines", h.ListMachines)
 			r.Get("/machines/{machineID}", h.GetMachine)
+			r.Put("/machines/{machineID}", h.UpdateMachine)
 
 			// Session routes
 			if deps.SessionHandler != nil {
