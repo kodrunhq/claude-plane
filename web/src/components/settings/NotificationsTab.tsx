@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { EVENT_GROUPS } from '../../constants/eventTypes.ts';
@@ -45,9 +46,14 @@ export function NotificationsTab({ preferences, onSave, saving }: NotificationsT
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-text-primary mb-3">
-          Subscribe to Event Types
-        </label>
+        <div className="flex items-center justify-between mb-3">
+          <label className="block text-sm font-medium text-text-primary">
+            Subscribe to Event Types
+          </label>
+          <Link to="/docs/smtp-setup" className="text-xs text-accent-primary hover:underline">
+            How to set up email / Telegram
+          </Link>
+        </div>
         <div className="space-y-4">
           {EVENT_GROUPS.map((group) => (
             <div key={group.label}>

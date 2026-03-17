@@ -17,6 +17,7 @@ import {
   Search,
   Settings,
   LayoutGrid,
+  BookOpen,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -68,6 +69,12 @@ const navSections: NavSection[] = [
       { to: '/users', label: 'Users', icon: Users },
       { to: '/provisioning', label: 'Provisioning', icon: KeyRound },
       { to: '/api-keys', label: 'API Keys', icon: Key },
+    ],
+  },
+  {
+    title: 'Help',
+    items: [
+      { to: '/docs', label: 'Documentation', icon: BookOpen },
     ],
   },
 ];
