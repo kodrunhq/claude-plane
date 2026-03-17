@@ -504,6 +504,7 @@ export function JobEditor() {
       {showRunModal && (
         <RunNowModal
           defaultParameters={jobParams}
+          steps={steps}
           onRun={executeRun}
           onClose={() => setShowRunModal(false)}
         />

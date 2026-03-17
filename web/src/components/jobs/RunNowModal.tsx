@@ -1,17 +1,24 @@
 import { useState } from 'react';
-import { X, Play } from 'lucide-react';
+import { X, Play, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+import type { Task } from '../../types/job.ts';
 
 interface RunNowModalProps {
   defaultParameters: Record<string, string>;
+  steps?: Task[];
   onRun: (parameters: Record<string, string>) => void;
   onClose: () => void;
 }
 
-export function RunNowModal({ defaultParameters, onRun, onClose }: RunNowModalProps) {
+export function RunNowModal({ defaultParameters, steps = [], onRun, onClose }: RunNowModalProps) {
   const [overrides, setOverrides] = useState<Record<string, string>>({ ...defaultParameters });
 
   const entries = Object.entries(overrides);
   const hasParams = entries.length > 0;
+
+  const hasEmptyPrompt = steps.some(
+    (s) => (!s.task_type || s.task_type === 'claude') && !s.prompt?.trim(),
+  );
 
   function handleValueChange(key: string, value: string) {
     setOverrides({ ...overrides, [key]: value });
@@ -19,6 +26,10 @@ export function RunNowModal({ defaultParameters, onRun, onClose }: RunNowModalPr
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (steps.length === 0) {
+      toast.error('Add at least one task before running');
+      return;
+    }
     onRun(overrides);
   }
 
@@ -46,6 +57,12 @@ export function RunNowModal({ defaultParameters, onRun, onClose }: RunNowModalPr
 
           {/* Body */}
           <div className="px-4 py-4 space-y-3">
+            {hasEmptyPrompt && (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/30 text-yellow-400">
+                <AlertTriangle size={14} className="shrink-0" />
+                One or more Claude tasks have an empty prompt.
+              </div>
+            )}
             {hasParams ? (
               <>
                 <p className="text-xs text-text-secondary">
