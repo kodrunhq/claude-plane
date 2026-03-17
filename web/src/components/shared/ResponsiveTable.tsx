@@ -65,7 +65,7 @@ export function ResponsiveTable<T>({
                 <tr
                   key={keyFn(item)}
                   onClick={onItemClick ? () => onItemClick(item) : undefined}
-                  className={`border-t border-gray-800 hover:bg-bg-tertiary/20 transition-colors ${onItemClick ? 'cursor-pointer' : ''}`}
+                  className={`border-t border-gray-800 hover:bg-bg-tertiary/50 transition-colors ${onItemClick ? 'cursor-pointer' : ''}`}
                 >
                   {fields.map((f) => (
                     <td key={f.label} className="px-4 py-3 text-sm">

@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
 import {
   getStatusDotClass,
   getStatusIcon,
@@ -53,6 +53,10 @@ function StatusIcon({
 
   if (iconType === 'spinner') {
     return <Loader2 size={px} className={`${textColorClass} animate-spin shrink-0`} />;
+  }
+
+  if (iconType === 'clock') {
+    return <Clock size={px} className={`${textColorClass} shrink-0`} />;
   }
 
   // Fallback: plain dot indicator

@@ -26,7 +26,7 @@ function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
   return (
     <>
       <tr
-        className={`border-t border-gray-800 ${hasDetails ? 'cursor-pointer hover:bg-bg-tertiary/30' : ''}`}
+        className={`border-t border-gray-800 ${hasDetails ? 'cursor-pointer hover:bg-bg-tertiary/50' : ''}`}
         onClick={() => hasDetails && setExpanded((v) => !v)}
       >
         <td className="px-4 py-3">

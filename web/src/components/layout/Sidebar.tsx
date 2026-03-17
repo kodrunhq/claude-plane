@@ -89,8 +89,9 @@ function NavItemLink({
       to={to}
       end={to === '/'}
       onClick={onClick}
+      title={collapsed ? label : undefined}
       className={({ isActive }) =>
-        `group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+        `group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${collapsed ? 'justify-center' : ''} ${
           isActive
             ? 'bg-accent-primary/10 text-accent-primary'
             : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60'
@@ -154,6 +155,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           onClick={() => logout()}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:text-status-error hover:bg-status-error/10 w-full transition-all duration-200"
           aria-label="Sign out"
+          title={collapsed && !onNavigate ? 'Sign out' : undefined}
         >
           <LogOut size={18} className="shrink-0" />
           {(!collapsed || onNavigate) && <span className="font-medium">Sign out</span>}
