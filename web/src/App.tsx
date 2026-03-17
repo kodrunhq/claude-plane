@@ -23,6 +23,7 @@ import { ConnectorsPage } from './views/ConnectorsPage.tsx'
 import { ConnectorDetailPage } from './views/ConnectorDetailPage.tsx'
 import { SearchPage } from './views/SearchPage.tsx'
 import { SettingsPage } from './views/SettingsPage.tsx'
+import { DocsPage } from './views/DocsPage.tsx'
 import { NotFoundPage } from './views/NotFoundPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { MultiviewPage } from './components/multiview/MultiviewPage.tsx'
@@ -126,6 +127,8 @@ function App() {
             <Route path="/connectors/:connectorId" element={<ConnectorDetailPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/docs/:guideId" element={<DocsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
           </ErrorBoundary>
