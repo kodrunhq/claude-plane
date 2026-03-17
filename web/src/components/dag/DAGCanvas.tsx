@@ -29,6 +29,7 @@ interface DAGCanvasProps {
   selectedTaskId?: string | null;
   onNodeClick?: (taskId: string) => void;
   onConnect?: (sourceStepId: string, targetStepId: string) => void;
+  onDeleteEdge?: (sourceStepId: string, targetStepId: string) => void;
   className?: string;
 }
 
@@ -80,6 +81,7 @@ export function DAGCanvas({
   selectedTaskId,
   onNodeClick,
   onConnect: onConnectProp,
+  onDeleteEdge,
   className = '',
 }: DAGCanvasProps) {
   const isMobile = useIsMobile();
@@ -162,6 +164,21 @@ export function DAGCanvas({
     [onNodeClick],
   );
 
+  const handleEdgesDelete = useCallback(
+    (deletedEdges: Edge[]) => {
+      if (!editable || !onDeleteEdge) return;
+      for (const edge of deletedEdges) {
+        // Edge ID format: "${depends_on}->${step_id}"
+        const parts = edge.id.split('->');
+        if (parts.length === 2) {
+          const [sourceStepId, targetStepId] = parts;
+          onDeleteEdge(sourceStepId, targetStepId);
+        }
+      }
+    },
+    [editable, onDeleteEdge],
+  );
+
   return (
     <div className={`w-full h-full ${className}`}>
       <ReactFlow
@@ -170,6 +187,7 @@ export function DAGCanvas({
         onNodesChange={editable ? onNodesChange : undefined}
         onEdgesChange={editable ? onEdgesChange : undefined}
         onConnect={editable ? handleConnect : undefined}
+        onEdgesDelete={editable ? handleEdgesDelete : undefined}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -177,7 +195,9 @@ export function DAGCanvas({
         fitViewOptions={{ padding: 0.2 }}
         nodesDraggable={editable}
         nodesConnectable={editable}
+        edgesReconnectable={editable}
         elementsSelectable={true}
+        deleteKeyCode={editable ? 'Backspace' : null}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#374151" />

@@ -21,6 +21,7 @@ import {
   useUpdateTask,
   useDeleteTask,
   useAddDependency,
+  useRemoveDependency,
   useTriggerRun,
 } from '../hooks/useJobs.ts';
 import { useMachines } from '../hooks/useMachines.ts';
@@ -51,6 +52,7 @@ export function JobEditor() {
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
   const addDependency = useAddDependency();
+  const removeDependency = useRemoveDependency();
   const triggerRun = useTriggerRun();
 
   const selectedTaskId = useJobEditorStore((s) => s.selectedTaskId);
@@ -175,6 +177,22 @@ export function JobEditor() {
       }
     },
     [effectiveJobId, addDependency],
+  );
+
+  const handleDeleteEdge = useCallback(
+    async (sourceStepId: string, targetStepId: string) => {
+      if (!effectiveJobId) return;
+      try {
+        await removeDependency.mutateAsync({
+          jobId: effectiveJobId,
+          taskId: targetStepId,
+          depId: sourceStepId,
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to remove dependency');
+      }
+    },
+    [effectiveJobId, removeDependency],
   );
 
   async function handleSave() {
@@ -394,6 +412,7 @@ export function JobEditor() {
                   selectedTaskId={selectedTaskId}
                   onNodeClick={handleNodeClick}
                   onConnect={handleConnect}
+                  onDeleteEdge={handleDeleteEdge}
                 />
               )}
             </div>
