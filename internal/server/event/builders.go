@@ -125,3 +125,10 @@ func NewWebhookEvent(eventType, webhookID, webhookName string) Event {
 		"webhook_name": webhookName,
 	})
 }
+
+// NewServerEvent constructs an event for server lifecycle changes (e.g. shutdown).
+func NewServerEvent(eventType, reason string) Event {
+	return newEvent(eventType, "server", map[string]any{
+		"reason": reason,
+	})
+}

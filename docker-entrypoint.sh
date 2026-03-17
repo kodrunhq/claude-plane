@@ -46,6 +46,15 @@ if [ ! -f "$CONFIG_FILE" ]; then
   echo "    Admin email:    $ADMIN_EMAIL"
   echo "    Admin password: $ADMIN_PASSWORD"
   echo "    Dashboard:      http://localhost:4200"
+  if [ "$ADMIN_PASSWORD" = "changeme123" ]; then
+    echo ""
+    echo "=============================================="
+    echo "  WARNING: Using default admin password!"
+    echo "  This is insecure for production use."
+    echo "  Set ADMIN_PASSWORD env var to change it."
+    echo "=============================================="
+    echo ""
+  fi
   echo ""
 fi
 

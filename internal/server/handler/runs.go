@@ -65,7 +65,11 @@ func (h *RunHandler) authorizeJobAccess(w http.ResponseWriter, r *http.Request, 
 		return false
 	}
 	c := h.claims(r)
-	if c == nil || c.Role == "admin" || c.UserID == detail.Job.UserID {
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	if c.Role == "admin" || c.UserID == detail.Job.UserID {
 		return true
 	}
 	writeError(w, http.StatusNotFound, "job not found")
@@ -76,7 +80,11 @@ func (h *RunHandler) authorizeJobAccess(w http.ResponseWriter, r *http.Request, 
 // (by checking ownership of its parent job).
 func (h *RunHandler) authorizeRunAccess(w http.ResponseWriter, r *http.Request, runDetail *store.RunDetail) bool {
 	c := h.claims(r)
-	if c == nil || c.Role == "admin" {
+	if c == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	if c.Role == "admin" {
 		return true
 	}
 	jobDetail, err := h.store.GetJob(r.Context(), runDetail.Run.JobID)

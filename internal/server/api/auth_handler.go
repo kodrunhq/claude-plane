@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -89,7 +90,7 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 
 	// Check invite code when in invite mode
 	if h.registrationMode == "invite" {
-		if req.InviteCode == "" || req.InviteCode != h.inviteCode {
+		if req.InviteCode == "" || subtle.ConstantTimeCompare([]byte(req.InviteCode), []byte(h.inviteCode)) != 1 {
 			writeError(w, http.StatusForbidden, "invalid invite code")
 			return
 		}

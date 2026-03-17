@@ -236,6 +236,10 @@ func (m *mockJobStoreForSchedules) CloneJob(_ context.Context, jobID string, new
 	panic("not implemented")
 }
 
+func (m *mockJobStoreForSchedules) CountRunsForJob(_ context.Context, jobID string) (int, error) {
+	return 0, nil
+}
+
 // mockScheduleReloader records calls.
 type mockScheduleReloader struct {
 	reloaded []string

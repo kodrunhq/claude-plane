@@ -9,7 +9,9 @@ import (
 )
 
 func TestRateLimitMiddleware(t *testing.T) {
-	handler := RateLimitMiddleware(rate.Limit(2), 2)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mw, stop := RateLimitMiddleware(rate.Limit(2), 2)
+	defer stop()
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 

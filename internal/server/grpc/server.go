@@ -397,7 +397,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				// Notify any connected browser WebSocket that the session status changed.
 				// This lets the frontend show "Session ended" instead of a dead terminal.
 				if s.registry != nil && (newStatus == status.Terminated || newStatus == status.Failed || newStatus == status.Completed) {
-					controlMsg := []byte(`{"type":"session_ended","status":"` + newStatus + `"}`)
+					type sessionEndedMsg struct {
+						Type   string `json:"type"`
+						Status string `json:"status"`
+					}
+					controlMsg, _ := json.Marshal(sessionEndedMsg{Type: "session_ended", Status: newStatus})
 					s.registry.PublishControl(ss.GetSessionId(), controlMsg)
 				}
 				// Publish to event bus so /ws/events subscribers (sessions list) get invalidated.

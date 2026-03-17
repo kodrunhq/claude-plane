@@ -147,6 +147,7 @@ type JobStoreIface interface {
 	GetTaskValues(ctx context.Context, runStepID string) ([]TaskValue, error)
 	GetTaskValuesForSteps(ctx context.Context, runStepIDs []string) ([]TaskValue, error)
 	DeleteTaskValuesForStep(ctx context.Context, runStepID string) error
+	CountRunsForJob(ctx context.Context, jobID string) (int, error)
 }
 
 // Compile-time check that Store implements JobStoreIface.
@@ -942,6 +943,16 @@ func (s *Store) ListRuns(ctx context.Context, jobID string) ([]Run, error) {
 		runs = append(runs, r)
 	}
 	return runs, rows.Err()
+}
+
+// CountRunsForJob returns the total number of runs for a job.
+func (s *Store) CountRunsForJob(ctx context.Context, jobID string) (int, error) {
+	var count int
+	err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE job_id = ?`, jobID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count runs for job: %w", err)
+	}
+	return count, nil
 }
 
 // ListAllRuns returns runs across all jobs with optional filtering and pagination.
