@@ -2,6 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { schedulesApi } from '../api/schedules.ts';
 import type { CreateScheduleParams, UpdateScheduleParams } from '../types/schedule.ts';
 
+export function useAllSchedules() {
+  return useQuery({
+    queryKey: ['schedules', 'all'],
+    queryFn: () => schedulesApi.listAll(),
+  });
+}
+
 export function useSchedules(jobId: string | undefined) {
   return useQuery({
     queryKey: ['schedules', jobId],

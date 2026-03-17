@@ -19,6 +19,8 @@ import { ProvisioningPage } from './views/ProvisioningPage.tsx'
 import { CredentialsPage } from './views/CredentialsPage.tsx'
 import { TemplatesPage } from './views/TemplatesPage.tsx'
 import { ApiKeysPage } from './views/ApiKeysPage.tsx'
+import { TriggersPage } from './views/TriggersPage.tsx'
+import { SchedulesPage } from './views/SchedulesPage.tsx'
 import { ConnectorsPage } from './views/ConnectorsPage.tsx'
 import { ConnectorDetailPage } from './views/ConnectorDetailPage.tsx'
 import { SearchPage } from './views/SearchPage.tsx'
@@ -118,6 +120,8 @@ function App() {
             <Route path="/runs/:id" element={<RunDetail />} />
             <Route path="/webhooks" element={<WebhooksPage />} />
             <Route path="/webhooks/:id/deliveries" element={<WebhookDeliveriesPage />} />
+            <Route path="/triggers" element={<TriggersPage />} />
+            <Route path="/schedules" element={<SchedulesPage />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/users" element={<AdminPage />} />
             <Route path="/provisioning" element={<ProvisioningPage />} />

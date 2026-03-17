@@ -8,6 +8,10 @@ export interface JobTrigger {
   updated_at: string;
 }
 
+export interface JobTriggerWithJob extends JobTrigger {
+  job_name: string;
+}
+
 export interface CreateTriggerParams {
   event_type: string;
   filter: string;

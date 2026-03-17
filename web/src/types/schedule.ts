@@ -10,6 +10,10 @@ export interface CronSchedule {
   updated_at: string;
 }
 
+export interface CronScheduleWithJob extends CronSchedule {
+  job_name: string;
+}
+
 export interface CreateScheduleParams {
   cron_expr: string;
   timezone?: string;

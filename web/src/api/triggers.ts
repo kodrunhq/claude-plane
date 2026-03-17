@@ -1,7 +1,9 @@
 import { request } from './client.ts';
-import type { JobTrigger, CreateTriggerParams, UpdateTriggerParams } from '../types/trigger.ts';
+import type { JobTrigger, JobTriggerWithJob, CreateTriggerParams, UpdateTriggerParams } from '../types/trigger.ts';
 
 export const triggersApi = {
+  listAll: () => request<JobTriggerWithJob[]>('/triggers'),
+
   listByJob: (jobId: string) =>
     request<JobTrigger[]>(`/jobs/${encodeURIComponent(jobId)}/triggers`),
 
