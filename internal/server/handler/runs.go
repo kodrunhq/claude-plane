@@ -175,6 +175,14 @@ func (h *RunHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 		Offset:      offset,
 	}
 
+	// When no specific job is requested, scope to the user's own runs (unless admin)
+	if jobID == "" {
+		c := h.claims(r)
+		if c != nil && c.Role != "admin" {
+			opts.UserID = c.UserID
+		}
+	}
+
 	runs, err := h.store.ListAllRuns(r.Context(), opts)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -274,7 +282,7 @@ func (h *RunHandler) RetryStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.orch.RetryStep(r.Context(), runID, stepID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
@@ -322,7 +330,7 @@ func (h *RunHandler) RepairRun(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "can only repair failed or cancelled runs")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "repairing"})

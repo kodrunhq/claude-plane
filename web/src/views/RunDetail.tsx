@@ -12,6 +12,42 @@ import { useJob } from '../hooks/useJobs.ts';
 import { useRunStore } from '../stores/runs.ts';
 import { formatDuration } from '../lib/format.ts';
 
+function TriggerBadge({ triggerType, triggerDetail }: { triggerType: string; triggerDetail?: string }) {
+  if (triggerType === 'cron') {
+    let cronExpr: string | null = null;
+    if (triggerDetail) {
+      try {
+        const detail = JSON.parse(triggerDetail) as { schedule_id?: string; cron_expr?: string };
+        cronExpr = detail.cron_expr ?? null;
+      } catch {
+        // ignore parse errors
+      }
+    }
+    return (
+      <span
+        className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-blue-600/20 text-blue-400 max-w-[200px]"
+        title={cronExpr ?? undefined}
+      >
+        <Clock size={10} />
+        <span className="truncate">{cronExpr ?? 'Scheduled'}</span>
+      </span>
+    );
+  }
+  if (triggerType === 'manual') {
+    return (
+      <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-gray-600/20 text-gray-400">
+        <Play size={10} />
+        Manual
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-600/20 text-gray-400">
+      {triggerType}
+    </span>
+  );
+}
+
 export function RunDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -116,42 +152,8 @@ export function RunDetail() {
 
   const isLoading = runLoading || jobLoading;
 
-  const triggerBadge = useMemo(() => {
-    const type = run?.trigger_type ?? 'manual';
-    if (type === 'cron') {
-      let cronExpr: string | null = null;
-      if (run?.trigger_detail) {
-        try {
-          const detail = JSON.parse(run.trigger_detail) as { schedule_id?: string; cron_expr?: string };
-          cronExpr = detail.cron_expr ?? null;
-        } catch {
-          // ignore parse errors
-        }
-      }
-      return (
-        <span
-          className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-blue-600/20 text-blue-400 max-w-[200px]"
-          title={cronExpr ?? undefined}
-        >
-          <Clock size={10} />
-          <span className="truncate">{cronExpr ?? 'Scheduled'}</span>
-        </span>
-      );
-    }
-    if (type === 'manual') {
-      return (
-        <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-gray-600/20 text-gray-400">
-          <Play size={10} />
-          Manual
-        </span>
-      );
-    }
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-600/20 text-gray-400">
-        {type}
-      </span>
-    );
-  }, [run?.trigger_type, run?.trigger_detail]);
+  const triggerType = run?.trigger_type ?? 'manual';
+  const triggerDetail = run?.trigger_detail;
 
   if (isLoading) {
     return (
@@ -170,7 +172,7 @@ export function RunDetail() {
   }
 
   const isActive = run.status === 'running' || run.status === 'pending';
-  const canRetry = selectedRunTask?.status === 'failed';
+  const canRetry = selectedRunTask?.status === 'failed' || selectedRunTask?.status === 'skipped' || selectedRunTask?.status === 'cancelled';
   const canRepair = run.status === 'failed' || run.status === 'cancelled';
 
   return (
@@ -197,7 +199,7 @@ export function RunDetail() {
             <span className="text-sm font-medium text-text-primary">Run</span>
             <CopyableId id={run.run_id} className="text-xs" />
             <RunStatusBadge status={run.status} />
-            {triggerBadge}
+            <TriggerBadge triggerType={triggerType} triggerDetail={triggerDetail} />
           </div>
           {displayElapsed !== null && (
             <div className="flex items-center gap-1 text-xs text-text-secondary mt-0.5">

@@ -15,6 +15,12 @@ import (
 	"time"
 )
 
+// testHTTPClient returns a plain HTTP client without SSRF protection, suitable
+// for tests that use httptest.Server on localhost.
+func testHTTPClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
+}
+
 // --- Mock store ---
 
 // mockWebhookStore implements WebhookStore for testing.
@@ -145,7 +151,7 @@ func TestHandlerDeliversToMatchingWebhook(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(store, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(store, testHTTPClient(), nullLogger())
 	handler := deliverer.Handler()
 
 	ev := webhookTestEvent(TypeRunCreated)
@@ -196,7 +202,7 @@ func TestHandlerHMACSignatureIsCorrect(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(store, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(store, testHTTPClient(), nullLogger())
 	handler := deliverer.Handler()
 
 	if err := handler(context.Background(), webhookTestEvent(TypeRunCompleted)); err != nil {
@@ -230,7 +236,7 @@ func TestHandlerNonMatchingPatternSkipsDelivery(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(store, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(store, testHTTPClient(), nullLogger())
 	handler := deliverer.Handler()
 
 	// Publish a run event — must NOT reach the session.* webhook.
@@ -270,7 +276,7 @@ func TestHandlerHTTPFailureCreatesRetryDelivery(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(store, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(store, testHTTPClient(), nullLogger())
 	handler := deliverer.Handler()
 
 	if err := handler(context.Background(), webhookTestEvent(TypeRunFailed)); err != nil {
@@ -385,7 +391,7 @@ func TestHandlerDisabledWebhookSkipsDelivery(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(store, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(store, testHTTPClient(), nullLogger())
 	handler := deliverer.Handler()
 
 	if err := handler(context.Background(), webhookTestEvent(TypeRunCreated)); err != nil {
@@ -436,7 +442,7 @@ func TestRetryPendingDeliversFullEvent(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(ms, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(ms, testHTTPClient(), nullLogger())
 	deliverer.retryPending(context.Background())
 
 	// Wait for the HTTP call and UpdateDelivery to complete.
@@ -528,7 +534,7 @@ func TestHandlerSuccessMarksDeliverySuccess(t *testing.T) {
 		},
 	}
 
-	deliverer := NewWebhookDeliverer(store, nil, nullLogger())
+	deliverer := NewWebhookDeliverer(store, testHTTPClient(), nullLogger())
 	handler := deliverer.Handler()
 
 	if err := handler(context.Background(), webhookTestEvent(TypeRunCompleted)); err != nil {

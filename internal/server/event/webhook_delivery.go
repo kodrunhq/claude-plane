@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -75,6 +76,41 @@ func retryBackoff(attempt int) time.Duration {
 	return base + jitter
 }
 
+// newSSRFSafeTransport returns an http.Transport that refuses connections to
+// private/loopback/link-local IP ranges, preventing SSRF attacks via webhook URLs.
+// It resolves DNS, validates the IPs, and then dials the resolved IP directly
+// to prevent DNS rebinding (TOCTOU) attacks.
+func newSSRFSafeTransport() *http.Transport {
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid address: %w", err)
+			}
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("dns lookup failed: %w", err)
+			}
+			if len(ips) == 0 {
+				return nil, fmt.Errorf("dns lookup returned no addresses for %s", host)
+			}
+			for _, ip := range ips {
+				if ip.IP.IsLoopback() || ip.IP.IsPrivate() || ip.IP.IsLinkLocalUnicast() || ip.IP.IsLinkLocalMulticast() {
+					return nil, fmt.Errorf("webhook URL resolves to private IP %s", ip.IP)
+				}
+				// Block AWS/GCP/Azure metadata endpoints
+				if ip.IP.Equal(net.IPv4(169, 254, 169, 254)) {
+					return nil, fmt.Errorf("webhook URL resolves to metadata endpoint %s", ip.IP)
+				}
+			}
+			// Dial the verified resolved IP directly to prevent DNS rebinding.
+			resolvedAddr := net.JoinHostPort(ips[0].IP.String(), port)
+			dialer := &net.Dialer{}
+			return dialer.DialContext(ctx, network, resolvedAddr)
+		},
+	}
+}
+
 // WebhookDeliverer subscribes to the event bus and delivers events to matching
 // outbound webhooks via HTTP POST with HMAC-SHA256 signing.
 type WebhookDeliverer struct {
@@ -87,7 +123,10 @@ type WebhookDeliverer struct {
 // optional; defaults are used when nil.
 func NewWebhookDeliverer(store WebhookStore, httpClient *http.Client, logger *slog.Logger) *WebhookDeliverer {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 10 * time.Second}
+		httpClient = &http.Client{
+			Timeout:   10 * time.Second,
+			Transport: newSSRFSafeTransport(),
+		}
 	}
 	if logger == nil {
 		logger = slog.Default()

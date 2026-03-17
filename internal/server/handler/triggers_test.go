@@ -719,3 +719,172 @@ func TestTriggerHandler_ListAllTriggers_StoreError(t *testing.T) {
 		t.Errorf("expected 500, got %d", resp.StatusCode)
 	}
 }
+
+// --- mock job store for trigger authorization ---
+
+type mockTriggerJobStore struct {
+	jobs map[string]*store.JobDetail
+}
+
+func newMockTriggerJobStore() *mockTriggerJobStore {
+	return &mockTriggerJobStore{jobs: make(map[string]*store.JobDetail)}
+}
+
+func (m *mockTriggerJobStore) GetJob(_ context.Context, jobID string) (*store.JobDetail, error) {
+	jd, ok := m.jobs[jobID]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	return jd, nil
+}
+
+// --- authorization tests ---
+
+func TestTriggerHandler_ListTriggers_RequiresJobOwnership(t *testing.T) {
+	trigStore := newMockTriggerStore()
+	jobStore := newMockTriggerJobStore()
+
+	// Job belongs to user-owner.
+	jobStore.jobs["job-1"] = &store.JobDetail{
+		Job: store.Job{JobID: "job-1", UserID: "user-owner"},
+	}
+	trigStore.triggers["t1"] = &store.JobTrigger{
+		TriggerID: "t1", JobID: "job-1", EventType: "run.completed",
+		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+
+	// Non-admin user (user-other) tries to list triggers for job-1.
+	getClaims := func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "user-other", Role: "member"}
+	}
+
+	h := handler.NewTriggerHandler(trigStore,
+		handler.WithTriggerJobStore(jobStore),
+		handler.WithTriggerClaims(getClaims),
+	)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/jobs/job-1/triggers")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for non-owner, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerHandler_CreateTrigger_RequiresJobOwnership(t *testing.T) {
+	trigStore := newMockTriggerStore()
+	jobStore := newMockTriggerJobStore()
+
+	// Job belongs to user-owner.
+	jobStore.jobs["job-1"] = &store.JobDetail{
+		Job: store.Job{JobID: "job-1", UserID: "user-owner"},
+	}
+
+	// Non-admin user tries to create trigger on another user's job.
+	getClaims := func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "user-other", Role: "member"}
+	}
+
+	h := handler.NewTriggerHandler(trigStore,
+		handler.WithTriggerJobStore(jobStore),
+		handler.WithTriggerClaims(getClaims),
+	)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	body := map[string]interface{}{"event_type": "run.completed"}
+	b, _ := json.Marshal(body)
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/job-1/triggers", "application/json", bytes.NewBuffer(b))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for non-owner creating trigger, got %d", resp.StatusCode)
+	}
+}
+
+func TestTriggerHandler_DeleteTrigger_RequiresAuth(t *testing.T) {
+	trigStore := newMockTriggerStore()
+	jobStore := newMockTriggerJobStore()
+
+	// Job belongs to user-owner.
+	jobStore.jobs["job-1"] = &store.JobDetail{
+		Job: store.Job{JobID: "job-1", UserID: "user-owner"},
+	}
+	triggerID := "trigger-abc"
+	trigStore.triggers[triggerID] = &store.JobTrigger{
+		TriggerID: triggerID, JobID: "job-1", EventType: "run.completed",
+		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+
+	// Non-admin user tries to delete trigger on another user's job.
+	getClaims := func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "user-other", Role: "member"}
+	}
+
+	h := handler.NewTriggerHandler(trigStore,
+		handler.WithTriggerJobStore(jobStore),
+		handler.WithTriggerClaims(getClaims),
+	)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/triggers/"+triggerID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for non-owner deleting trigger, got %d", resp.StatusCode)
+	}
+
+	// Verify trigger still exists.
+	if _, ok := trigStore.triggers[triggerID]; !ok {
+		t.Error("trigger should not have been deleted by unauthorized user")
+	}
+}
+
+func TestTriggerHandler_ListTriggers_AdminCanAccessAnyJob(t *testing.T) {
+	trigStore := newMockTriggerStore()
+	jobStore := newMockTriggerJobStore()
+
+	// Job belongs to user-owner.
+	jobStore.jobs["job-1"] = &store.JobDetail{
+		Job: store.Job{JobID: "job-1", UserID: "user-owner"},
+	}
+	trigStore.triggers["t1"] = &store.JobTrigger{
+		TriggerID: "t1", JobID: "job-1", EventType: "run.completed",
+		Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+
+	// Admin user.
+	getClaims := func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-user", Role: "admin"}
+	}
+
+	h := handler.NewTriggerHandler(trigStore,
+		handler.WithTriggerJobStore(jobStore),
+		handler.WithTriggerClaims(getClaims),
+	)
+	srv := newTriggerRouter(h)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/jobs/job-1/triggers")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 for admin, got %d", resp.StatusCode)
+	}
+}

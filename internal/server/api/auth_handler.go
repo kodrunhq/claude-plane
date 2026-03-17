@@ -186,7 +186,6 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	h.setSessionCookie(w, r, token)
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"token":        token,
 		"user_id":      user.UserID,
 		"email":        user.Email,
 		"display_name": user.DisplayName,
