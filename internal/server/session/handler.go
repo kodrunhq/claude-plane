@@ -331,6 +331,10 @@ func (h *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusNotFound, "session not found")
 		return
 	}
+	// Strip sensitive fields to avoid leaking secrets.
+	sess.EnvVars = ""
+	sess.Args = ""
+	sess.InitialPrompt = ""
 	httputil.WriteJSON(w, http.StatusOK, sess)
 }
 

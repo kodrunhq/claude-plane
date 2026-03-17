@@ -96,6 +96,7 @@ type ListRunsOptions struct {
 	JobID       string
 	Status      string
 	TriggerType string
+	UserID      string
 	Limit       int
 	Offset      int
 }
@@ -975,6 +976,10 @@ func (s *Store) ListAllRuns(ctx context.Context, opts ListRunsOptions) ([]RunWit
 	if opts.TriggerType != "" {
 		query += ` AND r.trigger_type = ?`
 		args = append(args, opts.TriggerType)
+	}
+	if opts.UserID != "" {
+		query += ` AND j.user_id = ?`
+		args = append(args, opts.UserID)
 	}
 
 	query += ` ORDER BY r.created_at DESC, r.run_id DESC LIMIT ? OFFSET ?`

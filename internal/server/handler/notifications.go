@@ -142,6 +142,9 @@ func (h *NotificationHandler) requireAdmin(w http.ResponseWriter, r *http.Reques
 
 // ListChannels handles GET /api/v1/notification-channels.
 func (h *NotificationHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	channels, err := h.store.ListNotificationChannels(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
@@ -209,6 +212,9 @@ func (h *NotificationHandler) CreateChannel(w http.ResponseWriter, r *http.Reque
 
 // GetChannel handles GET /api/v1/notification-channels/{channelID}.
 func (h *NotificationHandler) GetChannel(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "channelID")
 
 	ch, err := h.store.GetNotificationChannel(r.Context(), id)

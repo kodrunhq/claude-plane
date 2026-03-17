@@ -30,6 +30,10 @@ import {
   CREDENTIAL_DELETED,
   WEBHOOK_CREATED,
   WEBHOOK_DELETED,
+  WEBHOOK_TEST,
+  TRIGGER_CRON,
+  TRIGGER_WEBHOOK,
+  TRIGGER_JOB_COMPLETED,
 } from '../constants/eventTypes.ts';
 
 /** Wire format from WSFanout (internal/server/event/ws_fanout.go). */
@@ -50,6 +54,7 @@ export function useEventStream() {
   const wsRef = useRef<WebSocket | null>(null);
   const attemptRef = useRef(0);
   const mountedRef = useRef(true);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -137,6 +142,14 @@ export function useEventStream() {
             case WEBHOOK_DELETED:
               queryClient.invalidateQueries({ queryKey: ['webhooks'] });
               break;
+            case WEBHOOK_TEST:
+              queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+              break;
+            case TRIGGER_CRON:
+            case TRIGGER_WEBHOOK:
+            case TRIGGER_JOB_COMPLETED:
+              queryClient.invalidateQueries({ queryKey: ['runs'] });
+              break;
           }
         } catch {
           // Ignore unparseable messages
@@ -155,7 +168,7 @@ export function useEventStream() {
         // Reconnect with exponential backoff
         const delay = RECONNECT_DELAYS[Math.min(attemptRef.current, RECONNECT_DELAYS.length - 1)];
         attemptRef.current += 1;
-        setTimeout(connect, delay);
+        reconnectTimerRef.current = setTimeout(connect, delay);
       };
 
       wsRef.current = ws;
@@ -165,6 +178,10 @@ export function useEventStream() {
 
     return () => {
       mountedRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (wsRef.current) {
         // Clear handlers before closing to prevent reconnect
         const ws = wsRef.current;

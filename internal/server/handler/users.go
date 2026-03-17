@@ -77,20 +77,14 @@ func RegisterUserRoutes(r chi.Router, h *UserHandler) {
 	r.Delete("/api/v1/users/{userID}", h.DeleteUser)
 }
 
-// requireAdmin checks that the requesting user has the admin role.
-// Returns false and writes a 403 response if not.
-func (h *UserHandler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	c := h.getClaims(r)
-	if c == nil || c.Role != "admin" {
-		writeError(w, http.StatusForbidden, "admin access required")
-		return false
-	}
-	return true
+// requireAdminAccess delegates to the package-level requireAdmin helper.
+func (h *UserHandler) requireAdminAccess(w http.ResponseWriter, r *http.Request) bool {
+	return requireAdmin(w, r, h.getClaims)
 }
 
 // ListUsers handles GET /api/v1/users.
 func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
+	if !h.requireAdminAccess(w, r) {
 		return
 	}
 
@@ -115,7 +109,7 @@ type createUserRequest struct {
 
 // CreateUser handles POST /api/v1/users.
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
+	if !h.requireAdminAccess(w, r) {
 		return
 	}
 
@@ -195,7 +189,7 @@ type updateUserRequest struct {
 
 // UpdateUser handles PUT /api/v1/users/{userID}.
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
+	if !h.requireAdminAccess(w, r) {
 		return
 	}
 
@@ -322,7 +316,7 @@ type resetPasswordRequest struct {
 
 // ResetPassword handles POST /api/v1/users/{userID}/reset-password (admin-only).
 func (h *UserHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
+	if !h.requireAdminAccess(w, r) {
 		return
 	}
 
@@ -420,7 +414,7 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser handles DELETE /api/v1/users/{userID}.
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
+	if !h.requireAdminAccess(w, r) {
 		return
 	}
 

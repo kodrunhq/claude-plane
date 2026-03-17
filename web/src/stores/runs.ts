@@ -43,14 +43,6 @@ export const useRunStore = create<RunStore>((set) => ({
           status: status as RunTask['status'],
           ...(sessionId ? { session_id: sessionId } : {}),
         });
-      } else {
-        updated.set(stepId, {
-          run_step_id: '',
-          run_id: runId,
-          step_id: stepId,
-          status: status as RunTask['status'],
-          ...(sessionId ? { session_id: sessionId } : {}),
-        });
       }
       return { taskStatuses: updated };
     }),
