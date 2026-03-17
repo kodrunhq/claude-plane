@@ -61,6 +61,9 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono text-text-secondary bg-bg-tertiary border border-border-primary rounded">
+          <span className="text-xs">&#8984;</span>K
+        </kbd>
         <NotificationBadge />
         <div
           className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-accent-purple flex items-center justify-center text-xs text-white font-medium"
