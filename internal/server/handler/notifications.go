@@ -75,6 +75,50 @@ type subscriptionEntry struct {
 	EventType string `json:"event_type"`
 }
 
+// redactConfig masks sensitive fields (password, bot_token) in a JSON channel
+// config string before returning it in API responses.
+func redactConfig(config string) string {
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(config), &parsed); err != nil {
+		return "{}"
+	}
+	for _, key := range []string{"password", "bot_token"} {
+		if _, ok := parsed[key]; ok {
+			parsed[key] = "***"
+		}
+	}
+	redacted, _ := json.Marshal(parsed)
+	return string(redacted)
+}
+
+// mergeRedactedConfig replaces sentinel "***" values in incomingConfig with the
+// corresponding values from existingConfig. This lets the frontend omit secrets
+// it received as "***" without accidentally clearing them.
+func mergeRedactedConfig(existingConfig, incomingConfig string) string {
+	var existing map[string]any
+	if err := json.Unmarshal([]byte(existingConfig), &existing); err != nil {
+		return incomingConfig
+	}
+	var incoming map[string]any
+	if err := json.Unmarshal([]byte(incomingConfig), &incoming); err != nil {
+		return incomingConfig
+	}
+	for _, key := range []string{"password", "bot_token"} {
+		if val, ok := incoming[key]; ok {
+			if s, isStr := val.(string); isStr && s == "***" {
+				if orig, hasOrig := existing[key]; hasOrig {
+					incoming[key] = orig
+				}
+			}
+		}
+	}
+	merged, err := json.Marshal(incoming)
+	if err != nil {
+		return incomingConfig
+	}
+	return string(merged)
+}
+
 // --- Handlers ---
 
 // ListChannels handles GET /api/v1/notification-channels.
@@ -87,7 +131,12 @@ func (h *NotificationHandler) ListChannels(w http.ResponseWriter, r *http.Reques
 	if channels == nil {
 		channels = []store.NotificationChannel{}
 	}
-	writeJSON(w, http.StatusOK, channels)
+	redacted := make([]store.NotificationChannel, len(channels))
+	for i, ch := range channels {
+		ch.Config = redactConfig(ch.Config)
+		redacted[i] = ch
+	}
+	writeJSON(w, http.StatusOK, redacted)
 }
 
 // CreateChannel handles POST /api/v1/notification-channels.
@@ -152,6 +201,7 @@ func (h *NotificationHandler) GetChannel(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	ch.Config = redactConfig(ch.Config)
 	writeJSON(w, http.StatusOK, ch)
 }
 
@@ -193,10 +243,15 @@ func (h *NotificationHandler) UpdateChannel(w http.ResponseWriter, r *http.Reque
 		enabled = *req.Enabled
 	}
 
+	// If the frontend sends "***" for any sensitive field, preserve the
+	// existing value from the store rather than overwriting with the sentinel.
+	config := req.Config
+	config = mergeRedactedConfig(existing.Config, config)
+
 	updated, err := h.store.UpdateNotificationChannel(r.Context(), store.NotificationChannel{
 		ChannelID: id,
 		Name:      req.Name,
-		Config:    req.Config,
+		Config:    config,
 		Enabled:   enabled,
 	})
 	if err != nil {

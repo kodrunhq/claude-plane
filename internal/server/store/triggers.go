@@ -183,13 +183,28 @@ type JobTriggerWithJob struct {
 }
 
 // ListAllTriggers returns all triggers across all jobs, with job names.
-func (s *Store) ListAllTriggers(ctx context.Context) ([]JobTriggerWithJob, error) {
-	rows, err := s.reader.QueryContext(ctx,
-		`SELECT t.trigger_id, t.job_id, t.event_type, COALESCE(t.filter, ''), t.enabled,
-		        t.created_at, t.updated_at, j.name as job_name
-		 FROM job_triggers t
-		 JOIN jobs j ON t.job_id = j.job_id
-		 ORDER BY t.created_at DESC`)
+// When userID is non-empty, only triggers for jobs owned by that user are returned.
+func (s *Store) ListAllTriggers(ctx context.Context, userID string) ([]JobTriggerWithJob, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if userID != "" {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT t.trigger_id, t.job_id, t.event_type, COALESCE(t.filter, ''), t.enabled,
+			        t.created_at, t.updated_at, j.name as job_name
+			 FROM job_triggers t
+			 JOIN jobs j ON t.job_id = j.job_id
+			 WHERE j.user_id = ?
+			 ORDER BY t.created_at DESC`, userID)
+	} else {
+		rows, err = s.reader.QueryContext(ctx,
+			`SELECT t.trigger_id, t.job_id, t.event_type, COALESCE(t.filter, ''), t.enabled,
+			        t.created_at, t.updated_at, j.name as job_name
+			 FROM job_triggers t
+			 JOIN jobs j ON t.job_id = j.job_id
+			 ORDER BY t.created_at DESC`)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list all triggers: %w", err)
 	}

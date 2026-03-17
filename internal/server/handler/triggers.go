@@ -19,7 +19,7 @@ type TriggerCRUDStore interface {
 	UpdateJobTrigger(ctx context.Context, triggerID, eventType, filter string) (*store.JobTrigger, error)
 	ToggleJobTrigger(ctx context.Context, triggerID string) (*store.JobTrigger, error)
 	DeleteJobTrigger(ctx context.Context, triggerID string) error
-	ListAllTriggers(ctx context.Context) ([]store.JobTriggerWithJob, error)
+	ListAllTriggers(ctx context.Context, userID string) ([]store.JobTriggerWithJob, error)
 }
 
 // TriggerJobStore allows looking up jobs to verify trigger ownership.
@@ -108,8 +108,16 @@ type createTriggerRequest struct {
 }
 
 // ListAllTriggers handles GET /api/v1/triggers.
+// Non-admin users only see triggers belonging to their own jobs.
 func (h *TriggerHandler) ListAllTriggers(w http.ResponseWriter, r *http.Request) {
-	triggers, err := h.store.ListAllTriggers(r.Context())
+	userID := ""
+	if h.getClaims != nil {
+		c := h.getClaims(r)
+		if c != nil && c.Role != "admin" {
+			userID = c.UserID
+		}
+	}
+	triggers, err := h.store.ListAllTriggers(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return

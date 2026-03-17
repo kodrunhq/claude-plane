@@ -104,7 +104,7 @@ func (m *mockScheduleCRUDStore) SetScheduleEnabled(_ context.Context, scheduleID
 	return nil
 }
 
-func (m *mockScheduleCRUDStore) ListAllSchedules(_ context.Context) ([]store.CronScheduleWithJob, error) {
+func (m *mockScheduleCRUDStore) ListAllSchedules(_ context.Context, _ string) ([]store.CronScheduleWithJob, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
