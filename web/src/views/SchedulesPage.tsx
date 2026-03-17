@@ -154,6 +154,7 @@ export function SchedulesPage() {
                         onClick={() => handleToggleEnabled(schedule)}
                         className="p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
                         title={schedule.enabled ? 'Pause schedule' : 'Resume schedule'}
+                        aria-label={schedule.enabled ? 'Pause schedule' : 'Resume schedule'}
                       >
                         {schedule.enabled ? <Pause size={16} /> : <Play size={16} />}
                       </button>
@@ -161,6 +162,7 @@ export function SchedulesPage() {
                         onClick={() => setDeleteTarget(schedule)}
                         className="p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-status-error/10 transition-colors"
                         title="Delete schedule"
+                        aria-label="Delete schedule"
                       >
                         <Trash2 size={16} />
                       </button>

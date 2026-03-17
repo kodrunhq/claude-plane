@@ -137,6 +137,7 @@ export function TriggersPage() {
                         onClick={() => handleToggle(trigger)}
                         className="p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
                         title={trigger.enabled ? 'Disable trigger' : 'Enable trigger'}
+                        aria-label={trigger.enabled ? 'Disable trigger' : 'Enable trigger'}
                       >
                         {trigger.enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
                       </button>
@@ -144,6 +145,7 @@ export function TriggersPage() {
                         onClick={() => setDeleteTarget(trigger)}
                         className="p-1.5 rounded text-text-secondary hover:text-status-error hover:bg-status-error/10 transition-colors"
                         title="Delete trigger"
+                        aria-label="Delete trigger"
                       >
                         <Trash2 size={16} />
                       </button>
