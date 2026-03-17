@@ -13,6 +13,8 @@ import {
   KeyRound,
   Lock,
   Plug,
+  Zap,
+  Clock,
   Key,
   Search,
   Settings,
@@ -52,6 +54,8 @@ const navSections: NavSection[] = [
     title: 'Automation',
     items: [
       { to: '/webhooks', label: 'Webhooks', icon: Webhook },
+      { to: '/triggers', label: 'Triggers', icon: Zap },
+      { to: '/schedules', label: 'Schedules', icon: Clock },
       { to: '/connectors', label: 'Connectors', icon: Plug },
     ],
   },

@@ -2,6 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { triggersApi } from '../api/triggers.ts';
 import type { CreateTriggerParams, UpdateTriggerParams } from '../types/trigger.ts';
 
+export function useAllTriggers() {
+  return useQuery({
+    queryKey: ['triggers', 'all'],
+    queryFn: () => triggersApi.listAll(),
+  });
+}
+
 export function useTriggers(jobId: string | undefined) {
   return useQuery({
     queryKey: ['triggers', jobId],

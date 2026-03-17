@@ -1,7 +1,9 @@
 import { request } from './client.ts';
-import type { CronSchedule, CreateScheduleParams, UpdateScheduleParams } from '../types/schedule.ts';
+import type { CronSchedule, CronScheduleWithJob, CreateScheduleParams, UpdateScheduleParams } from '../types/schedule.ts';
 
 export const schedulesApi = {
+  listAll: () => request<CronScheduleWithJob[]>('/schedules'),
+
   list: (jobId: string) =>
     request<CronSchedule[]>(`/jobs/${encodeURIComponent(jobId)}/schedules`),
   get: (id: string) =>

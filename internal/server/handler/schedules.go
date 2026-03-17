@@ -23,6 +23,7 @@ type ScheduleCRUDStore interface {
 	UpdateSchedule(ctx context.Context, p store.UpdateScheduleParams) (*store.CronSchedule, error)
 	SetScheduleEnabled(ctx context.Context, scheduleID string, enabled bool) error
 	DeleteSchedule(ctx context.Context, scheduleID string) error
+	ListAllSchedules(ctx context.Context) ([]store.CronScheduleWithJob, error)
 }
 
 // ScheduleReloader is the interface for hot-reloading cron entries after CRUD changes.
@@ -74,6 +75,7 @@ func NewScheduleHandler(
 
 // RegisterScheduleRoutes mounts all schedule-related routes on the given router.
 func RegisterScheduleRoutes(r chi.Router, h *ScheduleHandler) {
+	r.Get("/api/v1/schedules", h.ListAllSchedules)
 	r.Get("/api/v1/jobs/{jobID}/schedules", h.ListSchedules)
 	r.Post("/api/v1/jobs/{jobID}/schedules", h.CreateSchedule)
 	r.Get("/api/v1/schedules/{scheduleID}", h.GetSchedule)
@@ -160,6 +162,19 @@ func (h *ScheduleHandler) authorizeScheduleByID(w http.ResponseWriter, r *http.R
 		return nil
 	}
 	return sc
+}
+
+// ListAllSchedules handles GET /api/v1/schedules.
+func (h *ScheduleHandler) ListAllSchedules(w http.ResponseWriter, r *http.Request) {
+	schedules, err := h.store.ListAllSchedules(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if schedules == nil {
+		schedules = []store.CronScheduleWithJob{}
+	}
+	writeJSON(w, http.StatusOK, schedules)
 }
 
 // ListSchedules handles GET /api/v1/jobs/{jobID}/schedules.

@@ -239,6 +239,51 @@ func (s *Store) DeleteSchedule(ctx context.Context, scheduleID string) error {
 	return nil
 }
 
+// CronScheduleWithJob includes the parent job's name for display in global lists.
+type CronScheduleWithJob struct {
+	CronSchedule
+	JobName string `json:"job_name"`
+}
+
+// ListAllSchedules returns all schedules across all jobs, with job names.
+func (s *Store) ListAllSchedules(ctx context.Context) ([]CronScheduleWithJob, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT s.schedule_id, s.job_id, s.cron_expr, s.timezone, s.enabled,
+		        s.next_run_at, s.last_triggered_at, s.created_at, s.updated_at,
+		        j.name as job_name
+		 FROM cron_schedules s
+		 JOIN jobs j ON s.job_id = j.job_id
+		 ORDER BY s.created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list all schedules: %w", err)
+	}
+	defer rows.Close()
+
+	var schedules []CronScheduleWithJob
+	for rows.Next() {
+		var sc CronScheduleWithJob
+		var nextRunAt, lastTriggeredAt sql.NullTime
+
+		if err := rows.Scan(
+			&sc.ScheduleID, &sc.JobID, &sc.CronExpr, &sc.Timezone, &sc.Enabled,
+			&nextRunAt, &lastTriggeredAt, &sc.CreatedAt, &sc.UpdatedAt,
+			&sc.JobName,
+		); err != nil {
+			return nil, fmt.Errorf("scan schedule: %w", err)
+		}
+
+		if nextRunAt.Valid {
+			sc.NextRunAt = &nextRunAt.Time
+		}
+		if lastTriggeredAt.Valid {
+			sc.LastTriggeredAt = &lastTriggeredAt.Time
+		}
+
+		schedules = append(schedules, sc)
+	}
+	return schedules, rows.Err()
+}
+
 // scanSchedules scans rows into a slice of CronSchedule.
 func scanSchedules(rows interface {
 	Next() bool
