@@ -433,6 +433,17 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch before deleting so the audit event has the email.
+	existing, err := h.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	if err := h.store.DeleteUser(r.Context(), userID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -441,6 +452,6 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	h.publishUserEvent(event.TypeUserDeleted, userID, "")
+	h.publishUserEvent(event.TypeUserDeleted, userID, existing.Email)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -206,7 +206,8 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.authorizeJobByID(w, r, jobID) == nil {
+	jobDetail := h.authorizeJobByID(w, r, jobID)
+	if jobDetail == nil {
 		return
 	}
 
@@ -225,7 +226,7 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusCreated, created)
-	h.publishScheduleEvent(event.TypeScheduleCreated, created.ScheduleID, jobID, "", created.CronExpr)
+	h.publishScheduleEvent(event.TypeScheduleCreated, created.ScheduleID, jobID, jobDetail.Job.Name, created.CronExpr)
 }
 
 // GetSchedule handles GET /api/v1/schedules/{scheduleID}.
@@ -309,7 +310,11 @@ func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.scheduler.RemoveSchedule(sc.ScheduleID)
-	h.publishScheduleEvent(event.TypeScheduleDeleted, sc.ScheduleID, sc.JobID, "", sc.CronExpr)
+	jobName := ""
+	if jd, err := h.jobStore.GetJob(r.Context(), sc.JobID); err == nil {
+		jobName = jd.Job.Name
+	}
+	h.publishScheduleEvent(event.TypeScheduleDeleted, sc.ScheduleID, sc.JobID, jobName, sc.CronExpr)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -353,6 +358,10 @@ func (h *ScheduleHandler) setEnabled(w http.ResponseWriter, r *http.Request, ena
 	if enabled {
 		eventType = event.TypeScheduleResumed
 	}
+	jobName := ""
+	if jd, err := h.jobStore.GetJob(r.Context(), sc.JobID); err == nil {
+		jobName = jd.Job.Name
+	}
 	writeJSON(w, http.StatusOK, result)
-	h.publishScheduleEvent(eventType, sc.ScheduleID, sc.JobID, "", sc.CronExpr)
+	h.publishScheduleEvent(eventType, sc.ScheduleID, sc.JobID, jobName, sc.CronExpr)
 }

@@ -40,38 +40,8 @@ export interface UpdateWebhookParams {
   enabled: boolean;
 }
 
-export const WEBHOOK_EVENTS = [
-  'run.created',
-  'run.started',
-  'run.completed',
-  'run.failed',
-  'run.cancelled',
-  'run.step.completed',
-  'run.step.failed',
-  'session.started',
-  'session.exited',
-  'session.terminated',
-  'machine.connected',
-  'machine.disconnected',
-  'trigger.cron',
-  'trigger.webhook',
-  'trigger.job_completed',
-  'template.created',
-  'template.updated',
-  'template.deleted',
-  'job.created',
-  'job.updated',
-  'job.deleted',
-  'user.created',
-  'user.deleted',
-  'schedule.created',
-  'schedule.paused',
-  'schedule.resumed',
-  'schedule.deleted',
-  'credential.created',
-  'credential.deleted',
-  'webhook.created',
-  'webhook.deleted',
-] as const;
+import { ALL_EVENT_TYPES } from '../constants/eventTypes.ts';
 
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+export const WEBHOOK_EVENTS = ALL_EVENT_TYPES;
+
+export type WebhookEvent = (typeof ALL_EVENT_TYPES)[number];

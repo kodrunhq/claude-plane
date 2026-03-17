@@ -75,7 +75,9 @@ function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigator.clipboard.writeText(delivery.payload!);
+                        navigator.clipboard.writeText(delivery.payload ?? '').catch(() => {
+                          // Clipboard API requires HTTPS; silently ignore on HTTP deployments.
+                        });
                       }}
                       className="text-xs text-accent-primary hover:text-accent-primary/80 transition-colors"
                     >
