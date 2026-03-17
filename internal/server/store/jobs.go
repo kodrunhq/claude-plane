@@ -131,6 +131,7 @@ type JobStoreIface interface {
 	DeleteStep(ctx context.Context, stepID string) error
 	AddDependency(ctx context.Context, stepID, dependsOn string) error
 	RemoveDependency(ctx context.Context, stepID, dependsOn string) error
+	CloneJob(ctx context.Context, jobID string, newName string) (*JobDetail, error)
 	GetStepsWithDeps(ctx context.Context, jobID string) ([]Step, []StepDependency, error)
 	CreateRun(ctx context.Context, p CreateRunParams) (*Run, error)
 	InsertRunSteps(ctx context.Context, runID string, steps []Step) error
@@ -1107,6 +1108,118 @@ func (s *Store) UpdateRunStepAttempt(ctx context.Context, runStepID string, atte
 		return fmt.Errorf("update run step attempt: %w", err)
 	}
 	return nil
+}
+
+// CloneJob duplicates a job (with all its steps and dependencies) under a new
+// name. If newName is empty the clone is named "{original} (copy)". The entire
+// operation runs inside a single transaction so partial state is never visible.
+func (s *Store) CloneJob(ctx context.Context, jobID string, newName string) (*JobDetail, error) {
+	// Read source job, steps, and dependencies (uses reader — outside tx).
+	src, err := s.GetJob(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+
+	if newName == "" {
+		newName = src.Job.Name + " (copy)"
+	}
+
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("clone job begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Create the new job.
+	newJobID := uuid.New().String()
+	now := time.Now().UTC()
+	maxConcurrent := src.Job.MaxConcurrentRuns
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO jobs (job_id, name, description, user_id, parameters, timeout_seconds, max_concurrent_runs, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newJobID, newName, nullIfEmpty(src.Job.Description), nullIfEmpty(src.Job.UserID),
+		nullIfEmpty(src.Job.Parameters), src.Job.TimeoutSeconds, maxConcurrent, now, now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("clone job insert: %w", err)
+	}
+
+	// Map old step IDs to new step IDs for dependency remapping.
+	stepIDMap := make(map[string]string, len(src.Steps))
+	newSteps := make([]Step, 0, len(src.Steps))
+
+	for _, st := range src.Steps {
+		newStepID := uuid.New().String()
+		stepIDMap[st.StepID] = newStepID
+
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO steps (step_id, job_id, name, prompt, machine_id, working_dir, command, args,
+			 timeout_seconds, sort_order, on_failure, skip_permissions, model, delay_seconds,
+			 task_type, session_key, run_if, max_retries, retry_delay_seconds, parameters,
+			 target_job_id, job_params)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newStepID, newJobID, st.Name, st.Prompt, nullIfEmpty(st.MachineID), st.WorkingDir,
+			st.Command, st.Args, st.TimeoutSeconds, st.SortOrder, st.OnFailure,
+			st.SkipPermissions, st.Model, st.DelaySeconds,
+			st.TaskType, nullIfEmpty(st.SessionKey), st.RunIf, st.MaxRetries, st.RetryDelaySeconds,
+			nullIfEmpty(st.Parameters), nullIfEmpty(st.TargetJobID), nullIfEmpty(st.JobParams),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("clone step %s: %w", st.StepID, err)
+		}
+
+		newSteps = append(newSteps, Step{
+			StepID: newStepID, JobID: newJobID, Name: st.Name, Prompt: st.Prompt,
+			MachineID: st.MachineID, WorkingDir: st.WorkingDir, Command: st.Command,
+			Args: st.Args, TimeoutSeconds: st.TimeoutSeconds, SortOrder: st.SortOrder,
+			OnFailure: st.OnFailure, SkipPermissions: st.SkipPermissions, Model: st.Model,
+			DelaySeconds: st.DelaySeconds, TaskType: st.TaskType, SessionKey: st.SessionKey,
+			RunIf: st.RunIf, MaxRetries: st.MaxRetries, RetryDelaySeconds: st.RetryDelaySeconds,
+			Parameters: st.Parameters, TargetJobID: st.TargetJobID, JobParams: st.JobParams,
+		})
+	}
+
+	// Remap and insert dependencies.
+	newDeps := make([]StepDependency, 0, len(src.Dependencies))
+	for _, dep := range src.Dependencies {
+		newStepID, ok1 := stepIDMap[dep.StepID]
+		newDepsOn, ok2 := stepIDMap[dep.DependsOn]
+		if !ok1 || !ok2 {
+			continue // skip orphaned dependency edges
+		}
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO step_dependencies (step_id, depends_on) VALUES (?, ?)`,
+			newStepID, newDepsOn,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("clone dependency %s->%s: %w", dep.StepID, dep.DependsOn, err)
+		}
+		newDeps = append(newDeps, StepDependency{StepID: newStepID, DependsOn: newDepsOn})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("clone job commit: %w", err)
+	}
+
+	return &JobDetail{
+		Job: Job{
+			JobID:             newJobID,
+			Name:              newName,
+			Description:       src.Job.Description,
+			UserID:            src.Job.UserID,
+			Parameters:        src.Job.Parameters,
+			TimeoutSeconds:    src.Job.TimeoutSeconds,
+			MaxConcurrentRuns: maxConcurrent,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		},
+		Steps:        newSteps,
+		Dependencies: newDeps,
+	}, nil
 }
 
 // nullIfEmpty returns nil for empty strings to satisfy SQL NULL constraints.

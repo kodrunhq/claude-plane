@@ -27,6 +27,8 @@ import { NotFoundPage } from './views/NotFoundPage.tsx'
 import { TemplateEditor } from './views/TemplateEditor.tsx'
 import { MultiviewPage } from './components/multiview/MultiviewPage.tsx'
 import { TerminalView } from './components/terminal/TerminalView.tsx'
+import { SessionHeader } from './components/terminal/SessionHeader.tsx'
+import { useSession, useTerminateSession } from './hooks/useSessions.ts'
 import { useAuthStore } from './stores/auth.ts'
 import { useThemeEffect } from './hooks/useThemeEffect.ts'
 import { useUIPrefs } from './hooks/useUIPrefs.ts'
@@ -49,9 +51,18 @@ function ThemeApplier() {
 function TerminalRoute() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const { terminal_font_size } = useUIPrefs()
+  const { data: session, isLoading } = useSession(sessionId ?? '')
+  const terminateMutation = useTerminateSession()
+
   if (!sessionId) return null
+
   return (
     <div className="flex flex-col h-full">
+      <SessionHeader
+        session={session}
+        isLoading={isLoading}
+        onTerminate={(id) => terminateMutation.mutate(id)}
+      />
       <TerminalView sessionId={sessionId} className="flex-1 min-h-0" fontSize={terminal_font_size} />
     </div>
   )

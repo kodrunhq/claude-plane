@@ -1,15 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Plus, CopyPlus, Trash2, Search } from 'lucide-react';
+import { Plus, CopyPlus, Trash2, Search, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTemplates, useDeleteTemplate, useCloneTemplate } from '../hooks/useTemplates.ts';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
+import { LaunchTemplateModal } from '../components/templates/LaunchTemplateModal.tsx';
 import { formatTimeAgo, truncateId } from '../lib/format.ts';
 import type { SessionTemplate } from '../types/template.ts';
-
-const SELECT_CLASS =
-  'rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary';
 
 function formatArgs(args: string[] | undefined): string {
   if (!args || args.length === 0) return '—';
@@ -29,30 +27,20 @@ export function TemplatesPage() {
   const cloneTemplate = useCloneTemplate();
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [launchTemplateId, setLaunchTemplateId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tagFilter, setTagFilter] = useState('all');
-
-  const allTags = useMemo(() => {
-    const tags = new Set<string>();
-    for (const t of templates ?? []) {
-      for (const tag of t.tags ?? []) tags.add(tag);
-    }
-    return Array.from(tags).sort();
-  }, [templates]);
 
   const filteredTemplates = useMemo(() => {
     const sorted = [...(templates ?? [])].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     return sorted.filter((t) => {
-      const matchesSearch =
+      return (
         searchQuery === '' ||
         t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.template_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (t.description ?? '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTag =
-        tagFilter === 'all' || (t.tags ?? []).includes(tagFilter);
-      return matchesSearch && matchesTag;
+        (t.description ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      );
     });
-  }, [templates, searchQuery, tagFilter]);
+  }, [templates, searchQuery]);
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -101,14 +89,6 @@ export function TemplatesPage() {
             className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-9 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/50"
           />
         </div>
-        {allTags.length > 0 && (
-          <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className={SELECT_CLASS}>
-            <option value="all">All Tags</option>
-            {allTags.map((tag) => (
-              <option key={tag} value={tag}>{tag}</option>
-            ))}
-          </select>
-        )}
       </div>
 
       {/* Content */}
@@ -135,7 +115,6 @@ export function TemplatesPage() {
               <th className="px-4 py-2">Command</th>
               <th className="px-4 py-2 hidden md:table-cell">Args</th>
               <th className="px-4 py-2 hidden md:table-cell">Working Dir</th>
-              <th className="px-4 py-2 hidden md:table-cell">Tags</th>
               <th className="px-4 py-2 hidden md:table-cell">Updated</th>
               <th className="px-4 py-2"></th>
             </tr>
@@ -173,30 +152,18 @@ export function TemplatesPage() {
                 <td className="px-4 py-2 font-mono text-xs text-text-secondary hidden md:table-cell" title={template.working_dir ?? ''}>
                   {formatWorkingDir(template.working_dir)}
                 </td>
-                <td className="px-4 py-2 hidden md:table-cell">
-                  {template.tags && template.tags.length > 0 ? (
-                    <div className="flex gap-1 flex-wrap">
-                      {template.tags.slice(0, 3).map((tag) => (
-                        <span
-                          key={tag}
-                          className="bg-bg-tertiary text-text-secondary rounded-full px-2 py-0.5 text-xs"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {template.tags.length > 3 && (
-                        <span className="text-xs text-text-secondary/60">+{template.tags.length - 3}</span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-text-secondary/40">—</span>
-                  )}
-                </td>
                 <td className="px-4 py-2 text-text-secondary hidden md:table-cell">
                   {formatTimeAgo(template.updated_at)}
                 </td>
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setLaunchTemplateId(template.template_id); }}
+                      className="p-1.5 rounded-md text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors"
+                      title="Launch"
+                    >
+                      <Play size={14} />
+                    </button>
                     <button
                       onClick={(e) => handleDuplicate(e, template)}
                       className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
@@ -228,6 +195,12 @@ export function TemplatesPage() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
+      />
+
+      <LaunchTemplateModal
+        open={launchTemplateId !== null}
+        onClose={() => setLaunchTemplateId(null)}
+        template={templates?.find((t) => t.template_id === launchTemplateId) ?? null}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Plus, Lock, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Lock, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useCredentials, useCreateCredential } from '../hooks/useCredentials.ts';
+import { useCredentials, useCreateCredential, useCredentialStatus } from '../hooks/useCredentials.ts';
 import { CredentialsList } from '../components/credentials/CredentialsList.tsx';
 import { CreateCredentialModal } from '../components/credentials/CreateCredentialModal.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
@@ -9,6 +9,7 @@ import { EmptyState } from '../components/shared/EmptyState.tsx';
 
 export function CredentialsPage() {
   const { data: credentials, isLoading, error, refetch } = useCredentials();
+  const { data: status } = useCredentialStatus();
   const createCredential = useCreateCredential();
   const [showModal, setShowModal] = useState(false);
 
@@ -44,6 +45,15 @@ export function CredentialsPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-4">
+      {status && !status.encryption_enabled && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertTriangle className="text-yellow-500 shrink-0" size={20} />
+          <p className="text-sm text-text-primary">
+            Credentials are stored without encryption. Configure an encryption key for production use.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Credentials</h1>

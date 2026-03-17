@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Settings, Terminal, Workflow, Bell, Monitor, Server, Database, AlertCircle, RefreshCw } from 'lucide-react';
+import { Settings, Terminal, Workflow, Bell, Monitor, Server, Database, User, AlertCircle, RefreshCw } from 'lucide-react';
 import { usePreferences, useUpdatePreferences } from '../hooks/usePreferences.ts';
 import { useServerSettings, useUpdateServerSettings } from '../hooks/useSettings.ts';
 import { SessionDefaultsTab } from '../components/settings/SessionDefaultsTab.tsx';
@@ -7,9 +7,11 @@ import { JobDefaultsTab } from '../components/settings/JobDefaultsTab.tsx';
 import { NotificationsTab } from '../components/settings/NotificationsTab.tsx';
 import { UIPreferencesTab } from '../components/settings/UIPreferencesTab.tsx';
 import { MachinesTab } from '../components/settings/MachinesTab.tsx';
+import { AccountTab } from '../components/settings/AccountTab.tsx';
 import type { UserPreferences } from '../types/preferences.ts';
 
 const TABS = [
+  { id: 'account', label: 'Account', icon: User },
   { id: 'sessions', label: 'Session Defaults', icon: Terminal },
   { id: 'jobs', label: 'Job Defaults', icon: Workflow },
   { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -103,7 +105,7 @@ function DataRetentionTab() {
 }
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('sessions');
+  const [activeTab, setActiveTab] = useState<TabId>('account');
   const { data: preferences, isLoading, error, refetch } = usePreferences();
   const updatePreferences = useUpdatePreferences();
 
@@ -178,6 +180,7 @@ export function SettingsPage() {
 
       {/* Tab content */}
       <div className="bg-bg-secondary rounded-lg border border-border-primary p-6">
+        {activeTab === 'account' && <AccountTab />}
         {activeTab === 'sessions' && (
           <SessionDefaultsTab
             preferences={preferences}

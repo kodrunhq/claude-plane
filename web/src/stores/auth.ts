@@ -3,6 +3,7 @@ import { create } from 'zustand';
 interface User {
   userId: string;
   email: string;
+  displayName: string;
   role: string;
 }
 
@@ -33,9 +34,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       throw new Error(body.error ?? `Login failed (${res.status})`);
     }
 
-    const data = await res.json() as { user_id: string; email: string; role: string };
+    const data = await res.json() as { user_id: string; email: string; display_name: string; role: string };
     set({
-      user: { userId: data.user_id, email: data.email, role: data.role },
+      user: { userId: data.user_id, email: data.email, displayName: data.display_name ?? '', role: data.role },
       authenticated: true,
     });
   },
@@ -54,9 +55,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
         credentials: 'same-origin',
       });
       if (res.ok) {
-        const data = await res.json() as { user_id: string; email: string; role: string };
+        const data = await res.json() as { user_id: string; email: string; display_name: string; role: string };
         set({
-          user: { userId: data.user_id, email: data.email, role: data.role },
+          user: { userId: data.user_id, email: data.email, displayName: data.display_name ?? '', role: data.role },
           authenticated: true,
           loading: false,
         });

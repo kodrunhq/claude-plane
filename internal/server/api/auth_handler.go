@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -185,15 +186,16 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 	h.setSessionCookie(w, r, token)
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"token":   token,
-		"user_id": user.UserID,
-		"email":   user.Email,
-		"role":    user.Role,
+		"token":        token,
+		"user_id":      user.UserID,
+		"email":        user.Email,
+		"display_name": user.DisplayName,
+		"role":         user.Role,
 	})
 }
 
 // Me handles GET /api/v1/auth/me.
-// Returns the current user's identity from the JWT claims.
+// Returns the current user's identity, including display_name from the database.
 func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
@@ -201,10 +203,25 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Look up user to include display_name (not stored in JWT)
+	user, err := h.store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil {
+		slog.Warn("Me: could not load user from db", "error", err, "user_id", claims.UserID)
+		// Fallback to claims-only response if user lookup fails
+		writeJSON(w, http.StatusOK, map[string]string{
+			"user_id":      claims.UserID,
+			"email":        claims.Email,
+			"display_name": "",
+			"role":         claims.Role,
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
-		"user_id": claims.UserID,
-		"email":   claims.Email,
-		"role":    claims.Role,
+		"user_id":      user.UserID,
+		"email":        user.Email,
+		"display_name": user.DisplayName,
+		"role":         user.Role,
 	})
 }
 

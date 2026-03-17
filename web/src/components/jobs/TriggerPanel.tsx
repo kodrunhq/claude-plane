@@ -1,15 +1,18 @@
 import { useState, useMemo } from 'react';
-import { Link, Plus, Trash2, Zap } from 'lucide-react';
+import { Link, Pencil, Pause, Play, Plus, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
-import { useTriggers, useCreateTrigger, useDeleteTrigger } from '../../hooks/useTriggers.ts';
+import { useTriggers, useCreateTrigger, useUpdateTrigger, useToggleTrigger, useDeleteTrigger } from '../../hooks/useTriggers.ts';
 import { useJobs } from '../../hooks/useJobs.ts';
 import { TriggerBuilder } from './TriggerBuilder.tsx';
-import type { JobTrigger, CreateTriggerParams } from '../../types/trigger.ts';
+import type { JobTrigger, CreateTriggerParams, UpdateTriggerParams } from '../../types/trigger.ts';
 
 interface TriggerRowProps {
   trigger: JobTrigger;
+  onEdit: (trigger: JobTrigger) => void;
+  onToggle: (triggerId: string) => void;
   onDelete: (triggerId: string) => void;
   isDeleting: boolean;
+  isToggling: boolean;
   jobNameMap: ReadonlyMap<string, string>;
 }
 
@@ -64,7 +67,7 @@ function buildTriggerDescription(
   };
 }
 
-function TriggerRow({ trigger, onDelete, isDeleting, jobNameMap }: TriggerRowProps) {
+function TriggerRow({ trigger, onEdit, onToggle, onDelete, isDeleting, isToggling, jobNameMap }: TriggerRowProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const description = buildTriggerDescription(trigger, jobNameMap);
@@ -82,14 +85,14 @@ function TriggerRow({ trigger, onDelete, isDeleting, jobNameMap }: TriggerRowPro
   }
 
   return (
-    <div className="border border-border-primary rounded-md p-3 space-y-2 bg-bg-tertiary">
+    <div className={`border border-border-primary rounded-md p-3 space-y-2 bg-bg-tertiary${!trigger.enabled ? ' opacity-50' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-text-primary flex items-center gap-1.5">
+          <p className={`text-xs text-text-primary flex items-center gap-1.5${!trigger.enabled ? ' line-through' : ''}`}>
             {description.isChained && <Link size={11} className="text-blue-400 shrink-0" />}
             <span className="truncate">{description.text}</span>
           </p>
-          <p className="text-xs font-mono text-text-secondary mt-0.5 truncate">
+          <p className={`text-xs font-mono text-text-secondary mt-0.5 truncate${!trigger.enabled ? ' line-through' : ''}`}>
             {trigger.event_type}
           </p>
           {trigger.filter && (
@@ -119,13 +122,30 @@ function TriggerRow({ trigger, onDelete, isDeleting, jobNameMap }: TriggerRowPro
               </button>
             </>
           ) : (
-            <button
-              onClick={handleDeleteClick}
-              className="p-1 text-text-secondary hover:text-red-400 transition-colors"
-              title="Delete trigger"
-            >
-              <Trash2 size={13} />
-            </button>
+            <>
+              <button
+                onClick={() => onToggle(trigger.trigger_id)}
+                disabled={isToggling}
+                className="p-1 text-text-secondary hover:text-accent-primary transition-colors disabled:opacity-40"
+                title={trigger.enabled ? 'Disable trigger' : 'Enable trigger'}
+              >
+                {trigger.enabled ? <Pause size={13} /> : <Play size={13} />}
+              </button>
+              <button
+                onClick={() => onEdit(trigger)}
+                className="p-1 text-text-secondary hover:text-accent-primary transition-colors"
+                title="Edit trigger"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="p-1 text-text-secondary hover:text-red-400 transition-colors"
+                title="Delete trigger"
+              >
+                <Trash2 size={13} />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -150,9 +170,12 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
   const { data: triggers, isLoading } = useTriggers(jobId);
   const { data: jobs } = useJobs();
   const createTrigger = useCreateTrigger();
+  const updateTrigger = useUpdateTrigger();
+  const toggleTrigger = useToggleTrigger();
   const deleteTrigger = useDeleteTrigger();
 
   const [showForm, setShowForm] = useState(false);
+  const [editingTrigger, setEditingTrigger] = useState<JobTrigger | null>(null);
 
   const jobNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -174,6 +197,32 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
     }
   }
 
+  async function handleUpdate(params: UpdateTriggerParams) {
+    if (!editingTrigger) return;
+    try {
+      await updateTrigger.mutateAsync({ triggerId: editingTrigger.trigger_id, params });
+      toast.success('Trigger updated');
+      setEditingTrigger(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update trigger');
+    }
+  }
+
+  function handleEdit(trigger: JobTrigger) {
+    setShowForm(false);
+    setEditingTrigger(trigger);
+  }
+
+  function handleToggle(triggerId: string) {
+    toggleTrigger.mutate(
+      { triggerId },
+      {
+        onSuccess: (data) => toast.success(`Trigger ${data.enabled ? 'enabled' : 'disabled'}`),
+        onError: (err) => toast.error(err instanceof Error ? err.message : 'Failed to toggle trigger'),
+      },
+    );
+  }
+
   function handleDelete(triggerId: string) {
     deleteTrigger.mutate(
       { triggerId, jobId },
@@ -184,6 +233,18 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
     );
   }
 
+  function handleCancelForm() {
+    setShowForm(false);
+    setEditingTrigger(null);
+  }
+
+  function openCreateForm() {
+    setEditingTrigger(null);
+    setShowForm(true);
+  }
+
+  const isFormVisible = showForm || editingTrigger !== null;
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-primary">
@@ -191,9 +252,9 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
           <Zap size={13} />
           Triggers
         </span>
-        {!showForm && (
+        {!isFormVisible && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={openCreateForm}
             className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
           >
             <Plus size={12} />
@@ -206,8 +267,18 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
         {showForm && (
           <TriggerBuilder
             onSave={handleCreate}
-            onCancel={() => setShowForm(false)}
+            onCancel={handleCancelForm}
             isSaving={createTrigger.isPending}
+          />
+        )}
+
+        {editingTrigger && (
+          <TriggerBuilder
+            key={editingTrigger.trigger_id}
+            onSave={handleUpdate}
+            onCancel={handleCancelForm}
+            isSaving={updateTrigger.isPending}
+            editingTrigger={editingTrigger}
           />
         )}
 
@@ -227,8 +298,11 @@ export function TriggerPanel({ jobId }: TriggerPanelProps) {
               <TriggerRow
                 key={trigger.trigger_id}
                 trigger={trigger}
+                onEdit={handleEdit}
+                onToggle={handleToggle}
                 onDelete={handleDelete}
                 isDeleting={deleteTrigger.isPending}
+                isToggling={toggleTrigger.isPending}
                 jobNameMap={jobNameMap}
               />
             ))}

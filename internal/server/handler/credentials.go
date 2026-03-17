@@ -28,7 +28,11 @@ type CredentialHandler struct {
 }
 
 // NewCredentialHandler creates a new CredentialHandler.
+// Panics if the store is nil.
 func NewCredentialHandler(s CredentialStore, getClaims ClaimsGetter, encryptionKey []byte) *CredentialHandler {
+	if s == nil {
+		panic("CredentialStore must not be nil")
+	}
 	return &CredentialHandler{
 		store:         s,
 		getClaims:     getClaims,
@@ -36,18 +40,15 @@ func NewCredentialHandler(s CredentialStore, getClaims ClaimsGetter, encryptionK
 	}
 }
 
-// NewDisabledCredentialHandler creates a handler that returns 503 for all operations.
-// Used when the encryption key is not configured.
-func NewDisabledCredentialHandler(getClaims ClaimsGetter) *CredentialHandler {
-	return &CredentialHandler{
-		store:     nil,
-		getClaims: getClaims,
-	}
+// EncryptionEnabled reports whether the handler has an encryption key configured.
+func (h *CredentialHandler) EncryptionEnabled() bool {
+	return len(h.encryptionKey) > 0
 }
 
 // RegisterCredentialRoutes mounts all credential routes on the given router.
 func RegisterCredentialRoutes(r chi.Router, h *CredentialHandler) {
 	r.Get("/api/v1/credentials", h.ListCredentials)
+	r.Get("/api/v1/credentials/status", h.GetStatus)
 	r.Post("/api/v1/credentials", h.CreateCredential)
 	r.Delete("/api/v1/credentials/{credentialID}", h.DeleteCredential)
 }
@@ -77,13 +78,22 @@ func toCredentialResponse(c store.Credential) credentialResponse {
 	}
 }
 
+// credentialStatusResponse is the JSON response for GET /api/v1/credentials/status.
+type credentialStatusResponse struct {
+	EncryptionEnabled bool `json:"encryption_enabled"`
+}
+
+// GetStatus handles GET /api/v1/credentials/status.
+// Returns whether credentials encryption is enabled.
+func (h *CredentialHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, credentialStatusResponse{
+		EncryptionEnabled: h.EncryptionEnabled(),
+	})
+}
+
 // ListCredentials handles GET /api/v1/credentials.
 // Returns only the current user's credentials (from JWT claims).
 func (h *CredentialHandler) ListCredentials(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "credentials vault is disabled: encryption key not configured on server")
-		return
-	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -105,10 +115,6 @@ func (h *CredentialHandler) ListCredentials(w http.ResponseWriter, r *http.Reque
 
 // CreateCredential handles POST /api/v1/credentials.
 func (h *CredentialHandler) CreateCredential(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "credentials vault is disabled: encryption key not configured on server")
-		return
-	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -145,10 +151,6 @@ func (h *CredentialHandler) CreateCredential(w http.ResponseWriter, r *http.Requ
 // DeleteCredential handles DELETE /api/v1/credentials/{credentialID}.
 // Only the owning user may delete their own credentials.
 func (h *CredentialHandler) DeleteCredential(w http.ResponseWriter, r *http.Request) {
-	if h.store == nil {
-		writeError(w, http.StatusServiceUnavailable, "credentials vault is disabled: encryption key not configured on server")
-		return
-	}
 	c := h.getClaims(r)
 	if c == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")

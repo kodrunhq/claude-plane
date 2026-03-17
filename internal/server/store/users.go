@@ -234,6 +234,46 @@ func (s *Store) UpdateUser(ctx context.Context, userID, displayName, role string
 	return nil
 }
 
+// UpdatePassword updates the password hash for a user.
+// Returns ErrNotFound if no row was affected.
+func (s *Store) UpdatePassword(ctx context.Context, userID string, passwordHash string) error {
+	result, err := s.writer.ExecContext(ctx, `
+		UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE user_id = ?
+	`, passwordHash, userID)
+	if err != nil {
+		return fmt.Errorf("update password for user %q: %w", userID, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateDisplayName updates only the display name of an existing user.
+// Returns ErrNotFound if no row was affected.
+func (s *Store) UpdateDisplayName(ctx context.Context, userID, displayName string) error {
+	result, err := s.writer.ExecContext(ctx, `
+		UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE user_id = ?
+	`, displayName, userID)
+	if err != nil {
+		return fmt.Errorf("update display name for user %q: %w", userID, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteUser removes a user by ID.
 // Returns ErrNotFound if no row was deleted.
 func (s *Store) DeleteUser(ctx context.Context, userID string) error {

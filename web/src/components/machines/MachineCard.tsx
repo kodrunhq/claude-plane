@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Check, Cpu, MemoryStick, Pencil, Terminal, X } from 'lucide-react';
+import { Check, Cpu, MemoryStick, Pencil, Terminal, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { TimeAgo } from '../shared/TimeAgo.tsx';
-import { useUpdateMachine } from '../../hooks/useMachines.ts';
+import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
+import { useUpdateMachine, useDeleteMachine } from '../../hooks/useMachines.ts';
+import { useAuthStore } from '../../stores/auth.ts';
 import type { Machine } from '../../lib/types.ts';
 
 interface MachineCardProps {
@@ -25,8 +28,12 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
   const health = machine.health;
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(machine.display_name || '');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const updateMachine = useUpdateMachine();
+  const deleteMachine = useDeleteMachine();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -145,13 +152,44 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
         </div>
       )}
 
-      <button
-        disabled={!isConnected}
-        onClick={() => onCreateSession(machine.machine_id)}
-        className="w-full px-3 py-1.5 text-xs rounded-md font-medium bg-accent-green/10 text-accent-green hover:bg-accent-green/20 transition-all hover:shadow-[0_0_12px_rgba(34,197,94,0.15)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:shadow-none"
-      >
-        New Session
-      </button>
+      <div className="flex gap-2">
+        <button
+          disabled={!isConnected}
+          onClick={() => onCreateSession(machine.machine_id)}
+          className="flex-1 px-3 py-1.5 text-xs rounded-md font-medium bg-accent-green/10 text-accent-green hover:bg-accent-green/20 transition-all hover:shadow-[0_0_12px_rgba(34,197,94,0.15)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:shadow-none"
+        >
+          New Session
+        </button>
+        {isAdmin && !isConnected && (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={deleteMachine.isPending}
+            className="px-2 py-1.5 text-xs rounded-md text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50"
+            title="Remove machine"
+            aria-label="Remove machine"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Remove Machine"
+        message={`Are you sure you want to remove "${machine.display_name || machine.machine_id}"? This machine will no longer appear in the dashboard.`}
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={() => {
+          deleteMachine.mutate(machine.machine_id, {
+            onSuccess: () => setShowDeleteConfirm(false),
+            onError: (err) => {
+              const message = err instanceof Error ? err.message : 'Failed to delete machine';
+              toast.error(message);
+            },
+          });
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }
