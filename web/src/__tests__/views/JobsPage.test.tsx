@@ -76,4 +76,13 @@ describe('JobsPage', () => {
       expect(runButtons.length).toBe(mockJobs.length);
     });
   });
+
+  it('shows delete button for each job', async () => {
+    renderWithProviders(<JobsPage />);
+
+    await waitFor(() => {
+      const deleteButtons = screen.getAllByTitle('Delete');
+      expect(deleteButtons.length).toBe(mockJobs.length);
+    });
+  });
 });

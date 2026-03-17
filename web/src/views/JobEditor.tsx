@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Plus, Save, Play, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Save, Play, Trash2, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { JobRunHistory } from '../components/jobs/JobRunHistory.tsx';
 import { toast } from 'sonner';
 import { DAGCanvas } from '../components/dag/DAGCanvas.tsx';
@@ -11,10 +11,12 @@ import { JobMetaForm } from '../components/jobs/JobMetaForm.tsx';
 import { ParameterEditor } from '../components/jobs/ParameterEditor.tsx';
 import { JobSettingsPanel } from '../components/jobs/JobSettingsPanel.tsx';
 import { RunNowModal } from '../components/jobs/RunNowModal.tsx';
+import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import {
   useJob,
   useCreateJob,
   useUpdateJob,
+  useDeleteJob,
   useAddTask,
   useUpdateTask,
   useDeleteTask,
@@ -44,6 +46,7 @@ export function JobEditor() {
   const { data: machines } = useMachines();
   const createJob = useCreateJob();
   const updateJob = useUpdateJob();
+  const deleteJobMutation = useDeleteJob();
   const addTask = useAddTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
@@ -62,6 +65,7 @@ export function JobEditor() {
   const [showRunHistory, setShowRunHistory] = useState(!isNew);
   const [activeTab, setActiveTab] = useState<EditorTab>('tasks');
   const [showRunModal, setShowRunModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const taskDirtyRef = useRef(false);
 
   // Sync job data when loaded
@@ -206,6 +210,18 @@ export function JobEditor() {
     }
   }
 
+  async function handleDeleteJob() {
+    if (!effectiveJobId) return;
+    try {
+      await deleteJobMutation.mutateAsync(effectiveJobId);
+      toast.success('Job deleted');
+      navigate('/jobs');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete job');
+    }
+    setShowDeleteConfirm(false);
+  }
+
   async function executeRun(parameters: Record<string, string>) {
     if (!effectiveJobId) return;
     setShowRunModal(false);
@@ -302,6 +318,17 @@ export function JobEditor() {
           <Play size={14} />
           Run
         </button>
+        {!isNew && (
+          <button
+            type="button"
+            aria-label="Delete job"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="p-1.5 rounded-md text-text-secondary hover:text-status-error hover:bg-status-error/10 transition-colors"
+            title="Delete job"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
       </div>
 
       {/* Tab bar */}
@@ -452,6 +479,16 @@ export function JobEditor() {
           onClose={() => setShowRunModal(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete Job"
+        message={`Are you sure you want to delete "${jobName}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDeleteJob}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }
