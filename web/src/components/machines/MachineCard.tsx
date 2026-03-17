@@ -78,18 +78,22 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
               disabled={updateMachine.isPending}
             />
             <button
+              type="button"
               onClick={handleSave}
               disabled={updateMachine.isPending}
               className="p-0.5 text-accent-green hover:text-accent-green/80 disabled:opacity-50"
               title="Save"
+              aria-label="Save machine name"
             >
               <Check size={14} />
             </button>
             <button
+              type="button"
               onClick={handleCancel}
               disabled={updateMachine.isPending}
               className="p-0.5 text-text-secondary hover:text-text-primary disabled:opacity-50"
               title="Cancel"
+              aria-label="Cancel rename"
             >
               <X size={14} />
             </button>
@@ -100,12 +104,14 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
               {machine.display_name || machine.machine_id}
             </p>
             <button
+              type="button"
               onClick={() => {
                 setEditValue(machine.display_name || '');
                 setIsEditing(true);
               }}
               className="p-0.5 text-text-secondary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-opacity"
               title="Rename machine"
+              aria-label="Rename machine"
             >
               <Pencil size={12} />
             </button>

@@ -66,8 +66,8 @@ describe('useEventStream', () => {
 
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    invalidateSpy = vi.fn();
-    queryClient.invalidateQueries = invalidateSpy;
+    invalidateSpy = vi.fn().mockResolvedValue(undefined);
+    queryClient.invalidateQueries = invalidateSpy as typeof queryClient.invalidateQueries;
     useRunStore.getState().reset();
   });
 
