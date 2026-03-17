@@ -3,13 +3,11 @@
 import '@testing-library/jest-dom';
 import { setupServer } from 'msw/node';
 import { handlers } from './handlers.ts';
-import { resetFactories } from './factories.ts';
 
 export const server = setupServer(...handlers);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   server.resetHandlers();
-  resetFactories();
 });
 afterAll(() => server.close());

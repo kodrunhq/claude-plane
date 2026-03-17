@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/kodrunhq/claude-plane/internal/server/testutil"
@@ -22,8 +23,8 @@ func requireFields(t *testing.T, entity map[string]interface{}, required []strin
 func requireAbsentFields(t *testing.T, entity map[string]interface{}, absent []string, label string) {
 	t.Helper()
 	for _, field := range absent {
-		if v, ok := entity[field]; ok && v != nil && v != "" {
-			t.Errorf("%s: sensitive field %q should be absent or empty in list response, got %v", label, field, v)
+		if _, ok := entity[field]; ok {
+			t.Errorf("%s: sensitive field %q should be absent from list response", label, field)
 		}
 	}
 }
@@ -60,7 +61,7 @@ func TestContractMachinesList(t *testing.T) {
 
 	required := []string{"machine_id", "status", "max_sessions", "created_at"}
 	for i, m := range machines {
-		requireFields(t, m, required, "machines["+itoa(i)+"]")
+		requireFields(t, m, required, "machines["+strconv.Itoa(i)+"]")
 	}
 }
 
@@ -80,7 +81,7 @@ func TestContractJobsList(t *testing.T) {
 
 	required := []string{"job_id", "name", "created_at"}
 	for i, j := range jobs {
-		requireFields(t, j, required, "jobs["+itoa(i)+"]")
+		requireFields(t, j, required, "jobs["+strconv.Itoa(i)+"]")
 	}
 }
 
@@ -107,7 +108,7 @@ func TestContractSessionsList(t *testing.T) {
 	sensitive := []string{"env_vars", "args", "initial_prompt"}
 
 	for i, s := range sessions {
-		label := "sessions[" + itoa(i) + "]"
+		label := "sessions[" + strconv.Itoa(i) + "]"
 		requireFields(t, s, required, label)
 		requireAbsentFields(t, s, sensitive, label)
 	}
@@ -141,7 +142,7 @@ func TestContractTemplatesList(t *testing.T) {
 
 	required := []string{"template_id", "name", "user_id", "created_at"}
 	for i, tmpl := range templates {
-		requireFields(t, tmpl, required, "templates["+itoa(i)+"]")
+		requireFields(t, tmpl, required, "templates["+strconv.Itoa(i)+"]")
 	}
 }
 
@@ -159,24 +160,11 @@ func TestContractUsersList(t *testing.T) {
 
 	required := []string{"user_id", "email", "role", "created_at"}
 	for i, u := range users {
-		requireFields(t, u, required, "users["+itoa(i)+"]")
+		requireFields(t, u, required, "users["+strconv.Itoa(i)+"]")
 
 		// password_hash must never appear in API responses
 		if _, ok := u["password_hash"]; ok {
 			t.Errorf("users[%d]: password_hash must not be exposed in API response", i)
 		}
 	}
-}
-
-// itoa converts an int to a string without importing strconv.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	digits := []byte{}
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
 }

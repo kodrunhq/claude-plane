@@ -14,10 +14,6 @@ describe('SessionsPage', () => {
       // SessionCard renders the session_id prefix (first 8 chars)
       expect(screen.getByText(mockSessions[0].session_id.slice(0, 8))).toBeInTheDocument();
     });
-
-    // Both sessions should be visible (default filter is 'running',
-    // but the first mock session is running so at least that one shows)
-    expect(screen.getByText(mockSessions[0].session_id.slice(0, 8))).toBeInTheDocument();
   });
 
   it('shows empty state when no sessions', async () => {

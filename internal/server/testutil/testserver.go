@@ -124,11 +124,14 @@ func (ts *TestServer) LoginAsAdmin(t *testing.T) []*http.Cookie {
 	email := "admin@integration.test"
 	password := "integration-test-pw"
 
-	body, _ := json.Marshal(map[string]string{
+	body, err := json.Marshal(map[string]string{
 		"email":        email,
 		"password":     password,
 		"display_name": "Integration Admin",
 	})
+	if err != nil {
+		t.Fatalf("LoginAsAdmin: marshal register body: %v", err)
+	}
 	resp, err := http.Post(ts.URL()+"/api/v1/auth/register", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("LoginAsAdmin: register: %v", err)
@@ -138,21 +141,15 @@ func (ts *TestServer) LoginAsAdmin(t *testing.T) []*http.Cookie {
 		t.Fatalf("LoginAsAdmin: register returned %d", resp.StatusCode)
 	}
 
-	// Promote to admin directly in the store.
-	var regResult map[string]string
-	body, _ = json.Marshal(map[string]string{
-		"email":        email,
-		"password":     password,
-		"display_name": "Integration Admin",
-	})
-	// Re-read the register response for user_id — we already closed resp,
-	// so just fetch via login and read user_id from there.
-
 	// Login to get the token/cookies.
-	body, _ = json.Marshal(map[string]string{
+	var loginResult map[string]string
+	body, err = json.Marshal(map[string]string{
 		"email":    email,
 		"password": password,
 	})
+	if err != nil {
+		t.Fatalf("LoginAsAdmin: marshal login body: %v", err)
+	}
 	loginResp, err := http.Post(ts.URL()+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("LoginAsAdmin: login: %v", err)
@@ -162,10 +159,10 @@ func (ts *TestServer) LoginAsAdmin(t *testing.T) []*http.Cookie {
 		t.Fatalf("LoginAsAdmin: login returned %d", loginResp.StatusCode)
 	}
 
-	if err := json.NewDecoder(loginResp.Body).Decode(&regResult); err != nil {
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginResult); err != nil {
 		t.Fatalf("LoginAsAdmin: decode login response: %v", err)
 	}
-	userID := regResult["user_id"]
+	userID := loginResult["user_id"]
 	if userID == "" {
 		t.Fatal("LoginAsAdmin: empty user_id in login response")
 	}
@@ -176,10 +173,13 @@ func (ts *TestServer) LoginAsAdmin(t *testing.T) []*http.Cookie {
 	}
 
 	// Login again so the JWT contains the admin role.
-	body, _ = json.Marshal(map[string]string{
+	body, err = json.Marshal(map[string]string{
 		"email":    email,
 		"password": password,
 	})
+	if err != nil {
+		t.Fatalf("LoginAsAdmin: marshal second login body: %v", err)
+	}
 	loginResp2, err := http.Post(ts.URL()+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("LoginAsAdmin: second login: %v", err)

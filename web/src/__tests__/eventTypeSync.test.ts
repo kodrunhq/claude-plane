@@ -36,8 +36,4 @@ describe('Event type sync between Go and TypeScript', () => {
       `Frontend has extra event types not in backend: ${extra.join(', ')}`,
     ).toEqual([]);
   });
-
-  it('backend has exactly 18 event types', () => {
-    expect(backendTypes).toHaveLength(18);
-  });
 });

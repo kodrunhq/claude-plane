@@ -17,7 +17,6 @@ var (
 	factoryJobCounter      atomic.Int64
 	factoryUserCounter     atomic.Int64
 	factoryTemplateCounter atomic.Int64
-	factoryRunCounter      atomic.Int64
 )
 
 // --- Store helper ---
@@ -264,7 +263,7 @@ func mustCreateJob(t *testing.T, s *Store, opts ...JobOption) *Job {
 // --- User ---
 
 // mustCreateUser creates a user with the given email and role, returning the User.
-// A dummy password hash is used for speed.
+// Uses the real HashPassword function for a valid argon2id hash.
 func mustCreateUser(t *testing.T, s *Store, email, role string) *User {
 	t.Helper()
 	n := factoryUserCounter.Add(1)
@@ -274,11 +273,15 @@ func mustCreateUser(t *testing.T, s *Store, email, role string) *User {
 	if role == "" {
 		role = "viewer"
 	}
+	hash, err := HashPassword("test-password")
+	if err != nil {
+		t.Fatalf("mustCreateUser: hash password: %v", err)
+	}
 	user := &User{
 		UserID:       uuid.New().String(),
 		Email:        email,
 		DisplayName:  fmt.Sprintf("Test User %d", n),
-		PasswordHash: "$argon2id$v=19$m=65536,t=2,p=4$dGVzdHNhbHQxMjM0NTY=$dGVzdGhhc2gxMjM0NTY3ODkwMTIzNDU2Nzg5MDEy",
+		PasswordHash: hash,
 		Role:         role,
 	}
 	if err := s.CreateUser(user); err != nil {
@@ -395,7 +398,6 @@ func WithRunParameters(params string) RunOption {
 // mustCreateRun creates a run for the given job and returns it.
 func mustCreateRun(t *testing.T, s *Store, jobID string, opts ...RunOption) *Run {
 	t.Helper()
-	factoryRunCounter.Add(1)
 	cfg := runDefaults()
 	for _, o := range opts {
 		o(&cfg)

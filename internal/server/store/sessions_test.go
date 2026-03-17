@@ -94,7 +94,7 @@ func TestCreateSession_PersistsMetadata(t *testing.T) {
 	sess := mustCreateSession(t, s, machineID,
 		WithSessionModel("opus"),
 		WithSessionSkipPerms("true"),
-		WithSessionEnvVars(`{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}`),
+		WithSessionEnvVars(`{"ANTHROPIC_API_KEY":"test-placeholder-not-a-real-key","DEBUG":"1"}`),
 		WithSessionArgs(`["--verbose","--no-cache"]`),
 		WithSessionInitialPrompt("Fix the login bug"),
 		WithSessionWorkingDir("/home/user/project"),
@@ -111,8 +111,8 @@ func TestCreateSession_PersistsMetadata(t *testing.T) {
 	if got.SkipPerms != "true" {
 		t.Errorf("SkipPerms = %q, want %q", got.SkipPerms, "true")
 	}
-	if got.EnvVars != `{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}` {
-		t.Errorf("EnvVars = %q, want %q", got.EnvVars, `{"ANTHROPIC_API_KEY":"sk-test","DEBUG":"1"}`)
+	if got.EnvVars != `{"ANTHROPIC_API_KEY":"test-placeholder-not-a-real-key","DEBUG":"1"}` {
+		t.Errorf("EnvVars = %q, want %q", got.EnvVars, `{"ANTHROPIC_API_KEY":"test-placeholder-not-a-real-key","DEBUG":"1"}`)
 	}
 	if got.Args != `["--verbose","--no-cache"]` {
 		t.Errorf("Args = %q, want %q", got.Args, `["--verbose","--no-cache"]`)
