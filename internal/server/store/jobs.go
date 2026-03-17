@@ -147,7 +147,7 @@ type JobStoreIface interface {
 	GetTaskValues(ctx context.Context, runStepID string) ([]TaskValue, error)
 	GetTaskValuesForSteps(ctx context.Context, runStepIDs []string) ([]TaskValue, error)
 	DeleteTaskValuesForStep(ctx context.Context, runStepID string) error
-	CountRunsForJob(ctx context.Context, jobID string) (int, error)
+	CountRunsForJobUpTo(ctx context.Context, jobID string, upTo time.Time) (int, error)
 }
 
 // Compile-time check that Store implements JobStoreIface.
@@ -945,12 +945,17 @@ func (s *Store) ListRuns(ctx context.Context, jobID string) ([]Run, error) {
 	return runs, rows.Err()
 }
 
-// CountRunsForJob returns the total number of runs for a job.
-func (s *Store) CountRunsForJob(ctx context.Context, jobID string) (int, error) {
+// CountRunsForJobUpTo returns the number of runs for a job created at or before
+// the given timestamp. This provides a stable ordinal for run numbering that
+// does not change as new runs are added.
+func (s *Store) CountRunsForJobUpTo(ctx context.Context, jobID string, upTo time.Time) (int, error) {
 	var count int
-	err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE job_id = ?`, jobID).Scan(&count)
+	err := s.reader.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM runs WHERE job_id = ? AND created_at <= ?`,
+		jobID, upTo,
+	).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("count runs for job: %w", err)
+		return 0, fmt.Errorf("count runs for job up to %v: %w", upTo, err)
 	}
 	return count, nil
 }

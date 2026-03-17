@@ -126,5 +126,9 @@
   {
     "name": "TypeWebhookTest",
     "value": "webhook.test"
+  },
+  {
+    "name": "TypeServerShutdown",
+    "value": "server.shutdown"
   }
 ]

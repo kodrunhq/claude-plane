@@ -3,9 +3,10 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 )
 
-func TestCountRunsForJob(t *testing.T) {
+func TestCountRunsForJobUpTo(t *testing.T) {
 	s := mustNewStore(t)
 	ctx := context.Background()
 
@@ -13,9 +14,9 @@ func TestCountRunsForJob(t *testing.T) {
 	user := mustCreateUser(t, s, "", "admin")
 	job := mustCreateJob(t, s, WithJobName("count-test"), WithJobUserID(user.UserID))
 
-	count, err := s.CountRunsForJob(ctx, job.JobID)
+	count, err := s.CountRunsForJobUpTo(ctx, job.JobID, time.Now())
 	if err != nil {
-		t.Fatalf("CountRunsForJob: %v", err)
+		t.Fatalf("CountRunsForJobUpTo: %v", err)
 	}
 	if count != 0 {
 		t.Errorf("expected 0 runs, got %d", count)
@@ -25,9 +26,9 @@ func TestCountRunsForJob(t *testing.T) {
 	mustCreateRun(t, s, job.JobID)
 	mustCreateRun(t, s, job.JobID)
 
-	count, err = s.CountRunsForJob(ctx, job.JobID)
+	count, err = s.CountRunsForJobUpTo(ctx, job.JobID, time.Now())
 	if err != nil {
-		t.Fatalf("CountRunsForJob after inserts: %v", err)
+		t.Fatalf("CountRunsForJobUpTo after inserts: %v", err)
 	}
 	if count != 2 {
 		t.Errorf("expected 2 runs, got %d", count)

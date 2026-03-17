@@ -401,8 +401,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						Type   string `json:"type"`
 						Status string `json:"status"`
 					}
-					controlMsg, _ := json.Marshal(sessionEndedMsg{Type: "session_ended", Status: newStatus})
-					s.registry.PublishControl(ss.GetSessionId(), controlMsg)
+					controlMsg, err := json.Marshal(sessionEndedMsg{Type: "session_ended", Status: newStatus})
+					if err != nil {
+						s.logger.Warn("failed to marshal session_ended control message", "error", err)
+					} else {
+						s.registry.PublishControl(ss.GetSessionId(), controlMsg)
+					}
 				}
 				// Publish to event bus so /ws/events subscribers (sessions list) get invalidated.
 				if s.eventPublisher != nil {

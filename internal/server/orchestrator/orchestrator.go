@@ -191,8 +191,8 @@ func (o *Orchestrator) CreateRun(ctx context.Context, jobID string, triggerType 
 		TriggerType: triggerType,
 		StartTime:   run.CreatedAt.Format(time.RFC3339),
 	}
-	// Populate RunNumber by counting existing runs for this job.
-	if count, err := o.store.CountRunsForJob(ctx, jobID); err == nil {
+	// Populate RunNumber: count runs created at or before this one for a stable ordinal.
+	if count, err := o.store.CountRunsForJobUpTo(ctx, jobID, run.CreatedAt); err == nil {
 		jobMeta.RunNumber = count
 	}
 
@@ -385,10 +385,8 @@ func (o *Orchestrator) rebuildAndStartRun(ctx context.Context, runID string) err
 		TriggerType: detail.Run.TriggerType,
 		StartTime:   detail.Run.CreatedAt.Format(time.RFC3339),
 	}
-	// Populate RunNumber: count runs created at or before this run to get a stable ordinal.
-	if count, err := o.store.CountRunsForJob(ctx, detail.Run.JobID); err == nil {
-		// For rebuilt runs, count all runs and use the total as a stable approximation.
-		// A rebuild is rare and the exact ordinal is informational only.
+	// Populate RunNumber: count runs created at or before this one for a stable ordinal.
+	if count, err := o.store.CountRunsForJobUpTo(ctx, detail.Run.JobID, detail.Run.CreatedAt); err == nil {
 		jobMeta.RunNumber = count
 	}
 
