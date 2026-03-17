@@ -1,0 +1,74 @@
+[
+  {
+    "name": "TypeRunCreated",
+    "value": "run.created"
+  },
+  {
+    "name": "TypeRunStarted",
+    "value": "run.started"
+  },
+  {
+    "name": "TypeRunCompleted",
+    "value": "run.completed"
+  },
+  {
+    "name": "TypeRunFailed",
+    "value": "run.failed"
+  },
+  {
+    "name": "TypeRunCancelled",
+    "value": "run.cancelled"
+  },
+  {
+    "name": "TypeSessionStarted",
+    "value": "session.started"
+  },
+  {
+    "name": "TypeSessionExited",
+    "value": "session.exited"
+  },
+  {
+    "name": "TypeSessionTerminated",
+    "value": "session.terminated"
+  },
+  {
+    "name": "TypeMachineConnected",
+    "value": "machine.connected"
+  },
+  {
+    "name": "TypeMachineDisconnected",
+    "value": "machine.disconnected"
+  },
+  {
+    "name": "TypeTriggerCron",
+    "value": "trigger.cron"
+  },
+  {
+    "name": "TypeTriggerWebhook",
+    "value": "trigger.webhook"
+  },
+  {
+    "name": "TypeTriggerJobCompleted",
+    "value": "trigger.job_completed"
+  },
+  {
+    "name": "TypeTemplateCreated",
+    "value": "template.created"
+  },
+  {
+    "name": "TypeTemplateUpdated",
+    "value": "template.updated"
+  },
+  {
+    "name": "TypeTemplateDeleted",
+    "value": "template.deleted"
+  },
+  {
+    "name": "TypeJobRunStepCompleted",
+    "value": "run.step.completed"
+  },
+  {
+    "name": "TypeJobRunStepFailed",
+    "value": "run.step.failed"
+  }
+]

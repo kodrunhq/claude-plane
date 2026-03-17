@@ -2,50 +2,41 @@ package store
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 )
 
+// newTestStoreForJobs wraps mustNewStore for backward compatibility
+// with tests in other files (e.g. task_values_test.go).
 func newTestStoreForJobs(t *testing.T) *Store {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewStore(dbPath)
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
+	return mustNewStore(t)
 }
 
-// testCreateJob is a test helper that creates a job with minimal params.
+// testCreateJob wraps the factory for backward compatibility with
+// existing tests that pass name, description, and userID as positional args.
 func testCreateJob(t *testing.T, s *Store, name, description, userID string) *Job {
 	t.Helper()
-	job, err := s.CreateJob(context.Background(), CreateJobParams{
-		Name:        name,
-		Description: description,
-		UserID:      userID,
-	})
-	if err != nil {
-		t.Fatalf("CreateJob(%q): %v", name, err)
+	var opts []JobOption
+	if name != "" {
+		opts = append(opts, WithJobName(name))
 	}
-	return job
+	if description != "" {
+		opts = append(opts, WithJobDescription(description))
+	}
+	if userID != "" {
+		opts = append(opts, WithJobUserID(userID))
+	}
+	return mustCreateJob(t, s, opts...)
 }
 
-// testCreateRun is a test helper that creates a run with minimal params.
+// testCreateRun wraps the factory for backward compatibility.
 func testCreateRun(t *testing.T, s *Store, jobID, triggerType string) *Run {
 	t.Helper()
-	run, err := s.CreateRun(context.Background(), CreateRunParams{
-		JobID:       jobID,
-		TriggerType: triggerType,
-	})
-	if err != nil {
-		t.Fatalf("CreateRun(%q, %q): %v", jobID, triggerType, err)
-	}
-	return run
+	return mustCreateRun(t, s, jobID, WithRunTriggerType(triggerType))
 }
 
 func TestJobStore_CreateAndGetJob(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job, err := s.CreateJob(ctx, CreateJobParams{Name: "Test Job", Description: "A test job"})
@@ -78,7 +69,7 @@ func TestJobStore_CreateAndGetJob(t *testing.T) {
 }
 
 func TestJobStore_ListJobs(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 
 	testCreateJob(t, s, "Job A", "", "")
 	testCreateJob(t, s, "Job B", "", "")
@@ -93,7 +84,7 @@ func TestJobStore_ListJobs(t *testing.T) {
 }
 
 func TestUpdateJob(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Original Name", "Original desc", "")
@@ -127,7 +118,7 @@ func TestUpdateJob(t *testing.T) {
 }
 
 func TestUpdateJob_NotFound(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	_, err := s.UpdateJob(ctx, UpdateJobParams{
@@ -139,7 +130,7 @@ func TestUpdateJob_NotFound(t *testing.T) {
 }
 
 func TestJobStore_DeleteJob(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "To Delete", "", "")
@@ -153,7 +144,7 @@ func TestJobStore_DeleteJob(t *testing.T) {
 }
 
 func TestJobStore_StepCRUD(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Job", "", "")
@@ -201,7 +192,7 @@ func TestJobStore_StepCRUD(t *testing.T) {
 }
 
 func TestJobStore_Dependencies(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Job", "", "")
@@ -247,17 +238,14 @@ func TestJobStore_Dependencies(t *testing.T) {
 }
 
 func TestJobStore_RunWithSnapshots(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
-	// Create machine for FK constraint
-	if err := s.UpsertMachine("machine-a", 5); err != nil {
-		t.Fatalf("UpsertMachine: %v", err)
-	}
+	machineID := mustCreateMachine(t, s, WithMachineID("machine-a"))
 
 	job := testCreateJob(t, s, "Job", "", "")
-	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: "machine-a", WorkingDir: "/work", Command: "claude", Args: "--verbose", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
-	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: "machine-a", WorkingDir: "/work2", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
+	stepA, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "A", Prompt: "do A", MachineID: machineID, WorkingDir: "/work", Command: "claude", Args: "--verbose", TimeoutSeconds: 0, SortOrder: 0, OnFailure: "fail_run"})
+	stepB, _ := s.CreateStep(ctx, CreateStepParams{JobID: job.JobID, Name: "B", Prompt: "do B", MachineID: machineID, WorkingDir: "/work2", Command: "claude", Args: "", TimeoutSeconds: 0, SortOrder: 1, OnFailure: "fail_run"})
 
 	// Create run
 	run := testCreateRun(t, s, job.JobID, "manual")
@@ -333,7 +321,7 @@ func TestJobStore_RunWithSnapshots(t *testing.T) {
 }
 
 func TestJobStore_ListRuns(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 
 	job := testCreateJob(t, s, "Job", "", "")
 	testCreateRun(t, s, job.JobID, "manual")
@@ -349,7 +337,7 @@ func TestJobStore_ListRuns(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 
 	jobA := testCreateJob(t, s, "Job A", "", "")
 	jobB := testCreateJob(t, s, "Job B", "", "")
@@ -367,7 +355,7 @@ func TestJobStore_ListAllRuns(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_FilterByStatus(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Job", "", "")
@@ -389,7 +377,7 @@ func TestJobStore_ListAllRuns_FilterByStatus(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_FilterByJobID(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	jobA := testCreateJob(t, s, "Job A", "", "")
@@ -413,7 +401,7 @@ func TestJobStore_ListAllRuns_FilterByJobID(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_Pagination(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Job", "", "")
@@ -450,7 +438,7 @@ func TestJobStore_ListAllRuns_Pagination(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_IncludesJobName(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Named Job", "", "")
@@ -469,7 +457,7 @@ func TestJobStore_ListAllRuns_IncludesJobName(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_DefaultLimit(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 
 	job := testCreateJob(t, s, "Job", "", "")
 	// Insert 55 runs -- more than the default limit of 50.
@@ -487,7 +475,7 @@ func TestJobStore_ListAllRuns_DefaultLimit(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_EmptyResult(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	runs, err := s.ListAllRuns(ctx, ListRunsOptions{})
@@ -503,7 +491,7 @@ func TestJobStore_ListAllRuns_EmptyResult(t *testing.T) {
 }
 
 func TestJobStore_DeleteJobCascades(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job := testCreateJob(t, s, "Job", "", "")
@@ -528,35 +516,31 @@ func TestJobStore_DeleteJobCascades(t *testing.T) {
 
 	// Verify steps are gone
 	var count int
-	s.reader.QueryRow("SELECT COUNT(*) FROM steps WHERE job_id = ?", job.JobID).Scan(&count)
+	s.Reader().QueryRow("SELECT COUNT(*) FROM steps WHERE job_id = ?", job.JobID).Scan(&count)
 	if count != 0 {
 		t.Errorf("steps count = %d, want 0", count)
 	}
 
 	// Verify runs are gone
-	s.reader.QueryRow("SELECT COUNT(*) FROM runs WHERE job_id = ?", job.JobID).Scan(&count)
+	s.Reader().QueryRow("SELECT COUNT(*) FROM runs WHERE job_id = ?", job.JobID).Scan(&count)
 	if count != 0 {
 		t.Errorf("runs count = %d, want 0", count)
 	}
 
 	// Verify run steps are gone
-	s.reader.QueryRow("SELECT COUNT(*) FROM run_steps WHERE run_id = ?", run.RunID).Scan(&count)
+	s.Reader().QueryRow("SELECT COUNT(*) FROM run_steps WHERE run_id = ?", run.RunID).Scan(&count)
 	if count != 0 {
 		t.Errorf("run_steps count = %d, want 0", count)
 	}
 }
 
 func TestJobStore_ListJobsWithStats(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	// Seed machines to satisfy FK constraints
-	if err := s.UpsertMachine("nuc-01", 5); err != nil {
-		t.Fatalf("UpsertMachine nuc-01: %v", err)
-	}
-	if err := s.UpsertMachine("nuc-02", 5); err != nil {
-		t.Fatalf("UpsertMachine nuc-02: %v", err)
-	}
+	mustCreateMachine(t, s, WithMachineID("nuc-01"))
+	mustCreateMachine(t, s, WithMachineID("nuc-02"))
 
 	jobA := testCreateJob(t, s, "Job A", "desc A", "")
 	testCreateJob(t, s, "Job B", "", "")
@@ -644,7 +628,7 @@ func TestJobStore_ListJobsWithStats(t *testing.T) {
 }
 
 func TestJobStore_ListJobsWithStats_TriggerTypes(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	// Job with event trigger only
@@ -681,12 +665,12 @@ func TestJobStore_ListJobsWithStats_TriggerTypes(t *testing.T) {
 }
 
 func TestJobStore_ListAllRuns_IncludesMachineIDs(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	// Seed machines for FK
-	_ = s.UpsertMachine("nuc-01", 5)
-	_ = s.UpsertMachine("nuc-02", 5)
+	mustCreateMachine(t, s, WithMachineID("nuc-01"))
+	mustCreateMachine(t, s, WithMachineID("nuc-02"))
 
 	job := testCreateJob(t, s, "Job", "", "")
 	step1, err := s.CreateStep(ctx, CreateStepParams{
@@ -735,7 +719,7 @@ func TestJobStore_ListAllRuns_IncludesMachineIDs(t *testing.T) {
 }
 
 func TestJobStore_RunWithParameters(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
 	job, err := s.CreateJob(ctx, CreateJobParams{
@@ -787,10 +771,10 @@ func TestJobStore_RunWithParameters(t *testing.T) {
 }
 
 func TestJobStore_UpdateRunStepAttempt(t *testing.T) {
-	s := newTestStoreForJobs(t)
+	s := mustNewStore(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	mustCreateMachine(t, s, WithMachineID("m1"))
 
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
