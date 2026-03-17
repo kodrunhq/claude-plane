@@ -13,3 +13,7 @@ export interface CreateCredentialParams {
   name: string;
   value: string;
 }
+
+export interface CredentialStatus {
+  encryption_enabled: boolean;
+}

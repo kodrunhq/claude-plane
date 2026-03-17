@@ -327,10 +327,12 @@ func newServeCmd() *cobra.Command {
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
 			// Credentials vault handler — encryption key is auto-generated if not configured.
+			// If key resolution fails, credentials still work but store values as plaintext.
 			dataDir := filepath.Dir(cfg.Database.Path)
 			encryptionKey, err := cfg.Secrets.ParseEncryptionKey(dataDir)
 			if err != nil {
-				return fmt.Errorf("parse encryption key: %w", err)
+				slog.Warn("encryption key unavailable, credentials will be stored as plaintext", "error", err)
+				encryptionKey = nil
 			}
 			credentialHandler := handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
 
