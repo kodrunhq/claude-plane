@@ -29,6 +29,21 @@ import { useMachines } from '../hooks/useMachines.ts';
 import { useJobEditorStore } from '../stores/jobs.ts';
 import type { UpdateTaskParams } from '../types/job.ts';
 
+/** Parse parameters that may arrive as a JSON string or object from the API. */
+function parseParams(raw: Record<string, string> | string | undefined): Record<string, string> {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, string>;
+    }
+  } catch {
+    // Not valid JSON — ignore
+  }
+  return {};
+}
+
 type EditorTab = 'details' | 'tasks' | 'triggers' | 'schedule' | 'settings';
 
 const TABS: { key: EditorTab; label: string }[] = [
@@ -78,7 +93,7 @@ export function JobEditor() {
       setJobName(jobDetail.job.name);
       setJobDescription(jobDetail.job.description);
       setJobId(jobDetail.job.job_id);
-      setJobParams(jobDetail.job.parameters ?? {});
+      setJobParams(parseParams(jobDetail.job.parameters));
       setTimeoutSeconds(jobDetail.job.timeout_seconds ?? 0);
       setMaxConcurrentRuns(jobDetail.job.max_concurrent_runs ?? 1);
     }
