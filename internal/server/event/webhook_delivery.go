@@ -78,6 +78,8 @@ func retryBackoff(attempt int) time.Duration {
 
 // newSSRFSafeTransport returns an http.Transport that refuses connections to
 // private/loopback/link-local IP ranges, preventing SSRF attacks via webhook URLs.
+// It resolves DNS, validates the IPs, and then dials the resolved IP directly
+// to prevent DNS rebinding (TOCTOU) attacks.
 func newSSRFSafeTransport() *http.Transport {
 	return &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -85,10 +87,12 @@ func newSSRFSafeTransport() *http.Transport {
 			if err != nil {
 				return nil, fmt.Errorf("invalid address: %w", err)
 			}
-			_ = port // used implicitly via addr in DialContext below
 			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 			if err != nil {
 				return nil, fmt.Errorf("dns lookup failed: %w", err)
+			}
+			if len(ips) == 0 {
+				return nil, fmt.Errorf("dns lookup returned no addresses for %s", host)
 			}
 			for _, ip := range ips {
 				if ip.IP.IsLoopback() || ip.IP.IsPrivate() || ip.IP.IsLinkLocalUnicast() || ip.IP.IsLinkLocalMulticast() {
@@ -99,8 +103,10 @@ func newSSRFSafeTransport() *http.Transport {
 					return nil, fmt.Errorf("webhook URL resolves to metadata endpoint %s", ip.IP)
 				}
 			}
+			// Dial the verified resolved IP directly to prevent DNS rebinding.
+			resolvedAddr := net.JoinHostPort(ips[0].IP.String(), port)
 			dialer := &net.Dialer{}
-			return dialer.DialContext(ctx, network, addr)
+			return dialer.DialContext(ctx, network, resolvedAddr)
 		},
 	}
 }
