@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Trash2, ShieldCheck, User } from 'lucide-react';
+import { Pencil, Trash2, ShieldCheck, User, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
 import { formatTimeAgo, truncateId } from '../../lib/format.ts';
@@ -9,12 +9,14 @@ import type { User as UserType } from '../../types/user.ts';
 interface UsersListProps {
   users: UserType[];
   onEdit: (user: UserType) => void;
+  onResetPassword: (user: UserType) => void;
 }
 
 interface UserRowProps {
   user: UserType;
   onEdit: (user: UserType) => void;
   onDeleteRequest: (user: UserType) => void;
+  onResetPassword: (user: UserType) => void;
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -33,7 +35,7 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function UserRow({ user, onEdit, onDeleteRequest }: UserRowProps) {
+function UserRow({ user, onEdit, onDeleteRequest, onResetPassword }: UserRowProps) {
   return (
     <tr className="border-t border-gray-800 hover:bg-bg-tertiary/20 transition-colors">
       <td className="px-4 py-3">
@@ -56,6 +58,13 @@ function UserRow({ user, onEdit, onDeleteRequest }: UserRowProps) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-1 justify-end">
           <button
+            onClick={() => onResetPassword(user)}
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary transition-colors"
+            title="Reset password"
+          >
+            <KeyRound size={15} />
+          </button>
+          <button
             onClick={() => onEdit(user)}
             className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             title="Edit user"
@@ -75,7 +84,7 @@ function UserRow({ user, onEdit, onDeleteRequest }: UserRowProps) {
   );
 }
 
-export function UsersList({ users, onEdit }: UsersListProps) {
+export function UsersList({ users, onEdit, onResetPassword }: UsersListProps) {
   const [pendingDelete, setPendingDelete] = useState<UserType | null>(null);
   const deleteUser = useDeleteUser();
 
@@ -119,6 +128,7 @@ export function UsersList({ users, onEdit }: UsersListProps) {
                 user={user}
                 onEdit={onEdit}
                 onDeleteRequest={setPendingDelete}
+                onResetPassword={onResetPassword}
               />
             ))}
           </tbody>
