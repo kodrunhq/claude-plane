@@ -1,20 +1,22 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ALL_EVENT_TYPES } from '../constants/eventTypes';
+import { ALL_EVENT_TYPES } from '../constants/eventTypes.ts';
 
 interface EventTypeEntry {
   name: string;
   value: string;
 }
 
-const jsonPath = path.resolve(
-  __dirname,
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const jsonPath = resolve(
+  currentDir,
   '../../../internal/server/event/event_types.json',
 );
 
 describe('Event type sync between Go and TypeScript', () => {
-  const raw = fs.readFileSync(jsonPath, 'utf-8');
+  const raw = readFileSync(jsonPath, 'utf-8');
   const backendTypes: EventTypeEntry[] = JSON.parse(raw);
   const backendValues = new Set(backendTypes.map((e) => e.value));
   const frontendValues = new Set<string>(ALL_EVENT_TYPES);
