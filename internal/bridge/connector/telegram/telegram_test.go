@@ -79,8 +79,8 @@ func TestFormatEvent_RunCompleted(t *testing.T) {
 		"run_id": "r2",
 	})
 	got := telegram.FormatEvent(e)
-	// run.completed now includes a Job line (empty when no job_id/job_name provided)
-	want := "✅ *Run completed*\nJob: ``\nRun: `r2`"
+	// Job line is omitted when no job_id/job_name provided
+	want := "✅ *Run completed*\nRun: `r2`"
 	if got != want {
 		t.Errorf("FormatEvent(run.completed)\ngot:  %q\nwant: %q", got, want)
 	}
@@ -91,8 +91,8 @@ func TestFormatEvent_RunFailed(t *testing.T) {
 		"run_id": "r3",
 	})
 	got := telegram.FormatEvent(e)
-	// run.failed now includes a Job line (empty when no job_id/job_name provided)
-	want := "❌ *Run failed*\nJob: ``\nRun: `r3`"
+	// Job line is omitted when no job_id/job_name provided
+	want := "❌ *Run failed*\nRun: `r3`"
 	if got != want {
 		t.Errorf("FormatEvent(run.failed)\ngot:  %q\nwant: %q", got, want)
 	}

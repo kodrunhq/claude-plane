@@ -76,7 +76,7 @@ function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigator.clipboard?.writeText(delivery.payload ?? '').catch(() => {
+                        navigator.clipboard?.writeText(delivery.payload ?? '')?.catch(() => {
                           // Clipboard API requires HTTPS; silently ignore on HTTP deployments.
                         });
                       }}
