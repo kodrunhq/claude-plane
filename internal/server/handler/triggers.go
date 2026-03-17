@@ -60,7 +60,8 @@ func WithTriggerClaims(cg ClaimsGetter) TriggerHandlerOption {
 // Returns true if authorized; writes an error response and returns false otherwise.
 func (h *TriggerHandler) authorizeTrigger(w http.ResponseWriter, r *http.Request, triggerID string) bool {
 	if h.getClaims == nil || h.jobStore == nil {
-		return true // ownership checks not configured
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
 	}
 	c := h.getClaims(r)
 	if c == nil {
@@ -95,7 +96,8 @@ func (h *TriggerHandler) authorizeTrigger(w http.ResponseWriter, r *http.Request
 // Returns true if authorized; writes an error response and returns false otherwise.
 func (h *TriggerHandler) authorizeJobByID(w http.ResponseWriter, r *http.Request, jobID string) bool {
 	if h.getClaims == nil || h.jobStore == nil {
-		return true // ownership checks not configured
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return false
 	}
 	c := h.getClaims(r)
 	if c == nil {

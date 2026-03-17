@@ -294,7 +294,9 @@ func newScheduleFixture() *scheduleTestFixture {
 	reloader := &mockScheduleReloader{}
 	runCreator := &mockScheduleRunCreator{}
 
-	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, nil)
+	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-test", Role: "admin"}
+	})
 	h.SetRunCreator(runCreator)
 
 	r := chi.NewRouter()
@@ -835,7 +837,9 @@ func TestScheduleHandler_CreateSchedule_PublishesEvent(t *testing.T) {
 	reloader := &mockScheduleReloader{}
 	pub := &mockPublisher{}
 
-	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, nil)
+	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, func(r *http.Request) *handler.UserClaims {
+		return &handler.UserClaims{UserID: "admin-test", Role: "admin"}
+	})
 	h.SetPublisher(pub)
 
 	r := chi.NewRouter()
