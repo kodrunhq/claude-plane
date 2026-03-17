@@ -12,14 +12,6 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 )
 
-func newSettingsRouter(getClaims handler.ClaimsGetter) *httptest.Server {
-	s := newTestStore(&testing.T{})
-	h := handler.NewSettingsHandler(s, getClaims)
-	r := chi.NewRouter()
-	handler.RegisterSettingsRoutes(r, h)
-	return httptest.NewServer(r)
-}
-
 func newSettingsRouterWithCleanup(t *testing.T, getClaims handler.ClaimsGetter) *httptest.Server {
 	t.Helper()
 	s := newTestStore(t)
