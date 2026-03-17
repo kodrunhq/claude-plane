@@ -73,9 +73,10 @@ function DeliveryRow({ delivery }: { delivery: WebhookDelivery }) {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-text-secondary font-medium">Payload:</span>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigator.clipboard.writeText(delivery.payload ?? '').catch(() => {
+                        navigator.clipboard?.writeText(delivery.payload ?? '').catch(() => {
                           // Clipboard API requires HTTPS; silently ignore on HTTP deployments.
                         });
                       }}
