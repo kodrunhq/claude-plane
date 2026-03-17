@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { copyToClipboard } from '../../lib/clipboard.ts';
 
@@ -10,6 +10,13 @@ interface CopyableIdProps {
 
 export function CopyableId({ id, length = 8, className }: CopyableIdProps) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   if (!id) {
     return <span className="font-mono text-text-secondary/40">—</span>;
@@ -20,7 +27,8 @@ export function CopyableId({ id, length = 8, className }: CopyableIdProps) {
     try {
       await copyToClipboard(id);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 2000);
     } catch {
       // Copy failed silently — don't show false positive feedback
     }

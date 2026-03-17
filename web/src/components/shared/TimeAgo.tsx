@@ -34,7 +34,7 @@ export function TimeAgo({ date, className }: TimeAgoProps) {
   }, [date]);
 
   return (
-    <time dateTime={date} title={absoluteDate} className={className}>
+    <time dateTime={date} title={absoluteDate || undefined} className={className}>
       {text}
     </time>
   );
