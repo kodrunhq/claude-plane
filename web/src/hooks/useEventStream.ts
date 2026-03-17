@@ -78,6 +78,11 @@ export function useEventStream() {
           const msg = JSON.parse(event.data as string) as WsEventMsg;
           if (msg.type !== 'event') return;
 
+          // Increment unread notification counter
+          const prevCount = parseInt(localStorage.getItem('claude-plane-unread-events') || '0', 10);
+          localStorage.setItem('claude-plane-unread-events', String(prevCount + 1));
+          window.dispatchEvent(new Event('unread-events-changed'));
+
           switch (msg.event_type) {
             case SESSION_STARTED:
             case SESSION_EXITED:
