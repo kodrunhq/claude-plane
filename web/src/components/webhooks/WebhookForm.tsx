@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { WEBHOOK_EVENTS } from '../../types/webhook.ts';
+import { useState, useMemo } from 'react';
+import { EVENT_GROUPS } from '../../constants/eventTypes.ts';
 import type { Webhook, CreateWebhookParams, UpdateWebhookParams } from '../../types/webhook.ts';
 
 interface WebhookFormProps {
@@ -9,26 +9,8 @@ interface WebhookFormProps {
   submitting?: boolean;
 }
 
-const EVENT_GROUPS: { label: string; events: string[] }[] = [
-  {
-    label: 'Runs',
-    events: ['run.created', 'run.started', 'run.completed', 'run.failed', 'run.cancelled'],
-  },
-  {
-    label: 'Sessions',
-    events: ['session.started', 'session.exited'],
-  },
-  {
-    label: 'Machines',
-    events: ['machine.connected', 'machine.disconnected'],
-  },
-  {
-    label: 'Triggers',
-    events: ['trigger.cron', 'trigger.webhook', 'trigger.job_completed'],
-  },
-];
-
 export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }: WebhookFormProps) {
+  const allEvents = useMemo(() => EVENT_GROUPS.flatMap((g) => g.events), []);
   const [name, setName] = useState(initial?.name ?? '');
   const [url, setUrl] = useState(initial?.url ?? '');
   const [secret, setSecret] = useState('');
@@ -76,10 +58,10 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
   }
 
   function handleSelectAll() {
-    if (selectedEvents.size === WEBHOOK_EVENTS.length) {
+    if (selectedEvents.size === allEvents.length) {
       setSelectedEvents(new Set());
     } else {
-      setSelectedEvents(new Set(WEBHOOK_EVENTS));
+      setSelectedEvents(new Set(allEvents));
     }
   }
 
@@ -100,7 +82,7 @@ export function WebhookForm({ initial, onSubmit, onCancel, submitting = false }:
   }
 
   const isEditing = !!initial;
-  const allSelected = selectedEvents.size === WEBHOOK_EVENTS.length;
+  const allSelected = selectedEvents.size === allEvents.length;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">

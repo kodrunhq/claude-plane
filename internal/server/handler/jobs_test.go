@@ -497,6 +497,95 @@ func TestJobHandler_AddDependency_CycleRejected(t *testing.T) {
 	}
 }
 
+func TestJobHandler_CreateJob_PublishesEvent(t *testing.T) {
+	s := newTestStore(t)
+	pub := &mockPublisher{}
+
+	h := handler.NewJobHandler(s, nil)
+	h.SetPublisher(pub)
+	r := chi.NewRouter()
+	handler.RegisterJobRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{
+		"name":        "Published Job",
+		"description": "test event",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	events := pub.published()
+	if len(events) < 1 {
+		t.Fatalf("expected at least 1 published event, got %d", len(events))
+	}
+	evt := events[0]
+	if evt.Type != "job.created" {
+		t.Errorf("event type = %q, want %q", evt.Type, "job.created")
+	}
+	if evt.Payload["job_name"] != "Published Job" {
+		t.Errorf("payload job_name = %v, want %q", evt.Payload["job_name"], "Published Job")
+	}
+}
+
+func TestJobHandler_DeleteJob_PublishesEvent(t *testing.T) {
+	s := newTestStore(t)
+	pub := &mockPublisher{}
+
+	h := handler.NewJobHandler(s, nil)
+	h.SetPublisher(pub)
+	r := chi.NewRouter()
+	handler.RegisterJobRoutes(r, h)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	// Create a job first.
+	body, _ := json.Marshal(map[string]string{"name": "To Delete"})
+	createResp, err := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	// Reset captured events so we only see the delete event.
+	pub.mu.Lock()
+	pub.events = nil
+	pub.mu.Unlock()
+
+	// Delete the job.
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/v1/jobs/"+created.JobID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+
+	events := pub.published()
+	if len(events) < 1 {
+		t.Fatalf("expected at least 1 published event, got %d", len(events))
+	}
+	evt := events[0]
+	if evt.Type != "job.deleted" {
+		t.Errorf("event type = %q, want %q", evt.Type, "job.deleted")
+	}
+	if evt.Payload["job_name"] != "To Delete" {
+		t.Errorf("payload job_name = %v, want %q", evt.Payload["job_name"], "To Delete")
+	}
+}
+
 func TestJobHandler_RemoveDependency(t *testing.T) {
 	s := newTestStore(t)
 	srv, _ := newJobRouter(t, s)

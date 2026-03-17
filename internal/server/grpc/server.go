@@ -410,7 +410,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						evType = event.TypeSessionExited
 					}
 					if evType != "" {
-						if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID)); err != nil {
+						if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {
 							s.logger.Warn("failed to publish session event", "type", evType, "error", err)
 						}
 					}
@@ -435,7 +435,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				)
 				// Publish to event bus so sessions list auto-refreshes.
 				if s.eventPublisher != nil {
-					if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(event.TypeSessionExited, se.GetSessionId(), machineID)); err != nil {
+					if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(event.TypeSessionExited, se.GetSessionId(), machineID, "", "")); err != nil {
 						s.logger.Warn("failed to publish session exit event", "error", err)
 					}
 				}

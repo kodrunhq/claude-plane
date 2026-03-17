@@ -79,6 +79,7 @@ func TestFormatEvent_RunCompleted(t *testing.T) {
 		"run_id": "r2",
 	})
 	got := telegram.FormatEvent(e)
+	// Job line is omitted when no job_id/job_name provided
 	want := "✅ *Run completed*\nRun: `r2`"
 	if got != want {
 		t.Errorf("FormatEvent(run.completed)\ngot:  %q\nwant: %q", got, want)
@@ -90,6 +91,7 @@ func TestFormatEvent_RunFailed(t *testing.T) {
 		"run_id": "r3",
 	})
 	got := telegram.FormatEvent(e)
+	// Job line is omitted when no job_id/job_name provided
 	want := "❌ *Run failed*\nRun: `r3`"
 	if got != want {
 		t.Errorf("FormatEvent(run.failed)\ngot:  %q\nwant: %q", got, want)
@@ -101,7 +103,8 @@ func TestFormatEvent_MachineConnected(t *testing.T) {
 		"machine_id": "mach-1",
 	})
 	got := telegram.FormatEvent(e)
-	want := "🖥️ *Machine connected*\nMachine: `mach-1`"
+	// Hyphens inside backtick spans are escaped for MarkdownV2
+	want := "🖥️ *Machine connected*\nMachine: `mach\\-1`"
 	if got != want {
 		t.Errorf("FormatEvent(machine.connected)\ngot:  %q\nwant: %q", got, want)
 	}
@@ -112,7 +115,8 @@ func TestFormatEvent_MachineDisconnected(t *testing.T) {
 		"machine_id": "mach-2",
 	})
 	got := telegram.FormatEvent(e)
-	want := "⚠️ *Machine disconnected*\nMachine: `mach-2`"
+	// Hyphens inside backtick spans are escaped for MarkdownV2
+	want := "⚠️ *Machine disconnected*\nMachine: `mach\\-2`"
 	if got != want {
 		t.Errorf("FormatEvent(machine.disconnected)\ngot:  %q\nwant: %q", got, want)
 	}

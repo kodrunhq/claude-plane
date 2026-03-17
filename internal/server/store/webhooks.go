@@ -33,6 +33,7 @@ type WebhookDelivery struct {
 	ResponseCode int        `json:"response_code,omitempty"`
 	LastError    string     `json:"last_error,omitempty"`
 	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"`
+	Payload      string     `json:"payload,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
@@ -175,11 +176,11 @@ func (s *Store) CreateDelivery(ctx context.Context, d WebhookDelivery) error {
 	now := time.Now().UTC()
 	_, err := s.writer.ExecContext(ctx,
 		`INSERT INTO webhook_deliveries
-		 (delivery_id, webhook_id, event_id, status, attempts, response_code, last_error, next_retry_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 (delivery_id, webhook_id, event_id, status, attempts, response_code, last_error, next_retry_at, payload, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.DeliveryID, d.WebhookID, d.EventID, d.Status, d.Attempts,
 		nullIntIfZero(d.ResponseCode), nullStringIfEmpty(d.LastError),
-		nullTimeIfNil(d.NextRetryAt), now, now,
+		nullTimeIfNil(d.NextRetryAt), nullStringIfEmpty(d.Payload), now, now,
 	)
 	if err != nil {
 		return fmt.Errorf("create delivery: %w", err)
@@ -213,7 +214,8 @@ func (s *Store) UpdateDelivery(ctx context.Context, d WebhookDelivery) error {
 func (s *Store) ListDeliveries(ctx context.Context, webhookID string) ([]WebhookDelivery, error) {
 	rows, err := s.reader.QueryContext(ctx,
 		`SELECT delivery_id, webhook_id, event_id, status, attempts,
-		        COALESCE(response_code, 0), COALESCE(last_error, ''), next_retry_at, created_at, updated_at
+		        COALESCE(response_code, 0), COALESCE(last_error, ''), next_retry_at,
+		        COALESCE(payload, ''), created_at, updated_at
 		 FROM webhook_deliveries WHERE webhook_id = ? ORDER BY created_at DESC`, webhookID,
 	)
 	if err != nil {
@@ -228,7 +230,8 @@ func (s *Store) ListDeliveries(ctx context.Context, webhookID string) ([]Webhook
 func (s *Store) PendingDeliveries(ctx context.Context) ([]WebhookDelivery, error) {
 	rows, err := s.reader.QueryContext(ctx,
 		`SELECT delivery_id, webhook_id, event_id, status, attempts,
-		        COALESCE(response_code, 0), COALESCE(last_error, ''), next_retry_at, created_at, updated_at
+		        COALESCE(response_code, 0), COALESCE(last_error, ''), next_retry_at,
+		        COALESCE(payload, ''), created_at, updated_at
 		 FROM webhook_deliveries
 		 WHERE status = 'pending'
 		   AND (next_retry_at IS NULL OR next_retry_at <= ?)
@@ -252,7 +255,7 @@ func scanDeliveries(rows *sql.Rows) ([]WebhookDelivery, error) {
 		if err := rows.Scan(
 			&d.DeliveryID, &d.WebhookID, &d.EventID, &d.Status,
 			&d.Attempts, &d.ResponseCode, &d.LastError,
-			&nextRetryAt, &d.CreatedAt, &d.UpdatedAt,
+			&nextRetryAt, &d.Payload, &d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan delivery: %w", err)
 		}

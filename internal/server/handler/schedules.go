@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/robfig/cron/v3"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -36,6 +37,24 @@ type ScheduleHandler struct {
 	jobStore  store.JobStoreIface
 	scheduler ScheduleReloader
 	getClaims ClaimsGetter
+	publisher event.Publisher
+}
+
+// SetPublisher configures the event publisher for schedule lifecycle events.
+func (h *ScheduleHandler) SetPublisher(p event.Publisher) {
+	h.publisher = p
+}
+
+// publishScheduleEvent fires a schedule lifecycle event if a publisher is configured.
+// Errors are logged but not propagated.
+func (h *ScheduleHandler) publishScheduleEvent(eventType, scheduleID, jobID, jobName, cronExpr string) {
+	if h.publisher == nil {
+		return
+	}
+	evt := event.NewScheduleEvent(eventType, scheduleID, jobID, jobName, cronExpr)
+	if err := h.publisher.Publish(context.Background(), evt); err != nil {
+		slog.Warn("failed to publish schedule event", "type", eventType, "schedule_id", scheduleID, "error", err)
+	}
 }
 
 // NewScheduleHandler creates a new ScheduleHandler.
@@ -187,7 +206,8 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.authorizeJobByID(w, r, jobID) == nil {
+	jobDetail := h.authorizeJobByID(w, r, jobID)
+	if jobDetail == nil {
 		return
 	}
 
@@ -206,6 +226,7 @@ func (h *ScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusCreated, created)
+	h.publishScheduleEvent(event.TypeScheduleCreated, created.ScheduleID, jobID, jobDetail.Job.Name, created.CronExpr)
 }
 
 // GetSchedule handles GET /api/v1/schedules/{scheduleID}.
@@ -289,6 +310,11 @@ func (h *ScheduleHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.scheduler.RemoveSchedule(sc.ScheduleID)
+	jobName := ""
+	if jd, err := h.jobStore.GetJob(r.Context(), sc.JobID); err == nil {
+		jobName = jd.Job.Name
+	}
+	h.publishScheduleEvent(event.TypeScheduleDeleted, sc.ScheduleID, sc.JobID, jobName, sc.CronExpr)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -327,5 +353,15 @@ func (h *ScheduleHandler) setEnabled(w http.ResponseWriter, r *http.Request, ena
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	eventType := event.TypeSchedulePaused
+	if enabled {
+		eventType = event.TypeScheduleResumed
+	}
+	jobName := ""
+	if jd, err := h.jobStore.GetJob(r.Context(), sc.JobID); err == nil {
+		jobName = jd.Job.Name
+	}
 	writeJSON(w, http.StatusOK, result)
+	h.publishScheduleEvent(eventType, sc.ScheduleID, sc.JobID, jobName, sc.CronExpr)
 }

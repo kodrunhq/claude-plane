@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
@@ -29,11 +31,29 @@ type UserAdminStore interface {
 type UserHandler struct {
 	store     UserAdminStore
 	getClaims ClaimsGetter
+	publisher event.Publisher
 }
 
 // NewUserHandler creates a new UserHandler.
 func NewUserHandler(s UserAdminStore, getClaims ClaimsGetter) *UserHandler {
 	return &UserHandler{store: s, getClaims: getClaims}
+}
+
+// SetPublisher configures the event publisher for user lifecycle events.
+func (h *UserHandler) SetPublisher(p event.Publisher) {
+	h.publisher = p
+}
+
+// publishUserEvent fires a user lifecycle event if a publisher is configured.
+// Errors are logged but not propagated.
+func (h *UserHandler) publishUserEvent(eventType, userID, email string) {
+	if h.publisher == nil {
+		return
+	}
+	evt := event.NewUserEvent(eventType, userID, email)
+	if err := h.publisher.Publish(context.Background(), evt); err != nil {
+		slog.Warn("failed to publish user event", "type", eventType, "user_id", userID, "error", err)
+	}
 }
 
 // validateNewPassword checks that a new password meets minimum requirements.
@@ -160,9 +180,11 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Still return the partial record rather than failing entirely
 		writeJSON(w, http.StatusCreated, u)
+		h.publishUserEvent(event.TypeUserCreated, u.UserID, u.Email)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+	h.publishUserEvent(event.TypeUserCreated, created.UserID, created.Email)
 }
 
 // updateUserRequest is the JSON body for PUT /api/v1/users/{userID}.
@@ -411,6 +433,17 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch before deleting so the audit event has the email.
+	existing, err := h.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	if err := h.store.DeleteUser(r.Context(), userID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -419,5 +452,6 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	h.publishUserEvent(event.TypeUserDeleted, userID, existing.Email)
 	w.WriteHeader(http.StatusNoContent)
 }

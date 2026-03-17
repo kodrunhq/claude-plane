@@ -40,6 +40,29 @@ const (
 	// Run step events.
 	TypeJobRunStepCompleted = "run.step.completed"
 	TypeJobRunStepFailed    = "run.step.failed"
+
+	// Job lifecycle events.
+	TypeJobCreated = "job.created"
+	TypeJobUpdated = "job.updated"
+	TypeJobDeleted = "job.deleted"
+
+	// User lifecycle events.
+	TypeUserCreated = "user.created"
+	TypeUserDeleted = "user.deleted"
+
+	// Schedule lifecycle events.
+	TypeScheduleCreated = "schedule.created"
+	TypeSchedulePaused  = "schedule.paused"
+	TypeScheduleResumed = "schedule.resumed"
+	TypeScheduleDeleted = "schedule.deleted"
+
+	// Credential lifecycle events.
+	TypeCredentialCreated = "credential.created"
+	TypeCredentialDeleted = "credential.deleted"
+
+	// Webhook lifecycle events.
+	TypeWebhookCreated = "webhook.created"
+	TypeWebhookDeleted = "webhook.deleted"
 )
 
 // Event is the envelope for all bus messages.

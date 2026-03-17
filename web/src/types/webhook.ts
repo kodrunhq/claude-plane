@@ -19,6 +19,7 @@ export interface WebhookDelivery {
   response_code?: number;
   last_error?: string;
   next_retry_at?: string;
+  payload?: string;
   created_at: string;
   updated_at: string;
 }
@@ -39,19 +40,8 @@ export interface UpdateWebhookParams {
   enabled: boolean;
 }
 
-export const WEBHOOK_EVENTS = [
-  'run.created',
-  'run.started',
-  'run.completed',
-  'run.failed',
-  'run.cancelled',
-  'session.started',
-  'session.exited',
-  'machine.connected',
-  'machine.disconnected',
-  'trigger.cron',
-  'trigger.webhook',
-  'trigger.job_completed',
-] as const;
+import { ALL_EVENT_TYPES } from '../constants/eventTypes.ts';
 
-export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+export const WEBHOOK_EVENTS = ALL_EVENT_TYPES;
+
+export type WebhookEvent = (typeof ALL_EVENT_TYPES)[number];
