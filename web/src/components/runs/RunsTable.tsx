@@ -53,6 +53,7 @@ export function RunsTable({ runs, showJobName = false, compact = false, onRowCli
             }}
             tabIndex={0}
             role="row"
+            aria-label={`Open run ${run.run_id.slice(0, 8)}`}
             className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-border-primary/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
           >
             {!compact && (

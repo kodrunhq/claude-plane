@@ -208,6 +208,7 @@ export function JobsPage() {
                 }}
                 tabIndex={0}
                 role="row"
+                aria-label={`Open job ${job.name}`}
                 className="bg-bg-secondary hover:bg-bg-tertiary/50 cursor-pointer border-b border-border-primary/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent-primary"
               >
                 <td className="px-4 py-2">
