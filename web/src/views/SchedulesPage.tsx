@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Clock, Trash2, Pause, Play, AlertCircle, RefreshCw } from 'lucide-react';
+import { Clock, Trash2, Pause, Play, PlayCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import cronstrue from 'cronstrue';
-import { useAllSchedules, usePauseSchedule, useResumeSchedule, useDeleteSchedule } from '../hooks/useSchedules.ts';
+import { useAllSchedules, usePauseSchedule, useResumeSchedule, useDeleteSchedule, useTriggerSchedule } from '../hooks/useSchedules.ts';
 import { RefreshButton } from '../components/shared/RefreshButton.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
@@ -24,8 +24,20 @@ export function SchedulesPage() {
   const pauseSchedule = usePauseSchedule();
   const resumeSchedule = useResumeSchedule();
   const deleteSchedule = useDeleteSchedule();
+  const triggerSchedule = useTriggerSchedule();
 
   const [deleteTarget, setDeleteTarget] = useState<CronScheduleWithJob | null>(null);
+
+  function handleTrigger(schedule: CronScheduleWithJob) {
+    triggerSchedule.mutate(schedule.schedule_id, {
+      onSuccess: () => {
+        toast.success('Run triggered');
+      },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to trigger run');
+      },
+    });
+  }
 
   function handleToggleEnabled(schedule: CronScheduleWithJob) {
     const mutation = schedule.enabled ? pauseSchedule : resumeSchedule;
@@ -150,6 +162,15 @@ export function SchedulesPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => handleTrigger(schedule)}
+                        disabled={triggerSchedule.isPending}
+                        className="p-1.5 rounded text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
+                        title="Run now"
+                        aria-label="Run now"
+                      >
+                        <PlayCircle size={16} />
+                      </button>
                       <button
                         onClick={() => handleToggleEnabled(schedule)}
                         className="p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"

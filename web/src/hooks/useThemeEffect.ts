@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePreferences } from './usePreferences.ts';
 
 type ThemeSetting = 'light' | 'dark' | 'system';
@@ -13,26 +13,37 @@ type ThemeSetting = 'light' | 'dark' | 'system';
 export function useThemeEffect(): ThemeSetting {
   const { data: prefs } = usePreferences();
   const theme: ThemeSetting = prefs?.ui?.theme ?? 'system';
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
 
     function apply(effective: 'light' | 'dark') {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      root.classList.add('transition-colors', 'duration-200');
       if (effective === 'light') {
         root.setAttribute('data-theme', 'light');
       } else {
         root.removeAttribute('data-theme');
       }
+      timeoutRef.current = setTimeout(() => {
+        root.classList.remove('transition-colors', 'duration-200');
+        timeoutRef.current = null;
+      }, 300);
     }
 
     if (theme === 'light') {
       apply('light');
-      return;
+      return () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      };
     }
 
     if (theme === 'dark') {
       apply('dark');
-      return;
+      return () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      };
     }
 
     // "system" — use media query and listen for changes
@@ -44,7 +55,10 @@ export function useThemeEffect(): ThemeSetting {
     }
 
     mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
+    return () => {
+      mq.removeEventListener('change', onChange);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, [theme]);
 
   return theme;

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { AlertCircle, Play, RefreshCw } from 'lucide-react';
 import { useRuns } from '../hooks/useRuns.ts';
@@ -8,6 +8,8 @@ import { RunFilters } from '../components/runs/RunFilters.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
 import { RefreshButton } from '../components/shared/RefreshButton.tsx';
+import { Pagination } from '../components/shared/Pagination.tsx';
+import { usePagination } from '../hooks/usePagination.ts';
 import type { ListRunsParams } from '../types/job.ts';
 
 export function RunsPage() {
@@ -27,6 +29,10 @@ export function RunsPage() {
 
   const { data: runs, isLoading, isFetching, error, refetch } = useRuns(params);
   const { data: jobs } = useJobs();
+
+  const { paged: pagedRuns, page, pageSize, total, setPage, setPageSize } = usePagination(runs ?? []);
+
+  useEffect(() => { setPage(1); }, [selectedJobId, selectedStatus, selectedTriggerType, setPage]);
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -77,11 +83,20 @@ export function RunsPage() {
               description="Runs will appear here when jobs are triggered manually or by automation."
             />
           ) : (
-            <RunsTable
-              runs={runs ?? []}
-              showJobName={selectedJobId === 'all'}
-              onRowClick={(runId) => navigate(`/runs/${runId}`)}
-            />
+            <>
+              <RunsTable
+                runs={pagedRuns}
+                showJobName={selectedJobId === 'all'}
+                onRowClick={(runId) => navigate(`/runs/${runId}`)}
+              />
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
         </>
       )}

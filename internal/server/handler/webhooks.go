@@ -60,6 +60,7 @@ func RegisterWebhookRoutes(r chi.Router, h *WebhookHandler) {
 	r.Put("/api/v1/webhooks/{webhookID}", h.UpdateWebhook)
 	r.Delete("/api/v1/webhooks/{webhookID}", h.DeleteWebhook)
 	r.Get("/api/v1/webhooks/{webhookID}/deliveries", h.ListDeliveries)
+	r.Post("/api/v1/webhooks/{webhookID}/test", h.TestDelivery)
 }
 
 // createWebhookRequest is the JSON body for POST /api/v1/webhooks.
@@ -249,6 +250,38 @@ func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	h.publishWebhookEvent(event.TypeWebhookDeleted, id, existing.Name)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// TestDelivery handles POST /api/v1/webhooks/{webhookID}/test.
+// Publishes a synthetic webhook.test event so the existing WebhookDeliverer
+// picks it up and delivers it to the webhook's URL.
+func (h *WebhookHandler) TestDelivery(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "webhookID")
+
+	webhook, err := h.store.GetWebhook(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "webhook not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if h.publisher == nil {
+		writeError(w, http.StatusInternalServerError, "event publisher not configured")
+		return
+	}
+
+	evt := event.NewWebhookEvent(event.TypeWebhookTest, webhook.WebhookID, webhook.Name)
+	evt.Source = "test"
+	if err := h.publisher.Publish(r.Context(), evt); err != nil {
+		slog.Warn("failed to publish test webhook event", "webhook_id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to publish test event")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "test event published"})
 }
 
 // ListDeliveries handles GET /api/v1/webhooks/{webhookID}/deliveries.

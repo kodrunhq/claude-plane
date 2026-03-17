@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Timer } from 'lucide-react';
 import type { NodeProps, Node } from '@xyflow/react';
+import { useIsMobile } from '../../hooks/useMediaQuery.ts';
 
 export interface TaskNodeData {
   label: string;
@@ -37,15 +38,20 @@ export const TaskNode = memo(function TaskNode({ data }: NodeProps<TaskNodeType>
   const borderColor = statusBorderColors[status] ?? 'border-gray-600';
   const isSelected = data.selected;
   const delaySeconds = data.delaySeconds ?? 0;
+  const isMobile = useIsMobile();
+
+  const nodeWidth = isMobile ? 160 : 180;
+  const nodeHeight = isMobile ? 56 : 60;
+  const handleClass = isMobile ? '!bg-gray-400 !w-3 !h-3' : '!bg-gray-400 !w-2 !h-2';
 
   return (
     <div
       className={`px-3 py-2 rounded-lg border-2 bg-bg-secondary ${borderColor} ${
         isSelected ? 'ring-2 ring-accent-primary' : ''
       } relative`}
-      style={{ width: 180, height: 60 }}
+      style={{ width: nodeWidth, height: nodeHeight }}
     >
-      <Handle type="target" position={Position.Left} className="!bg-gray-400 !w-2 !h-2" />
+      <Handle type="target" position={Position.Left} className={handleClass} />
       <div className="flex items-center gap-2 h-full">
         <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${statusColors[status] ?? 'bg-gray-500'}`} />
         <div className="min-w-0 flex-1">
@@ -61,7 +67,7 @@ export const TaskNode = memo(function TaskNode({ data }: NodeProps<TaskNodeType>
           {delaySeconds}s
         </div>
       )}
-      <Handle type="source" position={Position.Right} className="!bg-gray-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Right} className={handleClass} />
     </div>
   );
 });

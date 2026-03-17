@@ -252,12 +252,35 @@ func (m *mockScheduleReloader) RemoveSchedule(scheduleID string) {
 	m.removed = append(m.removed, scheduleID)
 }
 
+// mockScheduleRunCreator records calls to CreateRun.
+type mockScheduleRunCreator struct {
+	runs []store.Run
+	err  error
+}
+
+func (m *mockScheduleRunCreator) CreateRun(_ context.Context, jobID string, triggerType string, _ map[string]string, _ ...string) (*store.Run, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	run := store.Run{
+		RunID:       uuid.New().String(),
+		JobID:       jobID,
+		Status:      "pending",
+		TriggerType: triggerType,
+		CreatedAt:   time.Now().UTC(),
+	}
+	m.runs = append(m.runs, run)
+	return &run, nil
+}
+
 // --- router helper ---
 
 type scheduleTestFixture struct {
 	schedStore *mockScheduleCRUDStore
 	jobStore   *mockJobStoreForSchedules
 	reloader   *mockScheduleReloader
+	runCreator *mockScheduleRunCreator
+	handler    *handler.ScheduleHandler
 	srv        *httptest.Server
 }
 
@@ -265,8 +288,10 @@ func newScheduleFixture() *scheduleTestFixture {
 	schedStore := newMockScheduleCRUDStore()
 	jobStore := newMockJobStoreForSchedules()
 	reloader := &mockScheduleReloader{}
+	runCreator := &mockScheduleRunCreator{}
 
 	h := handler.NewScheduleHandler(schedStore, jobStore, reloader, nil)
+	h.SetRunCreator(runCreator)
 
 	r := chi.NewRouter()
 	handler.RegisterScheduleRoutes(r, h)
@@ -275,6 +300,8 @@ func newScheduleFixture() *scheduleTestFixture {
 		schedStore: schedStore,
 		jobStore:   jobStore,
 		reloader:   reloader,
+		runCreator: runCreator,
+		handler:    h,
 		srv:        httptest.NewServer(r),
 	}
 }
@@ -941,6 +968,74 @@ func TestScheduleHandler_ListAllSchedules_StoreError(t *testing.T) {
 	resp, err := http.Get(fix.srv.URL + "/api/v1/schedules")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+// --- TriggerSchedule tests ---
+
+func TestScheduleHandler_TriggerSchedule(t *testing.T) {
+	fix := newScheduleFixture()
+	defer fix.close()
+
+	fix.addJob("job-1")
+	fix.addSchedule("sched-1", "job-1", "0 * * * *")
+
+	resp, err := http.Post(fix.srv.URL+"/api/v1/schedules/sched-1/trigger", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	var run store.Run
+	if err := json.NewDecoder(resp.Body).Decode(&run); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if run.JobID != "job-1" {
+		t.Errorf("JobID = %q, want %q", run.JobID, "job-1")
+	}
+	if run.TriggerType != "manual_schedule" {
+		t.Errorf("TriggerType = %q, want %q", run.TriggerType, "manual_schedule")
+	}
+	if len(fix.runCreator.runs) != 1 {
+		t.Errorf("expected 1 run created, got %d", len(fix.runCreator.runs))
+	}
+}
+
+func TestScheduleHandler_TriggerSchedule_NotFound(t *testing.T) {
+	fix := newScheduleFixture()
+	defer fix.close()
+
+	resp, err := http.Post(fix.srv.URL+"/api/v1/schedules/ghost/trigger", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestScheduleHandler_TriggerSchedule_RunCreatorError(t *testing.T) {
+	fix := newScheduleFixture()
+	defer fix.close()
+
+	fix.addJob("job-1")
+	fix.addSchedule("sched-1", "job-1", "0 * * * *")
+	fix.runCreator.err = fmt.Errorf("orchestrator error")
+
+	resp, err := http.Post(fix.srv.URL+"/api/v1/schedules/sched-1/trigger", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
 

@@ -54,6 +54,7 @@ export const CREDENTIAL_DELETED = 'credential.deleted';
 // Webhook lifecycle events.
 export const WEBHOOK_CREATED = 'webhook.created';
 export const WEBHOOK_DELETED = 'webhook.deleted';
+export const WEBHOOK_TEST = 'webhook.test';
 
 /** All known event types. Useful for exhaustive matching or filtering. */
 export const ALL_EVENT_TYPES = [
@@ -88,6 +89,7 @@ export const ALL_EVENT_TYPES = [
   CREDENTIAL_DELETED,
   WEBHOOK_CREATED,
   WEBHOOK_DELETED,
+  WEBHOOK_TEST,
 ] as const;
 
 type EventType = (typeof ALL_EVENT_TYPES)[number];
@@ -128,7 +130,7 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   },
   {
     label: 'Webhooks',
-    events: [WEBHOOK_CREATED, WEBHOOK_DELETED],
+    events: [WEBHOOK_CREATED, WEBHOOK_DELETED, WEBHOOK_TEST],
   },
   {
     label: 'Users',

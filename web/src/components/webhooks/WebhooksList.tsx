@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Pencil, Trash2, History } from 'lucide-react';
+import { Pencil, Trash2, History, Zap } from 'lucide-react';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
 import { formatTimeAgo, truncateId } from '../../lib/format.ts';
-import { useUpdateWebhook, useDeleteWebhook } from '../../hooks/useWebhooks.ts';
+import { useUpdateWebhook, useDeleteWebhook, useTestWebhookDelivery } from '../../hooks/useWebhooks.ts';
 import { toast } from 'sonner';
 import type { Webhook } from '../../types/webhook.ts';
 
@@ -21,6 +21,17 @@ interface WebhookRowProps {
 
 function WebhookRow({ webhook, onEdit, onViewDeliveries, onDeleteRequest }: WebhookRowProps) {
   const updateWebhook = useUpdateWebhook();
+  const testDelivery = useTestWebhookDelivery();
+
+  async function handleTestDelivery(e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      await testDelivery.mutateAsync(webhook.webhook_id);
+      toast.success('Test event sent');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send test event');
+    }
+  }
 
   async function handleToggleEnabled(e: React.MouseEvent) {
     e.stopPropagation();
@@ -91,6 +102,15 @@ function WebhookRow({ webhook, onEdit, onViewDeliveries, onDeleteRequest }: Webh
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1 justify-end">
+          <button
+            onClick={handleTestDelivery}
+            disabled={testDelivery.isPending}
+            className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-accent-primary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
+            title="Send test event"
+            aria-label="Send test event"
+          >
+            <Zap size={15} />
+          </button>
           <button
             onClick={() => onViewDeliveries(webhook)}
             className="p-2.5 md:p-1.5 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
