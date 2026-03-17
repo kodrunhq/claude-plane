@@ -28,4 +28,8 @@ export const schedulesApi = {
     request<CronSchedule>(`/schedules/${encodeURIComponent(id)}/resume`, {
       method: 'POST',
     }),
+  trigger: (id: string) =>
+    request<unknown>(`/schedules/${encodeURIComponent(id)}/trigger`, {
+      method: 'POST',
+    }),
 };

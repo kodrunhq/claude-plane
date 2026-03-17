@@ -64,6 +64,17 @@ export function usePauseSchedule() {
   });
 }
 
+export function useTriggerSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => schedulesApi.trigger(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['runs'] });
+      qc.invalidateQueries({ queryKey: ['schedules', 'all'] });
+    },
+  });
+}
+
 export function useResumeSchedule() {
   const qc = useQueryClient();
   return useMutation({

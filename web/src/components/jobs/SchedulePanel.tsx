@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, Pause, Play, Clock, Calendar, X, Save } from 'lucide-react';
+import { Plus, Trash2, Pause, Play, PlayCircle, Clock, Calendar, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import cronstrue from 'cronstrue';
 import { CronExpressionParser } from 'cron-parser';
@@ -10,6 +10,7 @@ import {
   useDeleteSchedule,
   usePauseSchedule,
   useResumeSchedule,
+  useTriggerSchedule,
 } from '../../hooks/useSchedules.ts';
 import type { CronSchedule, CreateScheduleParams } from '../../types/schedule.ts';
 
@@ -190,10 +191,12 @@ interface ScheduleRowProps {
   onResume: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (schedule: CronSchedule) => void;
+  onTrigger: (id: string) => void;
   isToggling: boolean;
+  isTriggering: boolean;
 }
 
-function ScheduleRow({ schedule, onPause, onResume, onDelete, onEdit, isToggling }: ScheduleRowProps) {
+function ScheduleRow({ schedule, onPause, onResume, onDelete, onEdit, onTrigger, isToggling, isTriggering }: ScheduleRowProps) {
   const description = useMemo(
     () => parseCronDescription(schedule.cron_expr),
     [schedule.cron_expr],
@@ -213,6 +216,14 @@ function ScheduleRow({ schedule, onPause, onResume, onDelete, onEdit, isToggling
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onTrigger(schedule.schedule_id)}
+            disabled={isTriggering}
+            className="p-1 text-text-secondary hover:text-accent-primary transition-colors disabled:opacity-40"
+            title="Run now"
+          >
+            <PlayCircle size={13} />
+          </button>
           <button
             onClick={() => onEdit(schedule)}
             className="p-1 text-text-secondary hover:text-text-primary transition-colors"
@@ -263,6 +274,7 @@ export function SchedulePanel({ jobId }: SchedulePanelProps) {
   const deleteSchedule = useDeleteSchedule();
   const pauseSchedule = usePauseSchedule();
   const resumeSchedule = useResumeSchedule();
+  const triggerSchedule = useTriggerSchedule();
 
   const [formMode, setFormMode] = useState<FormMode>('hidden');
 
@@ -314,6 +326,15 @@ export function SchedulePanel({ jobId }: SchedulePanelProps) {
     }
   }
 
+  async function handleTrigger(id: string) {
+    try {
+      await triggerSchedule.mutateAsync(id);
+      toast.success('Run triggered');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to trigger run');
+    }
+  }
+
   function handleEditClick(schedule: CronSchedule) {
     setFormMode({
       editId: schedule.schedule_id,
@@ -323,6 +344,7 @@ export function SchedulePanel({ jobId }: SchedulePanelProps) {
 
   const isSaving = createSchedule.isPending || updateSchedule.isPending;
   const isToggling = pauseSchedule.isPending || resumeSchedule.isPending;
+  const isTriggering = triggerSchedule.isPending;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
@@ -381,7 +403,9 @@ export function SchedulePanel({ jobId }: SchedulePanelProps) {
                 onResume={handleResume}
                 onDelete={handleDelete}
                 onEdit={handleEditClick}
+                onTrigger={handleTrigger}
                 isToggling={isToggling}
+                isTriggering={isTriggering}
               />
             ))}
           </div>
