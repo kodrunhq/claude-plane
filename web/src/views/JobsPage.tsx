@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Play, Trash2, AlertCircle, RefreshCw, Search, CopyPlus } from 'lucide-react';
 import { useJobs, useDeleteJob, useTriggerRun, useCloneJob } from '../hooks/useJobs.ts';
+import { useSortableTable } from '../hooks/useSortableTable.ts';
 import { formatTimeAgo } from '../lib/format.ts';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
 import { RefreshButton } from '../components/shared/RefreshButton.tsx';
 import { CopyableId } from '../components/shared/CopyableId.tsx';
+import { SortableHeader } from '../components/shared/SortableHeader.tsx';
 import { toast } from 'sonner';
 import type { Job } from '../types/job.ts';
 
@@ -74,6 +76,8 @@ export function JobsPage() {
       return matchesSearch && matchesStatus;
     });
   }, [jobs, searchQuery, statusFilter]);
+
+  const { sorted: sortedJobs, sort, dir, handleSort } = useSortableTable(filteredJobs, 'created_at', 'desc');
 
   async function handleRun(e: React.MouseEvent, jobId: string) {
     e.stopPropagation();
@@ -176,7 +180,7 @@ export function JobsPage() {
             </div>
           ))}
         </div>
-      ) : filteredJobs.length === 0 ? (
+      ) : sortedJobs.length === 0 ? (
         <EmptyState
           title={jobs && jobs.length > 0 ? 'No matching jobs' : 'No jobs yet'}
           description={jobs && jobs.length > 0 ? 'Try adjusting your search or filters.' : 'Create your first job to get started.'}
@@ -185,18 +189,18 @@ export function JobsPage() {
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-text-secondary border-b border-border-primary">
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Tasks</th>
-              <th className="px-4 py-2 hidden md:table-cell">Machine</th>
-              <th className="px-4 py-2 hidden md:table-cell">Trigger</th>
-              <th className="px-4 py-2 hidden md:table-cell">Created</th>
+            <tr className="text-left border-b border-border-primary">
+              <SortableHeader label="Name" sortKey="name" currentSort={sort} currentDirection={dir} onSort={handleSort} />
+              <th className="px-4 py-2 text-xs text-text-secondary">Status</th>
+              <SortableHeader label="Tasks" sortKey="step_count" currentSort={sort} currentDirection={dir} onSort={handleSort} />
+              <th className="px-4 py-2 text-xs text-text-secondary hidden md:table-cell">Machine</th>
+              <th className="px-4 py-2 text-xs text-text-secondary hidden md:table-cell">Trigger</th>
+              <SortableHeader label="Created" sortKey="created_at" currentSort={sort} currentDirection={dir} onSort={handleSort} />
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {filteredJobs.map((job: Job) => (
+            {sortedJobs.map((job: Job) => (
               <tr
                 key={job.job_id}
                 onClick={() => navigate(`/jobs/${job.job_id}`)}
