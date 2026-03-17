@@ -10,15 +10,15 @@ interface RunNowModalProps {
   onClose: () => void;
 }
 
-export function RunNowModal({ defaultParameters, steps = [], onRun, onClose }: RunNowModalProps) {
+export function RunNowModal({ defaultParameters, steps, onRun, onClose }: RunNowModalProps) {
   const [overrides, setOverrides] = useState<Record<string, string>>({ ...defaultParameters });
 
   const entries = Object.entries(overrides);
   const hasParams = entries.length > 0;
 
-  const hasEmptyPrompt = steps.some(
+  const hasEmptyPrompt = steps?.some(
     (s) => (!s.task_type || s.task_type === 'claude') && !s.prompt?.trim(),
-  );
+  ) ?? false;
 
   function handleValueChange(key: string, value: string) {
     setOverrides({ ...overrides, [key]: value });
@@ -26,7 +26,7 @@ export function RunNowModal({ defaultParameters, steps = [], onRun, onClose }: R
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (steps.length === 0) {
+    if (steps && steps.length === 0) {
       toast.error('Add at least one task before running');
       return;
     }

@@ -98,7 +98,8 @@ export function CommandPalette() {
       }
     }
 
-    const sessions = queryClient.getQueryData<Session[]>(['sessions', undefined]);
+    const sessionsEntries = queryClient.getQueriesData<Session[]>({ queryKey: ['sessions'] });
+    const sessions = sessionsEntries.flatMap(([, data]) => data ?? []);
     if (sessions) {
       for (const session of sessions) {
         results.push({
@@ -124,7 +125,8 @@ export function CommandPalette() {
       }
     }
 
-    const templates = queryClient.getQueryData<SessionTemplate[]>(['templates', undefined]);
+    const templateEntries = queryClient.getQueriesData<SessionTemplate[]>({ queryKey: ['templates'] });
+    const templates = templateEntries.flatMap(([, data]) => data ?? []);
     if (templates) {
       for (const template of templates) {
         results.push({
