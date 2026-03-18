@@ -32,7 +32,7 @@ func (n *noopSubscriber) Subscribe(_ string, _ event.HandlerFunc, _ event.Subscr
 // mockMachineStore implements connmgr.MachineStore for tests.
 type mockMachineStore struct{}
 
-func (m *mockMachineStore) UpsertMachine(string, int32) error                   { return nil }
+func (m *mockMachineStore) UpsertMachine(string, int32, string) error            { return nil }
 func (m *mockMachineStore) UpdateMachineStatus(string, string, time.Time) error { return nil }
 
 // commandRecorder records commands sent to a mock agent.
@@ -92,7 +92,7 @@ func TestCreateSession(t *testing.T) {
 	_, cm, recorder, st, router := setupTestHandler(t)
 
 	// Register a connected agent with machine
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -149,7 +149,7 @@ func TestCreateSessionMachineNotConnected(t *testing.T) {
 func TestListSessions(t *testing.T) {
 	_, cm, recorder, st, router := setupTestHandler(t)
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -193,7 +193,7 @@ func TestListSessions(t *testing.T) {
 func TestTerminateSession(t *testing.T) {
 	_, cm, recorder, st, router := setupTestHandler(t)
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -279,7 +279,7 @@ func TestGetSession_AuthorizationNonOwner(t *testing.T) {
 	createTestUser(t, st, "user-other")
 
 	// Register agent
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -342,7 +342,7 @@ func TestGetSession_AdminCanAccessAny(t *testing.T) {
 
 	createTestUser(t, st, "user-owner")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -396,7 +396,7 @@ func TestListSessions_FiltersByOwnership(t *testing.T) {
 	createTestUser(t, st, "user-a")
 	createTestUser(t, st, "user-b")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -489,7 +489,7 @@ func setupTemplateTestEnv(t *testing.T, userID string) (
 	reg := session.NewRegistry(slog.Default())
 	recorder := &commandRecorder{}
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -808,7 +808,7 @@ func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
 
 	createTestUser(t, st, "user-owner")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -873,7 +873,7 @@ func setupInjectTestEnv(t *testing.T) (chi.Router, *store.Store, string) {
 
 	createTestUser(t, st, "inject-user")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -1044,7 +1044,7 @@ func TestInjectSession_NonOwnerReturns404(t *testing.T) {
 	createTestUser(t, st, "owner-user")
 	createTestUser(t, st, "other-user")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -1143,7 +1143,7 @@ func TestGetSessionStats_Default24h(t *testing.T) {
 	router, st := setupStatsTestHandler(t, getClaims)
 
 	// Create a few sessions with different statuses
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	for _, s := range []struct {
@@ -1240,7 +1240,7 @@ func setupModelTestEnv(t *testing.T) (chi.Router, *commandRecorder, *store.Store
 	reg := session.NewRegistry(slog.Default())
 	recorder := &commandRecorder{}
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{

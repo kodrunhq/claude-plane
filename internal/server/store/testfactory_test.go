@@ -69,7 +69,7 @@ func mustCreateMachine(t *testing.T, s *Store, opts ...MachineOption) string {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	if err := s.UpsertMachine(cfg.MachineID, cfg.MaxSessions); err != nil {
+	if err := s.UpsertMachine(cfg.MachineID, cfg.MaxSessions, ""); err != nil {
 		t.Fatalf("mustCreateMachine: %v", err)
 	}
 	return cfg.MachineID

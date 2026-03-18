@@ -58,7 +58,7 @@ func setupWSTest(t *testing.T) (*httptest.Server, *session.Registry, *commandRec
 	}
 
 	// Create machine and session
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	cm.Register("machine-a", &connmgr.ConnectedAgent{

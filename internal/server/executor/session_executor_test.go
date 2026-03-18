@@ -151,7 +151,7 @@ func registerMockAgent(t *testing.T, cm *connmgr.ConnectionManager, machineID st
 // mockMachineStore satisfies connmgr.MachineStore for test setup.
 type mockMachineStore struct{}
 
-func (mockMachineStore) UpsertMachine(string, int32) error                   { return nil }
+func (mockMachineStore) UpsertMachine(string, int32, string) error            { return nil }
 func (mockMachineStore) UpdateMachineStatus(string, string, time.Time) error { return nil }
 
 func newTestConnMgr() *connmgr.ConnectionManager {

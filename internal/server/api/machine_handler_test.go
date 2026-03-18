@@ -124,7 +124,7 @@ func TestUpdateMachine_HappyPath(t *testing.T) {
 	token := registerAndLoginAdmin(t, env, "admin-happy@example.com", "password123", "Admin User")
 
 	// Seed a machine in the store.
-	if err := env.Store.UpsertMachine("test-machine-1", 5); err != nil {
+	if err := env.Store.UpsertMachine("test-machine-1", 5, ""); err != nil {
 		t.Fatalf("seed machine: %v", err)
 	}
 
@@ -237,7 +237,7 @@ func TestDeleteMachine_Disconnected(t *testing.T) {
 	env := setupTestAPIWithStore(t)
 	token := registerAndLoginAdmin(t, env, "admin-del@example.com", "password123", "Admin User")
 
-	if err := env.Store.UpsertMachine("del-machine", 5); err != nil {
+	if err := env.Store.UpsertMachine("del-machine", 5, ""); err != nil {
 		t.Fatalf("seed machine: %v", err)
 	}
 
@@ -274,7 +274,7 @@ func TestDeleteMachine_ForbiddenForNonAdmin(t *testing.T) {
 	resp.Body.Close()
 	token := loginUser(t, env.Server, "regular-del@example.com", "password123")
 
-	if err := env.Store.UpsertMachine("del-machine-2", 5); err != nil {
+	if err := env.Store.UpsertMachine("del-machine-2", 5, ""); err != nil {
 		t.Fatalf("seed machine: %v", err)
 	}
 

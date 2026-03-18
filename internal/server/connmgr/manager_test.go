@@ -20,6 +20,7 @@ type mockStore struct {
 type upsertCall struct {
 	MachineID   string
 	MaxSessions int32
+	HomeDir     string
 }
 
 type statusCall struct {
@@ -28,10 +29,10 @@ type statusCall struct {
 	LastSeenAt time.Time
 }
 
-func (m *mockStore) UpsertMachine(machineID string, maxSessions int32) error {
+func (m *mockStore) UpsertMachine(machineID string, maxSessions int32, homeDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.upserts = append(m.upserts, upsertCall{machineID, maxSessions})
+	m.upserts = append(m.upserts, upsertCall{machineID, maxSessions, homeDir})
 	return nil
 }
 
@@ -206,7 +207,7 @@ type failingMockStore struct {
 	failAfter int
 }
 
-func (m *failingMockStore) UpsertMachine(machineID string, maxSessions int32) error {
+func (m *failingMockStore) UpsertMachine(machineID string, maxSessions int32, homeDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.callCount++

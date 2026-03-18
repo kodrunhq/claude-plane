@@ -159,7 +159,7 @@ func newTestConnMgr(t *testing.T, machineID string, captured *capturedCommand) *
 
 type noopMachineStore struct{}
 
-func (n *noopMachineStore) UpsertMachine(_ string, _ int32) error                        { return nil }
+func (n *noopMachineStore) UpsertMachine(_ string, _ int32, _ string) error               { return nil }
 func (n *noopMachineStore) UpdateMachineStatus(_ string, _ string, _ time.Time) error     { return nil }
 
 func newRunningSessionStore(sessionID, machineID string) *mockSessionStore {
