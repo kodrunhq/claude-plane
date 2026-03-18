@@ -183,7 +183,10 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
                 onSelect={(template) => {
                   setSelectedTemplate(template);
                   setVariables({});
-                  if (template.working_dir) setWorkingDir(template.working_dir);
+                  if (template.working_dir) {
+                    setWorkingDir(template.working_dir);
+                    setWorkingDirDirty(true);
+                  }
                 }}
               />
               {selectedTemplate && (
@@ -251,7 +254,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
                   type="text"
                   value={additionalArgs}
                   onChange={(e) => setAdditionalArgs(e.target.value)}
-                  placeholder="--resume abc123, --verbose, etc."
+                  placeholder="--resume abc123 --verbose"
                   className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
                 />
                 <p className="text-xs text-text-secondary/50 mt-1">Extra CLI flags passed to claude</p>

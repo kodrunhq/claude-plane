@@ -42,11 +42,22 @@ export function DirectoryBrowserModal({
 
   useEffect(() => {
     if (open) {
-      void fetchEntries(currentPath);
+      const path = initialPath ?? '/';
+      setCurrentPath(path);
+      void fetchEntries(path);
     }
-    // Only fetch on open or when navigating (currentPath changes handled by navigate)
+    // Reset and fetch when modal opens
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, initialPath]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
 
   function navigateTo(path: string) {
     setCurrentPath(path);

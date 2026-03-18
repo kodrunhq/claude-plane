@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,8 +18,25 @@ func newTestClient() *AgentClient {
 	}
 }
 
+// homeTempDir creates a temporary directory under the user's home directory
+// so it passes the home-directory path restriction. The caller must remove it
+// via t.Cleanup.
+func homeTempDir(t *testing.T) string {
+	t.Helper()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("get home dir: %v", err)
+	}
+	dir, err := os.MkdirTemp(homeDir, "claude-plane-test-*")
+	if err != nil {
+		t.Fatalf("create temp dir under home: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
 func TestHandleListDirectory_ValidPath(t *testing.T) {
-	tmpDir := t.TempDir()
+	tmpDir := homeTempDir(t)
 
 	// Create known contents.
 	if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0o755); err != nil {
@@ -68,8 +86,8 @@ func TestHandleListDirectory_ValidPath(t *testing.T) {
 		if nameMap["file.txt"] != "file" {
 			t.Errorf("expected file.txt to be type file, got %s", nameMap["file.txt"])
 		}
-		if nameMap["subdir"] != "directory" {
-			t.Errorf("expected subdir to be type directory, got %s", nameMap["subdir"])
+		if nameMap["subdir"] != "dir" {
+			t.Errorf("expected subdir to be type dir, got %s", nameMap["subdir"])
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for directory listing event")
@@ -77,12 +95,17 @@ func TestHandleListDirectory_ValidPath(t *testing.T) {
 }
 
 func TestHandleListDirectory_InvalidPath(t *testing.T) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("get home dir: %v", err)
+	}
+
 	c := newTestClient()
 	sendCh := make(chan *pb.AgentEvent, 4)
 
 	cmd := &pb.ListDirectoryCmd{
 		RequestId: "test-req-2",
-		Path:      "/nonexistent/path/that/does/not/exist",
+		Path:      filepath.Join(homeDir, "nonexistent-path-that-does-not-exist"),
 	}
 
 	c.handleListDirectory(cmd, sendCh)
@@ -126,6 +149,37 @@ func TestHandleListDirectory_RelativePath(t *testing.T) {
 		}
 		if dl.GetError() == "" {
 			t.Error("expected error for relative path, got empty string")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for error event")
+	}
+}
+
+func TestHandleListDirectory_OutsideHomeDir(t *testing.T) {
+	c := newTestClient()
+	sendCh := make(chan *pb.AgentEvent, 4)
+
+	cmd := &pb.ListDirectoryCmd{
+		RequestId: "test-req-4",
+		Path:      "/etc",
+	}
+
+	c.handleListDirectory(cmd, sendCh)
+
+	select {
+	case evt := <-sendCh:
+		dl := evt.GetDirectoryListing()
+		if dl == nil {
+			t.Fatal("expected DirectoryListingEvent, got nil")
+		}
+		if dl.GetRequestId() != "test-req-4" {
+			t.Errorf("expected request ID test-req-4, got %s", dl.GetRequestId())
+		}
+		if dl.GetError() == "" {
+			t.Error("expected error for path outside home dir, got empty string")
+		}
+		if !strings.Contains(dl.GetError(), "path outside allowed directory") {
+			t.Errorf("expected 'path outside allowed directory' error, got %s", dl.GetError())
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for error event")

@@ -10,17 +10,17 @@ import (
 
 func TestBroker_RegisterAndResolve(t *testing.T) {
 	b := broker.New()
-	ch := b.Register("req-1")
+	ch := b.Register("req-1", "machine-a")
 
 	evt := &pb.DirectoryListingEvent{
 		RequestId: "req-1",
 		Path:      "/home",
 		Entries: []*pb.DirectoryEntry{
-			{Name: "user", Type: "directory"},
+			{Name: "user", Type: "dir"},
 		},
 	}
 
-	b.Resolve("req-1", evt)
+	b.Resolve("req-1", "machine-a", evt)
 
 	select {
 	case got := <-ch:
@@ -38,15 +38,35 @@ func TestBroker_RegisterAndResolve(t *testing.T) {
 	}
 }
 
+func TestBroker_ResolveMachineIDMismatch(t *testing.T) {
+	b := broker.New()
+	ch := b.Register("req-mismatch", "machine-a")
+
+	evt := &pb.DirectoryListingEvent{RequestId: "req-mismatch", Path: "/tmp"}
+
+	// Resolve from a different machine — should be a no-op.
+	b.Resolve("req-mismatch", "machine-b", evt)
+
+	select {
+	case <-ch:
+		t.Fatal("expected no delivery when machineID mismatches")
+	case <-time.After(50 * time.Millisecond):
+		// Expected: not delivered.
+	}
+
+	// Clean up.
+	b.Cancel("req-mismatch")
+}
+
 func TestBroker_Cancel(t *testing.T) {
 	b := broker.New()
-	_ = b.Register("req-cancel")
+	_ = b.Register("req-cancel", "machine-a")
 
 	b.Cancel("req-cancel")
 
 	// Resolve after cancel should not panic and should be a no-op.
 	evt := &pb.DirectoryListingEvent{RequestId: "req-cancel", Path: "/tmp"}
-	b.Resolve("req-cancel", evt)
+	b.Resolve("req-cancel", "machine-a", evt)
 }
 
 func TestBroker_ResolveUnknown(t *testing.T) {
@@ -54,12 +74,12 @@ func TestBroker_ResolveUnknown(t *testing.T) {
 
 	// Resolving a request ID that was never registered should not panic.
 	evt := &pb.DirectoryListingEvent{RequestId: "unknown", Path: "/tmp"}
-	b.Resolve("unknown", evt)
+	b.Resolve("unknown", "machine-x", evt)
 }
 
 func TestBroker_Timeout(t *testing.T) {
 	b := broker.New()
-	ch := b.Register("req-timeout")
+	ch := b.Register("req-timeout", "machine-a")
 
 	// Simulate a timeout — nobody calls Resolve.
 	select {

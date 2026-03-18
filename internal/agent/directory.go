@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
@@ -24,6 +25,15 @@ func (c *AgentClient) handleListDirectory(cmd *pb.ListDirectoryCmd, sendCh chan<
 		return
 	}
 
+	// Restrict browsing to the user's home directory.
+	homeDir, _ := os.UserHomeDir()
+	if homeDir != "" {
+		if !strings.HasPrefix(dirPath, homeDir+"/") && dirPath != homeDir {
+			c.sendDirectoryError(sendCh, requestID, dirPath, "path outside allowed directory")
+			return
+		}
+	}
+
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		c.sendDirectoryError(sendCh, requestID, dirPath, fmt.Sprintf("read directory: %v", err))
@@ -39,7 +49,7 @@ func (c *AgentClient) handleListDirectory(cmd *pb.ListDirectoryCmd, sendCh chan<
 	for _, e := range entries {
 		entryType := "file"
 		if e.IsDir() {
-			entryType = "directory"
+			entryType = "dir"
 		} else if e.Type()&os.ModeSymlink != 0 {
 			entryType = "symlink"
 		}

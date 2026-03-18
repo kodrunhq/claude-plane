@@ -522,7 +522,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 
 			// Handle directory listing responses — deliver to waiting broker callers.
 			if dl := res.event.GetDirectoryListing(); dl != nil {
-				s.broker.Resolve(dl.GetRequestId(), dl)
+				s.broker.Resolve(dl.GetRequestId(), machineID, dl)
 			}
 
 			// Handle agent log batches — insert into the logs database.

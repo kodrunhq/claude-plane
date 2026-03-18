@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -200,6 +201,12 @@ type browseDirectoryEntry struct {
 // It sends a ListDirectoryCmd to the agent via gRPC and waits for the response
 // with a 10-second timeout.
 func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
 	machineID := chi.URLParam(r, "machineID")
 
 	agent := h.connMgr.GetAgent(machineID)
@@ -219,7 +226,7 @@ func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestID := uuid.New().String()
-	ch := h.broker.Register(requestID)
+	ch := h.broker.Register(requestID, machineID)
 
 	cmd := &pb.ServerCommand{
 		Command: &pb.ServerCommand_ListDirectory{
@@ -239,7 +246,8 @@ func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 	select {
 	case evt := <-ch:
 		if errMsg := evt.GetError(); errMsg != "" {
-			writeError(w, http.StatusBadRequest, errMsg)
+			slog.Warn("agent directory browse error", "machine_id", machineID, "path", dirPath, "error", errMsg)
+			writeError(w, http.StatusBadRequest, "directory not accessible")
 			return
 		}
 		entries := make([]browseDirectoryEntry, 0, len(evt.GetEntries()))
