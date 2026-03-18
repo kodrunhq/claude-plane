@@ -15,6 +15,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
+	"github.com/kodrunhq/claude-plane/internal/server/logging"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"github.com/kodrunhq/claude-plane/internal/shared/status"
@@ -75,6 +76,7 @@ type agentService struct {
 	taskValueStore  TaskValueStore
 	stepIdleHandler StepIdleHandler
 	cleanupStore    cleanupStore
+	logStore        *logging.LogStore
 	ingestor        *ingest.ContentIngestor
 	logger          *slog.Logger
 }
@@ -161,6 +163,11 @@ func (s *GRPCServer) SetEventPublisher(p event.Publisher) {
 // SetContentIngestor sets the content ingestor for search indexing.
 func (s *GRPCServer) SetContentIngestor(ci *ingest.ContentIngestor) {
 	s.agentSvc.ingestor = ci
+}
+
+// SetLogStore sets the log store for persisting agent log batches.
+func (s *GRPCServer) SetLogStore(ls *logging.LogStore) {
+	s.agentSvc.logStore = ls
 }
 
 // Serve starts the gRPC server on the given listener.
@@ -490,6 +497,29 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			if si := res.event.GetStepIdle(); si != nil {
 				if s.stepIdleHandler != nil {
 					s.stepIdleHandler.OnStepIdle(si.GetSessionId())
+				}
+			}
+
+			// Handle agent log batches — insert into the logs database.
+			if lb := res.event.GetLogBatch(); lb != nil {
+				if s.logStore != nil {
+					records := make([]logging.LogRecord, len(lb.GetEntries()))
+					for i, e := range lb.GetEntries() {
+						ts, _ := time.Parse(time.RFC3339Nano, e.GetTimestamp())
+						records[i] = logging.LogRecord{
+							Timestamp: ts,
+							Level:     e.GetLevel(),
+							Component: e.GetComponent(),
+							Message:   e.GetMessage(),
+							MachineID: machineID,
+							SessionID: e.GetSessionId(),
+							Error:     e.GetError(),
+							Source:    "agent",
+						}
+					}
+					if err := s.logStore.InsertBatch(records); err != nil {
+						s.logger.Warn("failed to insert agent logs", "error", err, "machine_id", machineID)
+					}
 				}
 			}
 		}

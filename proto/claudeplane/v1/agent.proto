@@ -121,6 +121,7 @@ message AgentEvent {
     SessionExitEvent session_exit = 5;
     TaskValuesEvent task_values = 6;
     StepIdleEvent step_idle = 7;
+    LogBatch log_batch = 8;
   }
 }
 
@@ -168,4 +169,18 @@ message ScrollbackChunkEvent {
   bool is_final = 3;
   int64 total_bytes = 4;
   int64 offset = 5;
+}
+
+message LogBatch {
+  repeated LogEntry entries = 1;
+}
+
+message LogEntry {
+  string timestamp = 1;
+  string level = 2;
+  string component = 3;
+  string message = 4;
+  string session_id = 5;
+  string error = 6;
+  map<string, string> attrs = 7;
 }

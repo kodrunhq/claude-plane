@@ -156,6 +156,7 @@ func newServeCmd() *cobra.Command {
 			grpcSrv.SetTaskValueStore(s)
 			grpcSrv.SetContentIngestor(contentIngestor)
 			grpcSrv.SetCleanupStore(s)
+			grpcSrv.SetLogStore(logStore)
 
 			grpcLis, err := net.Listen("tcp", cfg.GRPC.Listen)
 			if err != nil {
