@@ -42,7 +42,7 @@ func setupTestAPIWithStore(t *testing.T) *testAPIEnv {
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
 
-	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
+	handlers := api.NewHandlers(s, authSvc, cm, nil, "open", "")
 	router := api.NewRouter(api.RouterDeps{Handlers: handlers})
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)

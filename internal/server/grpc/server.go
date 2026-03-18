@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kodrunhq/claude-plane/internal/server/broker"
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
@@ -79,6 +80,7 @@ type agentService struct {
 	logStore        *logging.LogStore
 	logBroadcaster  *logging.LogBroadcaster
 	ingestor        *ingest.ContentIngestor
+	broker          *broker.RequestBroker
 	logger          *slog.Logger
 }
 
@@ -110,6 +112,7 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 	svc := &agentService{
 		streams:      streams,
 		agentConnMgr: agentConnMgr,
+		broker:       broker.New(),
 		logger:       logger,
 	}
 	pb.RegisterAgentServiceServer(srv, svc)
@@ -194,6 +197,12 @@ func (s *GRPCServer) StreamRegistry() *StreamRegistry {
 // used for agent status tracking.
 func (s *GRPCServer) AgentConnectionManager() *connmgr.ConnectionManager {
 	return s.agentConnMgr
+}
+
+// Broker returns the request broker used for correlating directory listing
+// request-response pairs over gRPC streams.
+func (s *GRPCServer) Broker() *broker.RequestBroker {
+	return s.agentSvc.broker
 }
 
 // Register handles an agent registration request.
@@ -509,6 +518,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				if s.stepIdleHandler != nil {
 					s.stepIdleHandler.OnStepIdle(si.GetSessionId())
 				}
+			}
+
+			// Handle directory listing responses — deliver to waiting broker callers.
+			if dl := res.event.GetDirectoryListing(); dl != nil {
+				s.broker.Resolve(dl.GetRequestId(), dl)
 			}
 
 			// Handle agent log batches — insert into the logs database.

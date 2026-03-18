@@ -81,7 +81,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	userHandler := handler.NewUserHandler(s, handlerClaimsGetter)
 
 	// Core router (auth endpoints, machines, sessions)
-	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
+	handlers := api.NewHandlers(s, authSvc, cm, nil, "open", "")
 	router := api.NewRouter(api.RouterDeps{
 		Handlers:       handlers,
 		SessionHandler: sessionHandler,

@@ -429,7 +429,7 @@ func newServeCmd() *cobra.Command {
 			bridgeHandler := handler.NewBridgeHandler(s, handlerClaimsGetter, encryptionKey)
 
 			// HTTP router
-			handlers := api.NewHandlers(s, authSvc, connMgr, cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
+			handlers := api.NewHandlers(s, authSvc, connMgr, grpcSrv.Broker(), cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
 			var shutdownHooks []func()
 			router := api.NewRouter(api.RouterDeps{
 				Handlers:           handlers,

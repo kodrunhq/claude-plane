@@ -54,9 +54,9 @@ internal/server/agentdl/binaries/*
 claude-plane-server
 claude-plane-agent
 claude-plane-bridge
-server
-agent
-bridge
+/server
+/agent
+/bridge
 
 # Node modules
 node_modules/

@@ -28,7 +28,7 @@ func TestRequestBodySizeLimit(t *testing.T) {
 
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
-	h := api.NewHandlers(s, authSvc, cm, "open", "")
+	h := api.NewHandlers(s, authSvc, cm, nil, "open", "")
 	router := api.NewRouter(api.RouterDeps{Handlers: h})
 
 	// 2MB body — should exceed 1MB limit
