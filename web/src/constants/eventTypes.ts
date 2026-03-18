@@ -13,10 +13,12 @@ export const RUN_CANCELLED = 'run.cancelled';
 export const SESSION_STARTED = 'session.started';
 export const SESSION_EXITED = 'session.exited';
 export const SESSION_TERMINATED = 'session.terminated';
+export const SESSION_DISPATCH_FAILED = 'session.dispatch_failed';
 
 // Machine connectivity events.
 export const MACHINE_CONNECTED = 'machine.connected';
 export const MACHINE_DISCONNECTED = 'machine.disconnected';
+export const MACHINE_STALE = 'machine.stale';
 
 // Trigger events.
 export const TRIGGER_CRON = 'trigger.cron';
@@ -69,8 +71,10 @@ export const ALL_EVENT_TYPES = [
   SESSION_STARTED,
   SESSION_EXITED,
   SESSION_TERMINATED,
+  SESSION_DISPATCH_FAILED,
   MACHINE_CONNECTED,
   MACHINE_DISCONNECTED,
+  MACHINE_STALE,
   TRIGGER_CRON,
   TRIGGER_WEBHOOK,
   TRIGGER_JOB_COMPLETED,
@@ -110,11 +114,11 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   },
   {
     label: 'Sessions',
-    events: [SESSION_STARTED, SESSION_EXITED, SESSION_TERMINATED],
+    events: [SESSION_STARTED, SESSION_EXITED, SESSION_TERMINATED, SESSION_DISPATCH_FAILED],
   },
   {
     label: 'Machines',
-    events: [MACHINE_CONNECTED, MACHINE_DISCONNECTED],
+    events: [MACHINE_CONNECTED, MACHINE_DISCONNECTED, MACHINE_STALE],
   },
   {
     label: 'Jobs',

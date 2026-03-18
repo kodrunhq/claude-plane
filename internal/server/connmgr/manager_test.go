@@ -339,6 +339,34 @@ func TestDisconnectIfMatch_NotRegistered(t *testing.T) {
 	}
 }
 
+func TestStartHealthCheck_RemovesStaleAgent(t *testing.T) {
+	cm, _ := newTestManager()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately — simulates dead transport
+
+	agent := &ConnectedAgent{
+		MachineID:    "stale-worker",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       func() {},
+		Ctx:          ctx,
+	}
+	cm.mu.Lock()
+	cm.agents["stale-worker"] = agent
+	cm.mu.Unlock()
+
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	cm.StartHealthCheck(healthCtx, 50*time.Millisecond)
+
+	time.Sleep(200 * time.Millisecond)
+
+	if got := cm.GetAgent("stale-worker"); got != nil {
+		t.Fatal("expected stale agent to be removed by health check")
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	cm, _ := newTestManager()
 

@@ -206,6 +206,55 @@ func (cm *ConnectionManager) DisconnectIfMatch(machineID string, agent *Connecte
 	return true
 }
 
+// StartHealthCheck begins a periodic sweep that detects and removes agents
+// whose stream context has been cancelled (dead transport).
+func (cm *ConnectionManager) StartHealthCheck(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				cm.sweepStaleAgents()
+			}
+		}
+	}()
+}
+
+// sweepStaleAgents checks all registered agents and removes any whose
+// stream context is done (transport died). Publishes TypeMachineStale
+// instead of TypeMachineDisconnected to distinguish proactive cleanup.
+func (cm *ConnectionManager) sweepStaleAgents() {
+	cm.mu.RLock()
+	var stale []*ConnectedAgent
+	for _, agent := range cm.agents {
+		if agent.Ctx != nil && agent.Ctx.Err() != nil {
+			stale = append(stale, agent)
+		}
+	}
+	cm.mu.RUnlock()
+
+	for _, agent := range stale {
+		cm.mu.Lock()
+		current, exists := cm.agents[agent.MachineID]
+		if !exists || current != agent {
+			cm.mu.Unlock()
+			continue
+		}
+		delete(cm.agents, agent.MachineID)
+		cm.mu.Unlock()
+
+		if err := cm.store.UpdateMachineStatus(agent.MachineID, "disconnected", time.Now()); err != nil {
+			cm.logger.Error("failed to update stale agent status", "machine_id", agent.MachineID, "error", err)
+		}
+
+		cm.logger.Warn("removed stale agent (dead transport)", "machine_id", agent.MachineID)
+		cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineStale, agent.MachineID, cm.machineDisplayName(agent.MachineID)))
+	}
+}
+
 // GetAgent returns the ConnectedAgent for the given machineID, or nil if not connected.
 func (cm *ConnectionManager) GetAgent(machineID string) *ConnectedAgent {
 	cm.mu.RLock()

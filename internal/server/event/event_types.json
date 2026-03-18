@@ -32,12 +32,20 @@
     "value": "session.terminated"
   },
   {
+    "name": "TypeSessionDispatchFailed",
+    "value": "session.dispatch_failed"
+  },
+  {
     "name": "TypeMachineConnected",
     "value": "machine.connected"
   },
   {
     "name": "TypeMachineDisconnected",
     "value": "machine.disconnected"
+  },
+  {
+    "name": "TypeMachineStale",
+    "value": "machine.stale"
   },
   {
     "name": "TypeTriggerCron",

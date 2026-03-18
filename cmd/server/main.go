@@ -119,6 +119,7 @@ func newServeCmd() *cobra.Command {
 
 			// Connection manager and session registry
 			connMgr := connmgr.NewConnectionManager(s, slog.Default())
+			connMgr.StartHealthCheck(ctx, 30*time.Second)
 			registry := session.NewRegistry(slog.Default())
 
 			// Content ingestor for search indexing
