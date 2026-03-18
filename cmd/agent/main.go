@@ -27,6 +27,7 @@ func main() {
 	rootCmd.AddCommand(
 		newRunCmd(),
 		newJoinCmd(),
+		newInstallServiceCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -136,6 +137,8 @@ func newJoinCmd() *cobra.Command {
 			fmt.Printf("Config written to %s\n\n", configPath)
 			fmt.Printf("Start the agent:\n")
 			fmt.Printf("  claude-plane-agent run --config %s\n\n", configPath)
+			fmt.Printf("Install as a background service (recommended):\n")
+			fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
 			return nil
 		},
 	}
@@ -149,5 +152,47 @@ func newJoinCmd() *cobra.Command {
 	cmd.Flags().String("server", "", "Server HTTP URL (falls back to CLAUDE_PLANE_SERVER env var)")
 	cmd.Flags().String("config-dir", defaultConfigDir, "Directory for config and certificates")
 	cmd.Flags().Bool("insecure", false, "Allow plain HTTP server URL (prints warning)")
+	return cmd
+}
+
+func newInstallServiceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "install-service",
+		Short: "Install agent as a system service (systemd on Linux, launchd on macOS)",
+		Long: `Installs the claude-plane-agent as a background system service that starts
+on boot and restarts automatically if it crashes.
+
+Requires root/sudo on Linux (systemd) or macOS (launchd).
+The agent binary must already be in a system-accessible location.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			configPath, _ := cmd.Flags().GetString("config")
+			user, _ := cmd.Flags().GetString("user")
+
+			// Resolve absolute paths for the service file.
+			absConfig, err := filepath.Abs(configPath)
+			if err != nil {
+				return fmt.Errorf("resolve config path: %w", err)
+			}
+
+			// Find the current binary path.
+			binPath, err := os.Executable()
+			if err != nil {
+				return fmt.Errorf("find executable path: %w", err)
+			}
+			binPath, err = filepath.EvalSymlinks(binPath)
+			if err != nil {
+				return fmt.Errorf("resolve executable path: %w", err)
+			}
+
+			// Verify the config file exists.
+			if _, err := os.Stat(absConfig); os.IsNotExist(err) {
+				return fmt.Errorf("config file not found: %s\nRun 'claude-plane-agent join' first to configure the agent", absConfig)
+			}
+
+			return installService(binPath, absConfig, user)
+		},
+	}
+	cmd.Flags().String("config", os.Getenv("HOME")+"/.claude-plane/agent.toml", "Path to agent TOML config file")
+	cmd.Flags().String("user", "", "User to run the service as (default: current user)")
 	return cmd
 }
