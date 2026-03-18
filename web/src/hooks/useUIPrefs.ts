@@ -5,7 +5,7 @@ const DEFAULTS: UIPrefs = {
   theme: 'system',
   terminal_font_size: 14,
   auto_attach_session: false,
-  command_center_cards: ['sessions', 'machines', 'jobs', 'runs', 'templates'],
+  command_center_cards: ['sessions', 'machines', 'jobs', 'runs', 'templates', 'health'],
 };
 
 /** Returns resolved UI preferences with defaults applied. */

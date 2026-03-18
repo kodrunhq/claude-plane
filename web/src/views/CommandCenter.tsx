@@ -15,6 +15,10 @@ import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 import { TimeAgo } from '../components/shared/TimeAgo.tsx';
 import { toast } from 'sonner';
 import { useUIPrefs } from '../hooks/useUIPrefs.ts';
+import { ConnectionHealth } from '../components/dashboard/ConnectionHealth.tsx';
+import { RecentErrors } from '../components/dashboard/RecentErrors.tsx';
+import { SessionSuccessRate } from '../components/dashboard/SessionSuccessRate.tsx';
+import { AgentResources } from '../components/dashboard/AgentResources.tsx';
 import type { Job, Run } from '../types/job.ts';
 
 export function CommandCenter() {
@@ -158,6 +162,21 @@ export function CommandCenter() {
           accent="green"
         />
       </div>
+
+      {/* Health Dashboard Cards */}
+      {visibleCards.includes('health') && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <ConnectionHealth />
+          <AgentResources />
+        </div>
+      )}
+
+      {visibleCards.includes('health') && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <SessionSuccessRate />
+          <RecentErrors />
+        </div>
+      )}
 
       {/* Machines & Active Sessions — side-by-side */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
