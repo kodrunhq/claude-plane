@@ -5,6 +5,20 @@ export interface UpdateMachineParams {
   display_name: string;
 }
 
+export interface BrowseEntry {
+  name: string;
+  type: 'dir' | 'file';
+}
+
+export interface BrowseResponse {
+  path: string;
+  entries: BrowseEntry[];
+  parent: string;
+}
+
+export const browseMachineDirectory = (machineId: string, path: string) =>
+  request<BrowseResponse>(`/machines/${encodeURIComponent(machineId)}/browse?path=${encodeURIComponent(path)}`);
+
 export const machinesApi = {
   list: () => request<Machine[]>('/machines'),
   get: (id: string) => request<Machine>(`/machines/${encodeURIComponent(id)}`),
