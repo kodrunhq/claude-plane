@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -119,10 +120,12 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 		existingSessions = c.sessions.GetStates()
 	}
 
+	homeDir, _ := os.UserHomeDir()
 	resp, err := client.Register(ctx, &pb.RegisterRequest{
 		MachineId:        c.cfg.Agent.MachineID,
 		MaxSessions:      int32(c.cfg.Agent.MaxSessions),
 		ExistingSessions: existingSessions,
+		HomeDir:          homeDir,
 	})
 	if err != nil {
 		return fmt.Errorf("register: %w", err)

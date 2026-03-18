@@ -216,6 +216,7 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 		MachineID:     machineID,
 		StreamToken:   token,
 		MaxSessions:   req.GetMaxSessions(),
+		HomeDir:       req.GetHomeDir(),
 		ConnectedAt:   time.Now(),
 		SessionStates: req.GetExistingSessions(),
 	})
@@ -259,13 +260,16 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	var ca *connmgr.ConnectedAgent
 	if s.agentConnMgr != nil {
 		var maxSessions int32
+		var homeDir string
 		if entry, ok := s.streams.Get(machineID); ok {
 			maxSessions = entry.MaxSessions
+			homeDir = entry.HomeDir
 		}
 		ca = &connmgr.ConnectedAgent{
 			MachineID:    machineID,
 			RegisteredAt: time.Now(),
 			MaxSessions:  maxSessions,
+			HomeDir:      homeDir,
 			Ctx:          ctx,
 			Cancel:       cancel,
 			Stream:       stream,
