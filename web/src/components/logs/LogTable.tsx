@@ -139,10 +139,19 @@ function LogRow({
   return (
     <>
       <tr
+        role={hasDetails ? 'button' : undefined}
+        tabIndex={hasDetails ? 0 : undefined}
+        onKeyDown={hasDetails ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        } : undefined}
         onClick={hasDetails ? onToggle : undefined}
         className={`border-t border-border-primary transition-colors ${
           hasDetails ? 'cursor-pointer hover:bg-bg-tertiary/40' : ''
         } ${isExpanded ? 'bg-bg-tertiary/30' : ''}`}
+        aria-expanded={hasDetails ? isExpanded : undefined}
       >
         <td className="px-2 py-2.5 text-center text-text-secondary">
           {hasDetails &&

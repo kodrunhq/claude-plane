@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { logsApi } from '../api/logs.ts';
 import type { LogFilter } from '../types/log.ts';
 
-export function useLogs(filter: LogFilter) {
+export function useLogs(filter: LogFilter, enabled: boolean = true) {
   return useQuery({
     queryKey: ['logs', filter],
     queryFn: () => logsApi.list(filter),
     refetchInterval: 30_000,
+    enabled,
   });
 }
 

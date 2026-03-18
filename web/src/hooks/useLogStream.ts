@@ -3,6 +3,16 @@ import type { LogEntry, LogFilter } from '../types/log.ts';
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
 
+/** Extract only the fields the WebSocket server supports for filtering. */
+function buildWsFilter(f: LogFilter) {
+  return {
+    level: f.level,
+    component: f.component,
+    source: f.source,
+    machine_id: f.machine_id,
+  };
+}
+
 export function useLogStream(
   filter: LogFilter,
   enabled: boolean = false,
@@ -18,10 +28,11 @@ export function useLogStream(
   // Keep filterRef in sync and send filter updates
   useEffect(() => {
     filterRef.current = filter;
+    setEntries([]); // Clear stale entries on filter change
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'update_filter',
-        ...filter,
+        ...buildWsFilter(filter),
       }));
     }
   }, [filter]);
@@ -45,10 +56,10 @@ export function useLogStream(
         }
         setConnected(true);
         retriesRef.current = 0;
-        // Send initial filter
+        // Send initial filter (only server-supported fields)
         ws.send(JSON.stringify({
           type: 'subscribe',
-          ...filterRef.current,
+          ...buildWsFilter(filterRef.current),
         }));
       };
 

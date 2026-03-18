@@ -29,7 +29,7 @@ export function SessionSuccessRate() {
               {rate}%
             </span>
             <span className="text-xs text-text-secondary">
-              {succeeded}/{total} sessions succeeded ({stats?.period ?? 'last 24h'})
+              {succeeded}/{total} sessions succeeded (since {stats?.since ? new Date(stats.since).toLocaleDateString() : 'last 24h'})
             </span>
           </div>
           <div className="h-2.5 bg-bg-tertiary rounded-full overflow-hidden">

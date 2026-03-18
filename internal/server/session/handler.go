@@ -557,7 +557,7 @@ func (h *SessionHandler) GetSessionStats(w http.ResponseWriter, r *http.Request)
 		"total":     total,
 		"succeeded": succeeded,
 		"failed":    failed,
-		"period":    time.Since(since).Round(time.Hour).String(),
+		"since":     since.Format(time.RFC3339),
 	})
 }
 

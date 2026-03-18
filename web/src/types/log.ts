@@ -39,5 +39,5 @@ export interface SessionStats {
   total: number;
   succeeded: number;
   failed: number;
-  period: string;
+  since: string;
 }

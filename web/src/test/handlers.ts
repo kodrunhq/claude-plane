@@ -85,7 +85,7 @@ export const handlers = [
 
   http.get('/api/v1/logs', () => HttpResponse.json({ logs: [], total: 0 })),
   http.get('/api/v1/logs/stats', () => HttpResponse.json({ by_level: {}, by_component: {}, total: 0 })),
-  http.get('/api/v1/sessions/stats', () => HttpResponse.json({ total: 0, succeeded: 0, failed: 0, period: '24h' })),
+  http.get('/api/v1/sessions/stats', () => HttpResponse.json({ total: 0, succeeded: 0, failed: 0, since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() })),
 
   http.get('/api/v1/users/me/preferences', () =>
     HttpResponse.json({

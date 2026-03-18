@@ -533,6 +533,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					if err != nil {
 						ts = time.Now().UTC()
 					}
+						var metadata string
+						if attrs := e.GetAttrs(); len(attrs) > 0 {
+							if data, jsonErr := json.Marshal(attrs); jsonErr == nil {
+								metadata = string(data)
+							}
+						}
 						records = append(records, logging.LogRecord{
 							Timestamp: ts,
 							Level:     level,
@@ -542,6 +548,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 							SessionID: e.GetSessionId(),
 							Error:     errStr,
 							Source:    "agent",
+							Metadata:  metadata,
 						})
 					}
 					if err := s.logStore.InsertBatch(records); err != nil {

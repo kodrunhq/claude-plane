@@ -16,7 +16,7 @@ export function LogsPage() {
   const setFilter = useLogsStore((s) => s.setFilter);
   const live = useLogsStore((s) => s.live);
 
-  // Parse URL search params on mount to pre-apply filters
+  // Parse URL search params to pre-apply filters (responds to navigation changes)
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const urlFilter: Record<string, string | number> = {};
@@ -30,12 +30,10 @@ export function LogsPage() {
     if (Object.keys(urlFilter).length > 0) {
       setFilter(urlFilter);
     }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, setFilter]);
 
-  // REST query for non-live mode
-  const { data, isLoading, error, refetch, isFetching } = useLogs(filter);
+  // REST query for non-live mode (disabled when live streaming is active)
+  const { data, isLoading, error, refetch, isFetching } = useLogs(filter, !live);
 
   // WebSocket stream for live mode
   const { entries: liveEntries, connected } = useLogStream(filter, live);
