@@ -28,6 +28,7 @@ import (
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
+	"github.com/kodrunhq/claude-plane/internal/server/logging"
 	"github.com/kodrunhq/claude-plane/internal/server/notify"
 	"github.com/kodrunhq/claude-plane/internal/server/retention"
 	"github.com/kodrunhq/claude-plane/internal/server/executor"
@@ -77,13 +78,25 @@ func newServeCmd() *cobra.Command {
 
 			// Configure structured logging from config.
 			logLevel := cfg.Log.ParseLevel()
-			var logHandler slog.Handler
+			var innerHandler slog.Handler
 			if strings.ToLower(cfg.Log.Format) == "json" {
-				logHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+				innerHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 			} else {
-				logHandler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+				innerHandler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 			}
-			slog.SetDefault(slog.New(logHandler))
+
+			// Initialize separate logs database.
+			logsDBPath := filepath.Join(filepath.Dir(cfg.Database.Path), "logs.db")
+			logStore, err := logging.NewLogStore(logsDBPath)
+			if err != nil {
+				return fmt.Errorf("open logs database: %w", err)
+			}
+			defer logStore.Close()
+
+			// Wrap in TeeHandler for dual-write (stderr + SQLite).
+			teeHandler := logging.NewTeeHandler(innerHandler, logStore, cfg.Log.GetBufferSize())
+			defer teeHandler.Close()
+			slog.SetDefault(slog.New(teeHandler))
 
 			shutdownTimeout, err := cfg.Shutdown.ParseTimeout()
 			if err != nil {
@@ -98,6 +111,11 @@ func newServeCmd() *cobra.Command {
 			// Root context cancelled on SIGINT or SIGTERM.
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
+
+			// Log retention cleaner.
+			logRetentionDays := cfg.Log.GetRetentionDays()
+			logRetention := logging.NewRetentionCleaner(logStore, time.Duration(logRetentionDays)*24*time.Hour, slog.Default())
+			logRetention.Start(ctx)
 
 			s, err := store.NewStore(cfg.Database.Path)
 			if err != nil {
