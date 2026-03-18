@@ -19,7 +19,7 @@ export function DirectoryBrowserModal({
   machineId,
   initialPath,
 }: DirectoryBrowserModalProps) {
-  const [currentPath, setCurrentPath] = useState(initialPath ?? '/');
+  const [currentPath, setCurrentPath] = useState(initialPath ?? '');
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<BrowseEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,8 @@ export function DirectoryBrowserModal({
     setLoading(true);
     setError(null);
     try {
-      const response = await browseMachineDirectory(machineId, path);
+      // Pass undefined (no path param) when path is empty so the server defaults to home_dir.
+      const response = await browseMachineDirectory(machineId, path || undefined);
       setCurrentPath(response.path);
       setParentPath(response.parent || null);
       setEntries(response.entries);
@@ -44,7 +45,8 @@ export function DirectoryBrowserModal({
 
   useEffect(() => {
     if (open) {
-      const path = initialPath ?? '/';
+      // Empty string means "use server default (home_dir)".
+      const path = initialPath || '';
       setCurrentPath(path);
       void fetchEntries(path);
     }
@@ -64,7 +66,9 @@ export function DirectoryBrowserModal({
     void fetchEntries(path);
   }
 
-  // Build breadcrumb segments from the current path
+  // Build breadcrumb segments from the current path.
+  // We intentionally omit the root "/" breadcrumb because agents restrict browsing
+  // to the home directory and navigating to "/" would fail.
   const pathSegments = currentPath.split('/').filter(Boolean);
   const breadcrumbs = pathSegments.map((segment, index) => ({
     label: segment,
@@ -79,23 +83,22 @@ export function DirectoryBrowserModal({
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-lg w-full mx-4 flex flex-col" style={{ maxHeight: '70vh' }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dir-browser-title"
+        className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-lg w-full mx-4 flex flex-col"
+        style={{ maxHeight: '70vh' }}
+      >
         {/* Header */}
         <div className="p-4 border-b border-border-primary">
-          <h3 className="text-sm font-semibold text-text-primary mb-2">Browse Directory</h3>
+          <h3 id="dir-browser-title" className="text-sm font-semibold text-text-primary mb-2">Browse Directory</h3>
 
-          {/* Breadcrumb */}
+          {/* Breadcrumb — starts from the first visible path segment (home dir), no root "/" */}
           <div className="flex items-center gap-1 text-xs text-text-secondary overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => navigateTo('/')}
-              className="hover:text-text-primary transition-colors shrink-0"
-            >
-              /
-            </button>
-            {breadcrumbs.map((crumb) => (
+            {breadcrumbs.map((crumb, index) => (
               <span key={crumb.path} className="flex items-center gap-1 shrink-0">
-                <ChevronRight size={12} className="text-text-secondary/50" />
+                {index > 0 && <ChevronRight size={12} className="text-text-secondary/50" />}
                 <button
                   type="button"
                   onClick={() => navigateTo(crumb.path)}

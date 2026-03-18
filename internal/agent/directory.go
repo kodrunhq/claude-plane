@@ -73,8 +73,15 @@ func (c *AgentClient) handleListDirectory(cmd *pb.ListDirectoryCmd, sendCh chan<
 		})
 	}
 
-	// Compute parent directory.
+	// Compute parent directory. If the parent is outside the home directory sandbox
+	// (i.e. dirPath is already at the home dir boundary), return an empty string so
+	// the frontend knows there is no navigable parent.
 	parent := filepath.Dir(dirPath)
+	if homeDir != "" && parent != dirPath {
+		if !strings.HasPrefix(parent, homeDir+"/") && parent != homeDir {
+			parent = "" // at the sandbox boundary — no further up
+		}
+	}
 
 	evt := &pb.AgentEvent{
 		Event: &pb.AgentEvent_DirectoryListing{

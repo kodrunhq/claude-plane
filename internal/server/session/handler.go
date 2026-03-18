@@ -191,9 +191,10 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		req.Args = append(req.Args, "--model", req.Model)
 	}
 
-	// Inject --dangerously-skip-permissions as the first arg when explicitly requested.
+	// Always strip --dangerously-skip-permissions from user-supplied args to prevent
+	// bypass via the freeform args field, then re-add only when explicitly requested.
+	req.Args = cliutil.StripFlag(req.Args, "--dangerously-skip-permissions")
 	if req.SkipPermissions != nil && *req.SkipPermissions {
-		req.Args = cliutil.StripFlag(req.Args, "--dangerously-skip-permissions")
 		req.Args = append([]string{"--dangerously-skip-permissions"}, req.Args...)
 	}
 

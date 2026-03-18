@@ -16,8 +16,10 @@ export interface BrowseResponse {
   parent: string;
 }
 
-export const browseMachineDirectory = (machineId: string, path: string) =>
-  request<BrowseResponse>(`/machines/${encodeURIComponent(machineId)}/browse?path=${encodeURIComponent(path)}`);
+export const browseMachineDirectory = (machineId: string, path?: string) =>
+  request<BrowseResponse>(
+    `/machines/${encodeURIComponent(machineId)}/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+  );
 
 export const machinesApi = {
   list: () => request<Machine[]>('/machines'),
