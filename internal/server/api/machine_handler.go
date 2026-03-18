@@ -222,7 +222,12 @@ func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
 
 	dirPath := r.URL.Query().Get("path")
 	if dirPath == "" {
-		dirPath = "/"
+		// Use the machine's stored home_dir as the default, fall back to "/".
+		if machine, err := h.store.GetMachine(machineID); err == nil && machine.HomeDir != "" {
+			dirPath = machine.HomeDir
+		} else {
+			dirPath = "/"
+		}
 	}
 
 	requestID := uuid.New().String()

@@ -20,6 +20,7 @@ export function DirectoryBrowserModal({
   initialPath,
 }: DirectoryBrowserModalProps) {
   const [currentPath, setCurrentPath] = useState(initialPath ?? '/');
+  const [parentPath, setParentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<BrowseEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function DirectoryBrowserModal({
     try {
       const response = await browseMachineDirectory(machineId, path);
       setCurrentPath(response.path);
+      setParentPath(response.parent || null);
       setEntries(response.entries);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to browse directory';
@@ -46,9 +48,7 @@ export function DirectoryBrowserModal({
       setCurrentPath(path);
       void fetchEntries(path);
     }
-    // Reset and fetch when modal opens
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialPath]);
+  }, [open, initialPath, fetchEntries]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,10 +70,6 @@ export function DirectoryBrowserModal({
     label: segment,
     path: '/' + pathSegments.slice(0, index + 1).join('/'),
   }));
-
-  const parentPath = currentPath === '/'
-    ? null
-    : '/' + pathSegments.slice(0, -1).join('/') || '/';
 
   const dirs = entries.filter((e) => e.type === 'dir');
   const files = entries.filter((e) => e.type === 'file');
@@ -126,7 +122,7 @@ export function DirectoryBrowserModal({
 
           {!loading && !error && (
             <div className="flex flex-col">
-              {parentPath !== null && (
+              {parentPath !== null && parentPath !== '' && (
                 <button
                   type="button"
                   onClick={() => navigateTo(parentPath)}
@@ -156,7 +152,7 @@ export function DirectoryBrowserModal({
                   {entry.name}
                 </div>
               ))}
-              {dirs.length === 0 && files.length === 0 && parentPath === null && (
+              {dirs.length === 0 && files.length === 0 && (
                 <p className="text-sm text-text-secondary/50 px-2 py-4">Empty directory</p>
               )}
             </div>

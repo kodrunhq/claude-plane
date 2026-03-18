@@ -26,16 +26,29 @@ func (c *AgentClient) handleListDirectory(cmd *pb.ListDirectoryCmd, sendCh chan<
 	}
 
 	// Restrict browsing to the user's home directory.
+	// Fail closed: if we cannot determine the home directory, reject all requests.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		c.logger.Debug("could not determine home directory", "error", err)
+		c.logger.Warn("could not determine home directory, rejecting browse request", "error", err)
+		c.sendDirectoryError(sendCh, requestID, dirPath, "home directory unavailable")
+		return
 	}
-	if homeDir != "" {
-		if !strings.HasPrefix(dirPath, homeDir+"/") && dirPath != homeDir {
-			c.sendDirectoryError(sendCh, requestID, dirPath, "path outside allowed directory")
-			return
-		}
+	if !strings.HasPrefix(dirPath, homeDir+"/") && dirPath != homeDir {
+		c.sendDirectoryError(sendCh, requestID, dirPath, "path outside allowed directory")
+		return
 	}
+
+	// Resolve symlinks before the prefix check to prevent symlink escape attacks.
+	resolvedPath, err := filepath.EvalSymlinks(dirPath)
+	if err != nil {
+		c.sendDirectoryError(sendCh, requestID, dirPath, fmt.Sprintf("resolve path: %v", err))
+		return
+	}
+	if !strings.HasPrefix(resolvedPath, homeDir+"/") && resolvedPath != homeDir {
+		c.sendDirectoryError(sendCh, requestID, dirPath, "path outside allowed directory")
+		return
+	}
+	dirPath = resolvedPath
 
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
