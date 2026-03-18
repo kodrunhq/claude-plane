@@ -1,6 +1,7 @@
 package connmgr
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -251,6 +252,168 @@ func TestRegister_DBFailureDoesNotDeleteNewerConnection(t *testing.T) {
 		if err := got.SendCommand(nil); err != nil {
 			t.Error("agent in map should not be the failed agent2")
 		}
+	}
+}
+
+func TestDisconnectIfMatch_MatchingAgent(t *testing.T) {
+	cm, ms := newTestManager()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	agent := &ConnectedAgent{
+		MachineID:    "worker-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       cancel,
+		Ctx:          ctx,
+	}
+	if err := cm.Register("worker-1", agent); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	disconnected := cm.DisconnectIfMatch("worker-1", agent)
+	if !disconnected {
+		t.Fatal("expected DisconnectIfMatch to return true for matching agent")
+	}
+	if got := cm.GetAgent("worker-1"); got != nil {
+		t.Fatal("expected agent to be removed after DisconnectIfMatch")
+	}
+
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	found := false
+	for _, c := range ms.statusUpds {
+		if c.MachineID == "worker-1" && c.Status == "disconnected" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected UpdateMachineStatus(disconnected) call")
+	}
+}
+
+func TestDisconnectIfMatch_DifferentAgent(t *testing.T) {
+	cm, _ := newTestManager()
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	oldAgent := &ConnectedAgent{
+		MachineID:    "worker-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       cancel1,
+		Ctx:          ctx1,
+	}
+	newAgent := &ConnectedAgent{
+		MachineID:    "worker-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       cancel2,
+		Ctx:          ctx2,
+	}
+
+	if err := cm.Register("worker-1", oldAgent); err != nil {
+		t.Fatalf("register old: %v", err)
+	}
+	if err := cm.Register("worker-1", newAgent); err != nil {
+		t.Fatalf("register new: %v", err)
+	}
+
+	disconnected := cm.DisconnectIfMatch("worker-1", oldAgent)
+	if disconnected {
+		t.Fatal("expected false for non-matching agent")
+	}
+	if got := cm.GetAgent("worker-1"); got != newAgent {
+		t.Fatal("new agent should still be registered")
+	}
+}
+
+func TestDisconnectIfMatch_NotRegistered(t *testing.T) {
+	cm, _ := newTestManager()
+	agent := &ConnectedAgent{MachineID: "worker-1"}
+	disconnected := cm.DisconnectIfMatch("worker-1", agent)
+	if disconnected {
+		t.Fatal("expected false when machine not registered")
+	}
+}
+
+func TestStartHealthCheck_RemovesStaleAgent(t *testing.T) {
+	cm, _ := newTestManager()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately — simulates dead transport
+
+	agent := &ConnectedAgent{
+		MachineID:    "stale-worker",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       func() {},
+		Ctx:          ctx,
+	}
+	cm.mu.Lock()
+	cm.agents["stale-worker"] = agent
+	cm.mu.Unlock()
+
+	healthCtx, healthCancel := context.WithCancel(context.Background())
+	defer healthCancel()
+	cm.StartHealthCheck(healthCtx, 50*time.Millisecond)
+
+	time.Sleep(200 * time.Millisecond)
+
+	if got := cm.GetAgent("stale-worker"); got != nil {
+		t.Fatal("expected stale agent to be removed by health check")
+	}
+}
+
+func TestSweepStaleAgents_MixedHealthyAndStale(t *testing.T) {
+	cm, _ := newTestManager()
+
+	// Live agent: context is NOT cancelled.
+	liveCtx, liveCancel := context.WithCancel(context.Background())
+	defer liveCancel()
+	liveAgent := &ConnectedAgent{
+		MachineID:    "healthy-worker",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       liveCancel,
+		Ctx:          liveCtx,
+	}
+
+	// Stale agent: context is already cancelled.
+	staleCtx, staleCancel := context.WithCancel(context.Background())
+	staleCancel() // cancel immediately to simulate dead transport
+	staleAgent := &ConnectedAgent{
+		MachineID:    "stale-worker",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       func() {},
+		Ctx:          staleCtx,
+	}
+
+	// Insert both directly into the agents map (same package access).
+	cm.mu.Lock()
+	cm.agents["healthy-worker"] = liveAgent
+	cm.agents["stale-worker"] = staleAgent
+	cm.mu.Unlock()
+
+	cm.sweepStaleAgents()
+
+	// Live agent should remain.
+	if got := cm.GetAgent("healthy-worker"); got == nil {
+		t.Error("expected healthy agent to remain after sweep")
+	}
+
+	// Stale agent should be removed.
+	if got := cm.GetAgent("stale-worker"); got != nil {
+		t.Error("expected stale agent to be removed after sweep")
+	}
+
+	// Verify total agents count.
+	agents := cm.ListAgents()
+	if len(agents) != 1 {
+		t.Errorf("expected 1 agent after sweep, got %d", len(agents))
 	}
 }
 

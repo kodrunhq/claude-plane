@@ -28,6 +28,7 @@ import (
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
+	"github.com/kodrunhq/claude-plane/internal/server/logging"
 	"github.com/kodrunhq/claude-plane/internal/server/notify"
 	"github.com/kodrunhq/claude-plane/internal/server/retention"
 	"github.com/kodrunhq/claude-plane/internal/server/executor"
@@ -77,13 +78,25 @@ func newServeCmd() *cobra.Command {
 
 			// Configure structured logging from config.
 			logLevel := cfg.Log.ParseLevel()
-			var logHandler slog.Handler
+			var innerHandler slog.Handler
 			if strings.ToLower(cfg.Log.Format) == "json" {
-				logHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+				innerHandler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 			} else {
-				logHandler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+				innerHandler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 			}
-			slog.SetDefault(slog.New(logHandler))
+
+			// Initialize separate logs database.
+			logsDBPath := filepath.Join(filepath.Dir(cfg.Database.Path), "logs.db")
+			logStore, err := logging.NewLogStore(logsDBPath)
+			if err != nil {
+				return fmt.Errorf("open logs database: %w", err)
+			}
+			defer logStore.Close()
+
+			// Wrap in TeeHandler for dual-write (stderr + SQLite).
+			teeHandler := logging.NewTeeHandler(innerHandler, logStore, cfg.Log.GetBufferSize())
+			defer teeHandler.Close()
+			slog.SetDefault(slog.New(teeHandler))
 
 			shutdownTimeout, err := cfg.Shutdown.ParseTimeout()
 			if err != nil {
@@ -98,6 +111,11 @@ func newServeCmd() *cobra.Command {
 			// Root context cancelled on SIGINT or SIGTERM.
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
+
+			// Log retention cleaner.
+			logRetentionDays := cfg.Log.GetRetentionDays()
+			logRetention := logging.NewRetentionCleaner(logStore, time.Duration(logRetentionDays)*24*time.Hour, slog.Default())
+			logRetention.Start(ctx)
 
 			s, err := store.NewStore(cfg.Database.Path)
 			if err != nil {
@@ -119,6 +137,7 @@ func newServeCmd() *cobra.Command {
 
 			// Connection manager and session registry
 			connMgr := connmgr.NewConnectionManager(s, slog.Default())
+			connMgr.StartHealthCheck(ctx, 30*time.Second)
 			registry := session.NewRegistry(slog.Default())
 
 			// Content ingestor for search indexing
@@ -137,6 +156,8 @@ func newServeCmd() *cobra.Command {
 			grpcSrv.SetTaskValueStore(s)
 			grpcSrv.SetContentIngestor(contentIngestor)
 			grpcSrv.SetCleanupStore(s)
+			grpcSrv.SetLogStore(logStore)
+			grpcSrv.SetLogBroadcaster(teeHandler.Broadcaster())
 
 			grpcLis, err := net.Listen("tcp", cfg.GRPC.Listen)
 			if err != nil {
@@ -328,6 +349,7 @@ func newServeCmd() *cobra.Command {
 
 			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
 			eventsWSHandler := session.HandleEventsWS(authSvc, wsFanout, slog.Default())
+			logsWSHandler := session.HandleLogsWS(authSvc, teeHandler.Broadcaster(), slog.Default())
 
 			jobHandler := handler.NewJobHandler(s, handlerClaimsGetter)
 			runHandler := handler.NewRunHandler(s, orch, handlerClaimsGetter)
@@ -350,6 +372,8 @@ func newServeCmd() *cobra.Command {
 			searchHandler := handler.NewSearchHandler(s, handlerClaimsGetter)
 
 			notificationHandler := handler.NewNotificationHandler(s, notifiers, handlerClaimsGetter)
+
+			logsHandler := handler.NewLogsHandler(logStore, handlerClaimsGetter)
 
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
@@ -412,6 +436,7 @@ func newServeCmd() *cobra.Command {
 				SessionHandler:     sessionHandler,
 				WSHandler:          wsHandler,
 				EventsWSHandler:    eventsWSHandler,
+				LogsWSHandler:      logsWSHandler,
 				JobHandler:         jobHandler,
 				RunHandler:         runHandler,
 				EventHandler:       eventHandler,
@@ -423,6 +448,7 @@ func newServeCmd() *cobra.Command {
 				CredentialHandler:  credentialHandler,
 				PreferencesHandler:  preferencesHandler,
 				NotificationHandler: notificationHandler,
+				LogsHandler:         logsHandler,
 				APIKeyAuth:         apiKeyAuth,
 				OnShutdown: func(f func()) { shutdownHooks = append(shutdownHooks, f) },
 			})

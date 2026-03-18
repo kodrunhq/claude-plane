@@ -41,6 +41,8 @@ type ConnectedAgent struct {
 	RegisteredAt time.Time
 	MaxSessions  int32
 	Cancel       context.CancelFunc
+	// Ctx is the stream context — checked by the health sweep to detect dead transports.
+	Ctx          context.Context
 	// Stream holds the gRPC stream reference. Typed as interface{} to avoid
 	// importing proto package; will be type-asserted when needed.
 	Stream interface{}
@@ -73,10 +75,11 @@ func (ca *ConnectedAgent) GetHealth() *HealthInfo {
 
 // AgentInfo is a public DTO for REST API responses.
 type AgentInfo struct {
-	MachineID   string    `json:"machine_id"`
-	Status      string    `json:"status"`
-	MaxSessions int32     `json:"max_sessions"`
-	ConnectedAt time.Time `json:"connected_at"`
+	MachineID   string      `json:"machine_id"`
+	Status      string      `json:"status"`
+	MaxSessions int32       `json:"max_sessions"`
+	ConnectedAt time.Time   `json:"connected_at"`
+	Health      *HealthInfo `json:"health,omitempty"`
 }
 
 // ConnectionManager tracks connected agents in-memory and persists status
@@ -181,6 +184,82 @@ func (cm *ConnectionManager) Disconnect(machineID string) {
 	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
 }
 
+// DisconnectIfMatch removes the agent only if the provided pointer matches
+// the currently registered agent. This prevents a closing stream from
+// removing a newer replacement connection. Returns true if the agent was
+// actually removed.
+func (cm *ConnectionManager) DisconnectIfMatch(machineID string, agent *ConnectedAgent) bool {
+	cm.mu.Lock()
+	current, exists := cm.agents[machineID]
+	if !exists || current != agent {
+		cm.mu.Unlock()
+		return false
+	}
+	delete(cm.agents, machineID)
+	cm.mu.Unlock()
+
+	if err := cm.store.UpdateMachineStatus(machineID, "disconnected", time.Now()); err != nil {
+		cm.logger.Error("failed to update status on disconnect", "machine_id", machineID, "error", err)
+	}
+
+	cm.logger.Info("agent disconnected", "machine_id", machineID)
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
+	return true
+}
+
+// StartHealthCheck begins a periodic sweep that detects and removes agents
+// whose stream context has been cancelled (dead transport).
+func (cm *ConnectionManager) StartHealthCheck(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				cm.sweepStaleAgents()
+			}
+		}
+	}()
+}
+
+// sweepStaleAgents checks all registered agents and removes any whose
+// stream context is done (transport died). Publishes TypeMachineStale
+// instead of TypeMachineDisconnected to distinguish proactive cleanup.
+func (cm *ConnectionManager) sweepStaleAgents() {
+	cm.mu.RLock()
+	var stale []*ConnectedAgent
+	for _, agent := range cm.agents {
+		if agent.Ctx != nil && agent.Ctx.Err() != nil {
+			stale = append(stale, agent)
+		}
+	}
+	cm.mu.RUnlock()
+
+	for _, agent := range stale {
+		cm.mu.Lock()
+		current, exists := cm.agents[agent.MachineID]
+		if !exists || current != agent {
+			cm.mu.Unlock()
+			continue
+		}
+		delete(cm.agents, agent.MachineID)
+		cm.mu.Unlock()
+
+		if agent.Cancel != nil {
+			agent.Cancel() // Release goroutines blocked on the stream context
+		}
+
+		if err := cm.store.UpdateMachineStatus(agent.MachineID, "disconnected", time.Now()); err != nil {
+			cm.logger.Error("failed to update stale agent status", "machine_id", agent.MachineID, "error", err)
+		}
+
+		cm.logger.Warn("removed stale agent (dead transport)", "machine_id", agent.MachineID)
+		cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineStale, agent.MachineID, cm.machineDisplayName(agent.MachineID)))
+	}
+}
+
 // GetAgent returns the ConnectedAgent for the given machineID, or nil if not connected.
 func (cm *ConnectionManager) GetAgent(machineID string) *ConnectedAgent {
 	cm.mu.RLock()
@@ -200,6 +279,7 @@ func (cm *ConnectionManager) ListAgents() []AgentInfo {
 			Status:      "connected",
 			MaxSessions: a.MaxSessions,
 			ConnectedAt: a.RegisteredAt,
+			Health:      a.GetHealth(),
 		})
 	}
 	return result

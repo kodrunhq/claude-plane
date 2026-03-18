@@ -21,11 +21,13 @@ const (
 	// Session lifecycle events.
 	TypeSessionStarted    = "session.started"
 	TypeSessionExited     = "session.exited"
-	TypeSessionTerminated = "session.terminated"
+	TypeSessionTerminated     = "session.terminated"
+	TypeSessionDispatchFailed = "session.dispatch_failed"
 
 	// Machine connectivity events.
 	TypeMachineConnected    = "machine.connected"
 	TypeMachineDisconnected = "machine.disconnected"
+	TypeMachineStale        = "machine.stale"
 
 	// Trigger events.
 	TypeTriggerCron         = "trigger.cron"

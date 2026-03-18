@@ -43,6 +43,16 @@ func NewSessionEvent(eventType, sessionID, machineID, machineName, command strin
 	})
 }
 
+// NewDispatchFailedEvent constructs an event for session dispatch failures.
+func NewDispatchFailedEvent(sessionID, machineID, machineName, errMsg string) Event {
+	return newEvent(TypeSessionDispatchFailed, "session", map[string]any{
+		"session_id":   sessionID,
+		"machine_id":   machineID,
+		"machine_name": machineName,
+		"error":        errMsg,
+	})
+}
+
 // NewMachineEvent constructs an event for agent connectivity changes.
 // eventType should be one of the TypeMachine* constants.
 func NewMachineEvent(eventType, machineID, displayName string) Event {

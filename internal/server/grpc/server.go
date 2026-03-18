@@ -15,6 +15,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
+	"github.com/kodrunhq/claude-plane/internal/server/logging"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"github.com/kodrunhq/claude-plane/internal/shared/status"
@@ -75,6 +76,8 @@ type agentService struct {
 	taskValueStore  TaskValueStore
 	stepIdleHandler StepIdleHandler
 	cleanupStore    cleanupStore
+	logStore        *logging.LogStore
+	logBroadcaster  *logging.LogBroadcaster
 	ingestor        *ingest.ContentIngestor
 	logger          *slog.Logger
 }
@@ -163,6 +166,17 @@ func (s *GRPCServer) SetContentIngestor(ci *ingest.ContentIngestor) {
 	s.agentSvc.ingestor = ci
 }
 
+// SetLogStore sets the log store for persisting agent log batches.
+func (s *GRPCServer) SetLogStore(ls *logging.LogStore) {
+	s.agentSvc.logStore = ls
+}
+
+// SetLogBroadcaster sets the broadcaster for live-streaming agent logs
+// to WebSocket subscribers.
+func (s *GRPCServer) SetLogBroadcaster(lb *logging.LogBroadcaster) {
+	s.agentSvc.logBroadcaster = lb
+}
+
 // Serve starts the gRPC server on the given listener.
 // This method blocks until the server is stopped.
 func (s *GRPCServer) Serve(lis net.Listener) error {
@@ -242,15 +256,17 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	}
 
 	// Register with the DB-backed connection manager if available.
+	var ca *connmgr.ConnectedAgent
 	if s.agentConnMgr != nil {
 		var maxSessions int32
 		if entry, ok := s.streams.Get(machineID); ok {
 			maxSessions = entry.MaxSessions
 		}
-		ca := &connmgr.ConnectedAgent{
+		ca = &connmgr.ConnectedAgent{
 			MachineID:    machineID,
 			RegisteredAt: time.Now(),
 			MaxSessions:  maxSessions,
+			Ctx:          ctx,
 			Cancel:       cancel,
 			Stream:       stream,
 			SendCommand:  sendCommand,
@@ -298,11 +314,14 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	s.logger.Info("agent stream opened", "machine_id", machineID)
 	defer func() {
 		s.streams.RemoveIfToken(machineID, streamToken)
-		if s.agentConnMgr != nil && ctx.Err() == nil {
-			s.agentConnMgr.Disconnect(machineID)
+		if s.agentConnMgr != nil {
+			if s.agentConnMgr.DisconnectIfMatch(machineID, ca) {
+				s.logger.Info("agent disconnected (stream closed)", "machine_id", machineID)
+			} else {
+				s.logger.Info("agent stream closed (replaced by newer connection)", "machine_id", machineID)
+			}
 		}
 		cancel()
-		s.logger.Info("agent stream closed", "machine_id", machineID)
 	}()
 
 	// Receive loop: run Recv in a goroutine so ctx cancellation (from a
@@ -485,6 +504,69 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			if si := res.event.GetStepIdle(); si != nil {
 				if s.stepIdleHandler != nil {
 					s.stepIdleHandler.OnStepIdle(si.GetSessionId())
+				}
+			}
+
+			// Handle agent log batches — insert into the logs database.
+			if lb := res.event.GetLogBatch(); lb != nil {
+				if s.logStore != nil {
+					entries := lb.GetEntries()
+					// Cap batch size to prevent flooding
+					const maxBatchSize = 1000
+					if len(entries) > maxBatchSize {
+						entries = entries[:maxBatchSize]
+					}
+
+					validLevels := map[string]bool{"DEBUG": true, "INFO": true, "WARN": true, "ERROR": true}
+					records := make([]logging.LogRecord, 0, len(entries))
+					for _, e := range entries {
+						level := e.GetLevel()
+						if !validLevels[level] {
+							level = "INFO" // default invalid levels
+						}
+						msg := e.GetMessage()
+						if len(msg) > 2000 {
+							msg = msg[:2000]
+						}
+						errStr := e.GetError()
+						if len(errStr) > 1000 {
+							errStr = errStr[:1000]
+						}
+						comp := e.GetComponent()
+						if len(comp) > 100 {
+							comp = comp[:100]
+						}
+						ts, err := time.Parse(time.RFC3339Nano, e.GetTimestamp())
+					if err != nil {
+						ts = time.Now().UTC()
+					}
+						var metadata string
+						if attrs := e.GetAttrs(); len(attrs) > 0 {
+							if data, jsonErr := json.Marshal(attrs); jsonErr == nil {
+								metadata = string(data)
+							}
+						}
+						records = append(records, logging.LogRecord{
+							Timestamp: ts,
+							Level:     level,
+							Component: comp,
+							Message:   msg,
+							MachineID: machineID,
+							SessionID: e.GetSessionId(),
+							Error:     errStr,
+							Source:    "agent",
+							Metadata:  metadata,
+						})
+					}
+					if err := s.logStore.InsertBatch(records); err != nil {
+						s.logger.Warn("failed to insert agent logs", "error", err, "machine_id", machineID)
+					}
+					// Broadcast agent logs to live WebSocket subscribers
+					if s.logBroadcaster != nil {
+						for _, r := range records {
+							s.logBroadcaster.Broadcast(r)
+						}
+					}
 				}
 			}
 		}

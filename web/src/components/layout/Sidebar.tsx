@@ -20,6 +20,7 @@ import {
   Settings,
   LayoutGrid,
   BookOpen,
+  ScrollText,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/ui.ts';
 import { useAuthStore } from '../../stores/auth.ts';
@@ -63,6 +64,7 @@ const navSections: NavSection[] = [
     title: 'Monitoring',
     items: [
       { to: '/events', label: 'Events', icon: Activity },
+      { to: '/logs', label: 'Logs', icon: ScrollText },
       { to: '/credentials', label: 'Credentials', icon: Lock },
     ],
   },

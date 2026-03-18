@@ -239,11 +239,15 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		if err := agent.SendCommand(cmd); err != nil {
-			h.logger.Error("failed to send create session command", "error", err)
-			// Session was created in DB but command failed; update status
+			h.logger.Error("failed to send create session command",
+				"error", err,
+				"machine_id", req.MachineID,
+				"session_id", sessionID,
+			)
 			if err := h.store.UpdateSessionStatus(sessionID, store.StatusFailed); err != nil {
 				h.logger.Warn("failed to update session status after command dispatch failure", "error", err, "session_id", sessionID)
 			}
+			h.publishEvent(r.Context(), event.NewDispatchFailedEvent(sessionID, req.MachineID, "", "session dispatch failed"))
 			httputil.WriteError(w, http.StatusInternalServerError, "failed to dispatch session to agent")
 			return
 		}
@@ -518,6 +522,45 @@ func (h *SessionHandler) ListInjections(w http.ResponseWriter, r *http.Request) 
 	httputil.WriteJSON(w, http.StatusOK, injections)
 }
 
+// GetSessionStats handles GET /api/v1/sessions/stats
+func (h *SessionHandler) GetSessionStats(w http.ResponseWriter, r *http.Request) {
+	if h.getClaims != nil {
+		claims := h.getClaims(r)
+		if claims == nil || claims.Role != "admin" {
+			httputil.WriteError(w, http.StatusForbidden, "admin access required")
+			return
+		}
+	}
+
+	since := time.Now().UTC().Add(-24 * time.Hour)
+	if s := r.URL.Query().Get("since"); s != "" {
+		parsed, err := parseTime(s)
+		if err != nil {
+			httputil.WriteError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
+			return
+		}
+		// Cap lookback to 90 days
+		minSince := time.Now().UTC().Add(-90 * 24 * time.Hour)
+		if parsed.Before(minSince) {
+			parsed = minSince
+		}
+		since = parsed
+	}
+
+	total, succeeded, failed, err := h.store.GetSessionStats(since)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to get session stats")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"total":     total,
+		"succeeded": succeeded,
+		"failed":    failed,
+		"since":     since.Format(time.RFC3339),
+	})
+}
+
 // authorizeSession returns true if the current user is allowed to access the session.
 // Admins can access any session; regular users can only access their own.
 // Returns true only when no claims getter is configured (explicitly unauthenticated mode).
@@ -532,6 +575,15 @@ func (h *SessionHandler) authorizeSession(r *http.Request, sess *store.Session) 
 		return false
 	}
 	return claims.Role == "admin" || claims.UserID == sess.UserID
+}
+
+// parseTime tries RFC3339Nano first (handles fractional seconds from JavaScript
+// Date.toISOString()), then falls back to RFC3339.
+func parseTime(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
 }
 
 // marshalJSON serializes a value to a JSON string. Returns an empty string

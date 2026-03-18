@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar.tsx';
 import { StatusBar } from './StatusBar.tsx';
 import { useUIStore } from '../../stores/ui.ts';
 import { useIsMobile } from '../../hooks/useMediaQuery.ts';
+import { useSystemAlerts } from '../../hooks/useSystemAlerts.ts';
 
 interface AppShellProps {
   children: ReactNode;
@@ -13,6 +14,9 @@ export function AppShell({ children }: AppShellProps) {
   const isMobile = useIsMobile();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+
+  // Fire sonner toasts for critical system events on any page
+  useSystemAlerts();
 
   // Auto-close mobile drawer when switching to desktop (e.g. device rotation).
   useEffect(() => {
