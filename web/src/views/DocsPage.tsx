@@ -3,6 +3,7 @@ import { BookOpen, ChevronRight } from 'lucide-react';
 import { MarkdownRenderer } from '../components/docs/MarkdownRenderer.tsx';
 
 import gettingStarted from '../docs/getting-started.md?raw';
+import agentSetup from '../docs/agent-setup.md?raw';
 import telegramSetup from '../docs/telegram-setup.md?raw';
 import githubSetup from '../docs/github-setup.md?raw';
 import smtpSetup from '../docs/smtp-setup.md?raw';
@@ -20,6 +21,12 @@ const guides: readonly Guide[] = [
     title: 'Getting Started',
     description: 'Overview of claude-plane and setup basics',
     content: gettingStarted,
+  },
+  {
+    id: 'agent-setup',
+    title: 'Agent Setup',
+    description: 'Connect agent machines to your server with Quick Join or provisioning scripts.',
+    content: agentSetup,
   },
   {
     id: 'telegram-setup',
