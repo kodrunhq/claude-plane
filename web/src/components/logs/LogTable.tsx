@@ -35,7 +35,7 @@ function ExpandedRow({ entry }: { entry: LogEntry }) {
 
   return (
     <tr className="bg-bg-tertiary/50">
-      <td colSpan={6} className="px-6 py-3">
+      <td colSpan={7} className="px-6 py-3">
         <div className="space-y-2 text-xs">
           {entry.session_id && (
             <div>
@@ -49,7 +49,7 @@ function ExpandedRow({ entry }: { entry: LogEntry }) {
               <span className="text-red-400 font-mono">{entry.error}</span>
             </div>
           )}
-          {metadata && (
+          {metadata != null && (
             <div>
               <span className="text-text-secondary">Metadata:</span>
               <pre className="mt-1 p-2 rounded bg-bg-primary text-text-primary font-mono text-xs overflow-x-auto whitespace-pre-wrap">

@@ -529,7 +529,10 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						if len(comp) > 100 {
 							comp = comp[:100]
 						}
-						ts, _ := time.Parse(time.RFC3339Nano, e.GetTimestamp())
+						ts, err := time.Parse(time.RFC3339Nano, e.GetTimestamp())
+					if err != nil {
+						ts = time.Now().UTC()
+					}
 						records = append(records, logging.LogRecord{
 							Timestamp: ts,
 							Level:     level,

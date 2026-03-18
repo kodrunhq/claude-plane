@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { AlertCircle, ScrollText, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { useLogsStore } from '../stores/logs.ts';
 import { useLogs } from '../hooks/useLogs.ts';
@@ -8,11 +10,29 @@ import { SkeletonTable } from '../components/shared/SkeletonTable.tsx';
 import { EmptyState } from '../components/shared/EmptyState.tsx';
 import { Pagination } from '../components/shared/Pagination.tsx';
 import { RefreshButton } from '../components/shared/RefreshButton.tsx';
-import { usePagination } from '../hooks/usePagination.ts';
 
 export function LogsPage() {
   const filter = useLogsStore((s) => s.filter);
+  const setFilter = useLogsStore((s) => s.setFilter);
   const live = useLogsStore((s) => s.live);
+
+  // Parse URL search params on mount to pre-apply filters
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const urlFilter: Record<string, string | number> = {};
+    const paramKeys = ['level', 'source', 'component', 'machine_id', 'session_id', 'search', 'since', 'until'] as const;
+    for (const key of paramKeys) {
+      const val = searchParams.get(key);
+      if (val) {
+        urlFilter[key] = val;
+      }
+    }
+    if (Object.keys(urlFilter).length > 0) {
+      setFilter(urlFilter);
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // REST query for non-live mode
   const { data, isLoading, error, refetch, isFetching } = useLogs(filter);
@@ -25,15 +45,17 @@ export function LogsPage() {
   const displayEntries = live ? liveEntries : restEntries;
   const totalCount = live ? liveEntries.length : (data?.total ?? 0);
 
-  // Pagination for non-live mode
-  const {
-    paged: pagedEntries,
-    page,
-    pageSize,
-    total: paginatedTotal,
-    setPage,
-    setPageSize,
-  } = usePagination(displayEntries, 50);
+  // Server-side pagination helpers
+  const pageSize = filter.limit ?? 100;
+  const currentPage = Math.floor((filter.offset ?? 0) / pageSize) + 1;
+
+  const handlePageChange = (newPage: number) => {
+    setFilter({ offset: (newPage - 1) * pageSize });
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setFilter({ limit: newSize, offset: 0 });
+  };
 
   const hasActiveFilters = Boolean(
     filter.level || filter.source || filter.component || filter.machine_id || filter.search || filter.since,
@@ -114,15 +136,15 @@ export function LogsPage() {
         />
       ) : (
         <>
-          <LogTable entries={live ? displayEntries : pagedEntries} loading={false} />
+          <LogTable entries={displayEntries} loading={false} />
 
           {!live && (
             <Pagination
-              page={page}
+              page={currentPage}
               pageSize={pageSize}
-              total={paginatedTotal}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              total={totalCount}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
               pageSizeOptions={[25, 50, 100]}
             />
           )}

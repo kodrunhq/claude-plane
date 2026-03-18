@@ -174,7 +174,7 @@ func (s *Store) GetSessionStats(since time.Time) (total, succeeded, failed int, 
 	row := s.reader.QueryRow(`
 		SELECT
 			COUNT(*),
-			COUNT(CASE WHEN status IN ('completed', 'running', 'created') THEN 1 END),
+			COUNT(CASE WHEN status = 'completed' THEN 1 END),
 			COUNT(CASE WHEN status = 'failed' THEN 1 END)
 		FROM sessions
 		WHERE started_at >= ?`, since.UTC().Format(time.RFC3339))

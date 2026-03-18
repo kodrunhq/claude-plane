@@ -29,9 +29,9 @@ func TestInsertAndQueryAll(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Component: "server", Message: "started", Source: "server"},
-		{Timestamp: now.Add(time.Second), Level: "error", Component: "grpc", Message: "connection failed", Error: "timeout", Source: "server"},
-		{Timestamp: now.Add(2 * time.Second), Level: "warn", Component: "auth", Message: "invalid token", MachineID: "m1", SessionID: "s1", Source: "agent"},
+		{Timestamp: now, Level: "INFO", Component: "server", Message: "started", Source: "server"},
+		{Timestamp: now.Add(time.Second), Level: "ERROR", Component: "grpc", Message: "connection failed", Error: "timeout", Source: "server"},
+		{Timestamp: now.Add(2 * time.Second), Level: "WARN", Component: "auth", Message: "invalid token", MachineID: "m1", SessionID: "s1", Source: "agent"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -48,11 +48,11 @@ func TestInsertAndQueryAll(t *testing.T) {
 		t.Errorf("len(results) = %d, want 3", len(results))
 	}
 	// Results should be ordered by timestamp DESC
-	if results[0].Level != "warn" {
-		t.Errorf("first result level = %q, want %q", results[0].Level, "warn")
+	if results[0].Level != "WARN" {
+		t.Errorf("first result level = %q, want %q", results[0].Level, "WARN")
 	}
-	if results[2].Level != "info" {
-		t.Errorf("last result level = %q, want %q", results[2].Level, "info")
+	if results[2].Level != "INFO" {
+		t.Errorf("last result level = %q, want %q", results[2].Level, "INFO")
 	}
 }
 
@@ -61,15 +61,15 @@ func TestQueryByLevel(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Message: "a", Source: "server"},
-		{Timestamp: now.Add(time.Second), Level: "error", Message: "b", Source: "server"},
-		{Timestamp: now.Add(2 * time.Second), Level: "info", Message: "c", Source: "server"},
+		{Timestamp: now, Level: "INFO", Message: "a", Source: "server"},
+		{Timestamp: now.Add(time.Second), Level: "ERROR", Message: "b", Source: "server"},
+		{Timestamp: now.Add(2 * time.Second), Level: "INFO", Message: "c", Source: "server"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
 	}
 
-	results, total, err := ls.Query(LogFilter{Level: "info"})
+	results, total, err := ls.Query(LogFilter{Level: "INFO"})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestQueryByLevel(t *testing.T) {
 		t.Errorf("len(results) = %d, want 2", len(results))
 	}
 	for _, r := range results {
-		if r.Level != "info" {
+		if r.Level != "INFO" {
 			t.Errorf("unexpected level %q", r.Level)
 		}
 	}
@@ -91,9 +91,9 @@ func TestQueryBySource(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Message: "server log", Source: "server"},
-		{Timestamp: now.Add(time.Second), Level: "info", Message: "agent log", Source: "agent"},
-		{Timestamp: now.Add(2 * time.Second), Level: "info", Message: "bridge log", Source: "bridge"},
+		{Timestamp: now, Level: "INFO", Message: "server log", Source: "server"},
+		{Timestamp: now.Add(time.Second), Level: "INFO", Message: "agent log", Source: "agent"},
+		{Timestamp: now.Add(2 * time.Second), Level: "INFO", Message: "bridge log", Source: "bridge"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -119,9 +119,9 @@ func TestQueryBySearch(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Message: "user logged in", Source: "server"},
-		{Timestamp: now.Add(time.Second), Level: "error", Message: "db query failed", Error: "connection reset", Source: "server"},
-		{Timestamp: now.Add(2 * time.Second), Level: "warn", Message: "cache miss", Source: "server"},
+		{Timestamp: now, Level: "INFO", Message: "user logged in", Source: "server"},
+		{Timestamp: now.Add(time.Second), Level: "ERROR", Message: "db query failed", Error: "connection reset", Source: "server"},
+		{Timestamp: now.Add(2 * time.Second), Level: "WARN", Message: "cache miss", Source: "server"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -147,7 +147,7 @@ func TestQueryBySearch(t *testing.T) {
 	if total != 1 {
 		t.Errorf("total = %d, want 1", total)
 	}
-	if len(results) != 1 || results[0].Level != "error" {
+	if len(results) != 1 || results[0].Level != "ERROR" {
 		t.Errorf("unexpected results: %+v", results)
 	}
 }
@@ -157,9 +157,9 @@ func TestQueryByMachineAndSession(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Message: "a", MachineID: "m1", SessionID: "s1", Source: "agent"},
-		{Timestamp: now.Add(time.Second), Level: "info", Message: "b", MachineID: "m1", SessionID: "s2", Source: "agent"},
-		{Timestamp: now.Add(2 * time.Second), Level: "info", Message: "c", MachineID: "m2", SessionID: "s3", Source: "agent"},
+		{Timestamp: now, Level: "INFO", Message: "a", MachineID: "m1", SessionID: "s1", Source: "agent"},
+		{Timestamp: now.Add(time.Second), Level: "INFO", Message: "b", MachineID: "m1", SessionID: "s2", Source: "agent"},
+		{Timestamp: now.Add(2 * time.Second), Level: "INFO", Message: "c", MachineID: "m2", SessionID: "s3", Source: "agent"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -190,9 +190,9 @@ func TestQueryByTimeRange(t *testing.T) {
 
 	base := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	records := []LogRecord{
-		{Timestamp: base, Level: "info", Message: "first", Source: "server"},
-		{Timestamp: base.Add(time.Hour), Level: "info", Message: "second", Source: "server"},
-		{Timestamp: base.Add(2 * time.Hour), Level: "info", Message: "third", Source: "server"},
+		{Timestamp: base, Level: "INFO", Message: "first", Source: "server"},
+		{Timestamp: base.Add(time.Hour), Level: "INFO", Message: "second", Source: "server"},
+		{Timestamp: base.Add(2 * time.Hour), Level: "INFO", Message: "third", Source: "server"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -219,7 +219,7 @@ func TestQueryLimitClamping(t *testing.T) {
 	now := time.Now()
 	records := make([]LogRecord, 5)
 	for i := range records {
-		records[i] = LogRecord{Timestamp: now.Add(time.Duration(i) * time.Second), Level: "info", Message: "msg", Source: "server"}
+		records[i] = LogRecord{Timestamp: now.Add(time.Duration(i) * time.Second), Level: "INFO", Message: "msg", Source: "server"}
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -255,9 +255,9 @@ func TestPurgeBefore(t *testing.T) {
 	cutoff := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	records := []LogRecord{
-		{Timestamp: old, Level: "info", Message: "old record", Source: "server"},
-		{Timestamp: old.Add(time.Hour), Level: "error", Message: "another old", Source: "server"},
-		{Timestamp: recent, Level: "info", Message: "recent record", Source: "server"},
+		{Timestamp: old, Level: "INFO", Message: "old record", Source: "server"},
+		{Timestamp: old.Add(time.Hour), Level: "ERROR", Message: "another old", Source: "server"},
+		{Timestamp: recent, Level: "INFO", Message: "recent record", Source: "server"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -288,11 +288,11 @@ func TestStats(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Component: "server", Message: "a", Source: "server"},
-		{Timestamp: now.Add(time.Second), Level: "info", Component: "server", Message: "b", Source: "server"},
-		{Timestamp: now.Add(2 * time.Second), Level: "error", Component: "grpc", Message: "c", Source: "server"},
-		{Timestamp: now.Add(3 * time.Second), Level: "warn", Component: "auth", Message: "d", Source: "agent"},
-		{Timestamp: now.Add(4 * time.Second), Level: "error", Component: "grpc", Message: "e", Source: "server"},
+		{Timestamp: now, Level: "INFO", Component: "server", Message: "a", Source: "server"},
+		{Timestamp: now.Add(time.Second), Level: "INFO", Component: "server", Message: "b", Source: "server"},
+		{Timestamp: now.Add(2 * time.Second), Level: "ERROR", Component: "grpc", Message: "c", Source: "server"},
+		{Timestamp: now.Add(3 * time.Second), Level: "WARN", Component: "auth", Message: "d", Source: "agent"},
+		{Timestamp: now.Add(4 * time.Second), Level: "ERROR", Component: "grpc", Message: "e", Source: "server"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -306,14 +306,14 @@ func TestStats(t *testing.T) {
 	if stats.Total != 5 {
 		t.Errorf("total = %d, want 5", stats.Total)
 	}
-	if stats.ByLevel["info"] != 2 {
-		t.Errorf("info count = %d, want 2", stats.ByLevel["info"])
+	if stats.ByLevel["INFO"] != 2 {
+		t.Errorf("INFO count = %d, want 2", stats.ByLevel["INFO"])
 	}
-	if stats.ByLevel["error"] != 2 {
-		t.Errorf("error count = %d, want 2", stats.ByLevel["error"])
+	if stats.ByLevel["ERROR"] != 2 {
+		t.Errorf("ERROR count = %d, want 2", stats.ByLevel["ERROR"])
 	}
-	if stats.ByLevel["warn"] != 1 {
-		t.Errorf("warn count = %d, want 1", stats.ByLevel["warn"])
+	if stats.ByLevel["WARN"] != 1 {
+		t.Errorf("WARN count = %d, want 1", stats.ByLevel["WARN"])
 	}
 	if stats.ByComponent["server"] != 2 {
 		t.Errorf("server component count = %d, want 2", stats.ByComponent["server"])
@@ -331,8 +331,8 @@ func TestNullableFields(t *testing.T) {
 
 	now := time.Now()
 	records := []LogRecord{
-		{Timestamp: now, Level: "info", Message: "no optionals", Source: "server"},
-		{Timestamp: now.Add(time.Second), Level: "info", Message: "with metadata", Source: "server", Metadata: `{"key":"val"}`},
+		{Timestamp: now, Level: "INFO", Message: "no optionals", Source: "server"},
+		{Timestamp: now.Add(time.Second), Level: "INFO", Message: "with metadata", Source: "server", Metadata: `{"key":"val"}`},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)

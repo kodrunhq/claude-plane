@@ -524,6 +524,14 @@ func (h *SessionHandler) ListInjections(w http.ResponseWriter, r *http.Request) 
 
 // GetSessionStats handles GET /api/v1/sessions/stats
 func (h *SessionHandler) GetSessionStats(w http.ResponseWriter, r *http.Request) {
+	if h.getClaims != nil {
+		claims := h.getClaims(r)
+		if claims == nil || claims.Role != "admin" {
+			httputil.WriteError(w, http.StatusForbidden, "admin access required")
+			return
+		}
+	}
+
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	if s := r.URL.Query().Get("since"); s != "" {
 		parsed, err := time.Parse(time.RFC3339, s)
@@ -549,7 +557,7 @@ func (h *SessionHandler) GetSessionStats(w http.ResponseWriter, r *http.Request)
 		"total":     total,
 		"succeeded": succeeded,
 		"failed":    failed,
-		"period":    "24h",
+		"period":    time.Since(since).Round(time.Hour).String(),
 	})
 }
 

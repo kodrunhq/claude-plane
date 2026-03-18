@@ -18,7 +18,14 @@ export const useLogsStore = create<LogsStore>((set) => ({
   filter: { ...defaultFilter },
   live: false,
   setFilter: (partial) =>
-    set((state) => ({ filter: { ...state.filter, ...partial, offset: 0 } })),
+    set((state) => ({
+      filter: {
+        ...state.filter,
+        ...partial,
+        // Reset offset to 0 when filters change, unless offset is explicitly provided
+        offset: 'offset' in partial ? (partial.offset ?? 0) : 0,
+      },
+    })),
   setLive: (live) => set({ live }),
   resetFilter: () => set({ filter: { ...defaultFilter } }),
 }));
