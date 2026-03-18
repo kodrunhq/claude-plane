@@ -11,6 +11,12 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/logging"
 )
 
+func adminClaimsGetter() ClaimsGetter {
+	return func(r *http.Request) *UserClaims {
+		return &UserClaims{UserID: "admin-1", Role: "admin"}
+	}
+}
+
 func newTestLogStore(t *testing.T) *logging.LogStore {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test-logs.db")
@@ -26,9 +32,9 @@ func seedTestLogs(t *testing.T, ls *logging.LogStore) {
 	t.Helper()
 	now := time.Now().UTC()
 	records := []logging.LogRecord{
-		{Timestamp: now.Add(-time.Minute), Level: "info", Component: "server", Message: "server started", Source: "server"},
-		{Timestamp: now.Add(-30 * time.Second), Level: "error", Component: "grpc", Message: "connection failed", Error: "timeout", Source: "server"},
-		{Timestamp: now, Level: "warn", Component: "auth", Message: "invalid token", MachineID: "m1", SessionID: "s1", Source: "agent"},
+		{Timestamp: now.Add(-time.Minute), Level: "INFO", Component: "server", Message: "server started", Source: "server"},
+		{Timestamp: now.Add(-30 * time.Second), Level: "ERROR", Component: "grpc", Message: "connection failed", Error: "timeout", Source: "server"},
+		{Timestamp: now, Level: "WARN", Component: "auth", Message: "invalid token", MachineID: "m1", SessionID: "s1", Source: "agent"},
 	}
 	if err := ls.InsertBatch(records); err != nil {
 		t.Fatalf("InsertBatch: %v", err)
@@ -37,7 +43,7 @@ func seedTestLogs(t *testing.T, ls *logging.LogStore) {
 
 func TestListLogs_Empty(t *testing.T) {
 	ls := newTestLogStore(t)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs", nil)
 	w := httptest.NewRecorder()
@@ -67,7 +73,7 @@ func TestListLogs_Empty(t *testing.T) {
 func TestListLogs_WithData(t *testing.T) {
 	ls := newTestLogStore(t)
 	seedTestLogs(t, ls)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs", nil)
 	w := httptest.NewRecorder()
@@ -94,7 +100,7 @@ func TestListLogs_WithData(t *testing.T) {
 func TestListLogs_FilterByLevel(t *testing.T) {
 	ls := newTestLogStore(t)
 	seedTestLogs(t, ls)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?level=error", nil)
 	w := httptest.NewRecorder()
@@ -118,7 +124,7 @@ func TestListLogs_FilterByLevel(t *testing.T) {
 func TestListLogs_FilterByMachineID(t *testing.T) {
 	ls := newTestLogStore(t)
 	seedTestLogs(t, ls)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?machine_id=m1", nil)
 	w := httptest.NewRecorder()
@@ -141,7 +147,7 @@ func TestListLogs_FilterByMachineID(t *testing.T) {
 
 func TestListLogs_InvalidSince(t *testing.T) {
 	ls := newTestLogStore(t)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs?since=not-a-date", nil)
 	w := httptest.NewRecorder()
@@ -155,7 +161,7 @@ func TestListLogs_InvalidSince(t *testing.T) {
 
 func TestGetLogStats_Empty(t *testing.T) {
 	ls := newTestLogStore(t)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs/stats", nil)
 	w := httptest.NewRecorder()
@@ -178,7 +184,7 @@ func TestGetLogStats_Empty(t *testing.T) {
 func TestGetLogStats_WithData(t *testing.T) {
 	ls := newTestLogStore(t)
 	seedTestLogs(t, ls)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs/stats", nil)
 	w := httptest.NewRecorder()
@@ -196,17 +202,17 @@ func TestGetLogStats_WithData(t *testing.T) {
 	if stats.Total != 3 {
 		t.Errorf("total = %d, want 3", stats.Total)
 	}
-	if stats.ByLevel["error"] != 1 {
-		t.Errorf("by_level[error] = %d, want 1", stats.ByLevel["error"])
+	if stats.ByLevel["ERROR"] != 1 {
+		t.Errorf("by_level[ERROR] = %d, want 1", stats.ByLevel["ERROR"])
 	}
-	if stats.ByLevel["info"] != 1 {
-		t.Errorf("by_level[info] = %d, want 1", stats.ByLevel["info"])
+	if stats.ByLevel["INFO"] != 1 {
+		t.Errorf("by_level[INFO] = %d, want 1", stats.ByLevel["INFO"])
 	}
 }
 
 func TestGetLogStats_InvalidSince(t *testing.T) {
 	ls := newTestLogStore(t)
-	h := NewLogsHandler(ls)
+	h := NewLogsHandler(ls, adminClaimsGetter())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logs/stats?since=bad", nil)
 	w := httptest.NewRecorder()

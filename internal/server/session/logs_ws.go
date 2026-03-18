@@ -53,8 +53,13 @@ func HandleLogsWS(authSvc *auth.Service, broadcaster *logging.LogBroadcaster, lo
 	return func(w http.ResponseWriter, r *http.Request) {
 		// --- Cookie auth (preferred, pre-upgrade) ---
 		if cookie, err := r.Cookie(sessionCookieName); err == nil && cookie.Value != "" {
-			if _, err := authSvc.ValidateToken(cookie.Value); err != nil {
+			claims, err := authSvc.ValidateToken(cookie.Value)
+			if err != nil {
 				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+			if claims.Role != "admin" {
+				http.Error(w, "admin access required", http.StatusForbidden)
 				return
 			}
 
@@ -92,8 +97,13 @@ func HandleLogsWS(authSvc *auth.Service, broadcaster *logging.LogBroadcaster, lo
 			conn.Close(websocket.StatusPolicyViolation, "first message must be auth")
 			return
 		}
-		if _, err := authSvc.ValidateToken(authMsg.Token); err != nil {
+		claims, err := authSvc.ValidateToken(authMsg.Token)
+		if err != nil {
 			conn.Close(websocket.StatusPolicyViolation, "invalid token")
+			return
+		}
+		if claims.Role != "admin" {
+			conn.Close(websocket.StatusPolicyViolation, "admin access required")
 			return
 		}
 
@@ -115,7 +125,12 @@ func runLogsLoop(conn *websocket.Conn, reqCtx context.Context, broadcaster *logg
 	logger.Debug("logs websocket connected")
 
 	// Subscribe with default filter (all levels, all sources).
-	sub := broadcaster.Subscribe(logging.LogFilter{})
+	sub, err := broadcaster.Subscribe(logging.LogFilter{})
+	if err != nil {
+		logger.Warn("logs websocket: subscriber limit reached", "error", err)
+		conn.Close(websocket.StatusTryAgainLater, "too many subscribers")
+		return
+	}
 	defer broadcaster.Unsubscribe(sub)
 
 	// Reader goroutine: handles initial filter negotiation and subsequent

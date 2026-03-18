@@ -60,7 +60,10 @@ func TestTeeHandler_WritesToBothInnerAndStore(t *testing.T) {
 
 func TestLogBroadcaster_SubscribeReceivesMatchingRecords(t *testing.T) {
 	b := NewLogBroadcaster()
-	sub := b.Subscribe(LogFilter{Level: "INFO"})
+	sub, err := b.Subscribe(LogFilter{Level: "INFO"})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer b.Unsubscribe(sub)
 
 	rec := LogRecord{
@@ -83,7 +86,10 @@ func TestLogBroadcaster_SubscribeReceivesMatchingRecords(t *testing.T) {
 
 func TestLogBroadcaster_FiltersOutBelowThreshold(t *testing.T) {
 	b := NewLogBroadcaster()
-	sub := b.Subscribe(LogFilter{Level: "WARN"})
+	sub, err := b.Subscribe(LogFilter{Level: "WARN"})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer b.Unsubscribe(sub)
 
 	// INFO is below WARN threshold — should be filtered.
@@ -112,7 +118,10 @@ func TestLogBroadcaster_FiltersOutBelowThreshold(t *testing.T) {
 
 func TestLogBroadcaster_UnsubscribeStopsDelivery(t *testing.T) {
 	b := NewLogBroadcaster()
-	sub := b.Subscribe(LogFilter{})
+	sub, err := b.Subscribe(LogFilter{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 
 	b.Unsubscribe(sub)
 
@@ -197,7 +206,10 @@ func TestTeeHandler_WithGroupUsedAsComponentFallback(t *testing.T) {
 
 func TestLogBroadcaster_FilterByComponent(t *testing.T) {
 	b := NewLogBroadcaster()
-	sub := b.Subscribe(LogFilter{Component: "auth"})
+	sub, err := b.Subscribe(LogFilter{Component: "auth"})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer b.Unsubscribe(sub)
 
 	b.Broadcast(LogRecord{Level: "INFO", Component: "store", Message: "wrong component"})

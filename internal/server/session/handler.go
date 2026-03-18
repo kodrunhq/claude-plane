@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -248,8 +247,8 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			if err := h.store.UpdateSessionStatus(sessionID, store.StatusFailed); err != nil {
 				h.logger.Warn("failed to update session status after command dispatch failure", "error", err, "session_id", sessionID)
 			}
-			h.publishEvent(r.Context(), event.NewDispatchFailedEvent(sessionID, req.MachineID, "", err.Error()))
-			httputil.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to dispatch session to agent: %v", err))
+			h.publishEvent(r.Context(), event.NewDispatchFailedEvent(sessionID, req.MachineID, "", "session dispatch failed"))
+			httputil.WriteError(w, http.StatusInternalServerError, "failed to dispatch session to agent")
 			return
 		}
 	}
@@ -527,9 +526,17 @@ func (h *SessionHandler) ListInjections(w http.ResponseWriter, r *http.Request) 
 func (h *SessionHandler) GetSessionStats(w http.ResponseWriter, r *http.Request) {
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	if s := r.URL.Query().Get("since"); s != "" {
-		if parsed, err := time.Parse(time.RFC3339, s); err == nil {
-			since = parsed
+		parsed, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			httputil.WriteError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
+			return
 		}
+		// Cap lookback to 90 days
+		minSince := time.Now().UTC().Add(-90 * 24 * time.Hour)
+		if parsed.Before(minSince) {
+			parsed = minSince
+		}
+		since = parsed
 	}
 
 	total, succeeded, failed, err := h.store.GetSessionStats(since)

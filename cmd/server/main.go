@@ -372,7 +372,7 @@ func newServeCmd() *cobra.Command {
 
 			notificationHandler := handler.NewNotificationHandler(s, notifiers, handlerClaimsGetter)
 
-			logsHandler := handler.NewLogsHandler(logStore)
+			logsHandler := handler.NewLogsHandler(logStore, handlerClaimsGetter)
 
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 

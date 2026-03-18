@@ -503,19 +503,43 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			// Handle agent log batches — insert into the logs database.
 			if lb := res.event.GetLogBatch(); lb != nil {
 				if s.logStore != nil {
-					records := make([]logging.LogRecord, len(lb.GetEntries()))
-					for i, e := range lb.GetEntries() {
+					entries := lb.GetEntries()
+					// Cap batch size to prevent flooding
+					const maxBatchSize = 1000
+					if len(entries) > maxBatchSize {
+						entries = entries[:maxBatchSize]
+					}
+
+					validLevels := map[string]bool{"DEBUG": true, "INFO": true, "WARN": true, "ERROR": true}
+					records := make([]logging.LogRecord, 0, len(entries))
+					for _, e := range entries {
+						level := e.GetLevel()
+						if !validLevels[level] {
+							level = "INFO" // default invalid levels
+						}
+						msg := e.GetMessage()
+						if len(msg) > 2000 {
+							msg = msg[:2000]
+						}
+						errStr := e.GetError()
+						if len(errStr) > 1000 {
+							errStr = errStr[:1000]
+						}
+						comp := e.GetComponent()
+						if len(comp) > 100 {
+							comp = comp[:100]
+						}
 						ts, _ := time.Parse(time.RFC3339Nano, e.GetTimestamp())
-						records[i] = logging.LogRecord{
+						records = append(records, logging.LogRecord{
 							Timestamp: ts,
-							Level:     e.GetLevel(),
-							Component: e.GetComponent(),
-							Message:   e.GetMessage(),
+							Level:     level,
+							Component: comp,
+							Message:   msg,
 							MachineID: machineID,
 							SessionID: e.GetSessionId(),
-							Error:     e.GetError(),
+							Error:     errStr,
 							Source:    "agent",
-						}
+						})
 					}
 					if err := s.logStore.InsertBatch(records); err != nil {
 						s.logger.Warn("failed to insert agent logs", "error", err, "machine_id", machineID)

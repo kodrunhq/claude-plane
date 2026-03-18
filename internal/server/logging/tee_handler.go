@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ type TeeHandler struct {
 	dbSink  chan LogRecord
 	bcast   *LogBroadcaster
 	done    chan struct{}
+	wg      sync.WaitGroup
 	attrs   []slog.Attr
 	groups  []string
 	source  string
@@ -53,6 +55,7 @@ func NewTeeHandler(inner slog.Handler, store *LogStore, bufferSize int, opts ...
 	for _, o := range opts {
 		o(h)
 	}
+	h.wg.Add(1)
 	go h.backgroundWriter()
 	return h
 }
@@ -132,6 +135,7 @@ func (h *TeeHandler) Close() {
 	h.closeMu.Do(func() {
 		close(h.done)
 	})
+	h.wg.Wait()
 }
 
 // buildLogRecord converts an slog.Record plus pre-resolved attrs into a LogRecord.
@@ -189,6 +193,7 @@ func (h *TeeHandler) extractAttr(lr *LogRecord, extra map[string]any, a slog.Att
 
 // backgroundWriter drains dbSink and batch-writes to LogStore every 500ms or 100 records.
 func (h *TeeHandler) backgroundWriter() {
+	defer h.wg.Done()
 	const (
 		maxBatch  = 100
 		flushTick = 500 * time.Millisecond
@@ -254,17 +259,22 @@ func NewLogBroadcaster() *LogBroadcaster {
 	}
 }
 
+const maxLogSubscribers = 100
+
 // Subscribe creates a new subscriber with the given filter and returns it.
 // The caller must eventually call Unsubscribe to release resources.
-func (b *LogBroadcaster) Subscribe(filter LogFilter) *LogSubscriber {
+func (b *LogBroadcaster) Subscribe(filter LogFilter) (*LogSubscriber, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.subscribers) >= maxLogSubscribers {
+		return nil, fmt.Errorf("maximum subscriber limit reached")
+	}
 	sub := &LogSubscriber{
 		Ch:     make(chan LogRecord, 256),
 		filter: filter,
 	}
-	b.mu.Lock()
 	b.subscribers[sub] = struct{}{}
-	b.mu.Unlock()
-	return sub
+	return sub, nil
 }
 
 // Unsubscribe removes a subscriber and closes its channel.

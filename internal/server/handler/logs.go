@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
@@ -11,16 +12,21 @@ import (
 
 // LogsHandler handles log-related REST endpoints.
 type LogsHandler struct {
-	store *logging.LogStore
+	store     *logging.LogStore
+	getClaims ClaimsGetter
 }
 
 // NewLogsHandler creates a new LogsHandler.
-func NewLogsHandler(store *logging.LogStore) *LogsHandler {
-	return &LogsHandler{store: store}
+func NewLogsHandler(store *logging.LogStore, getClaims ClaimsGetter) *LogsHandler {
+	return &LogsHandler{store: store, getClaims: getClaims}
 }
 
 // ListLogs handles GET /api/v1/logs
 func (h *LogsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r, h.getClaims) {
+		return
+	}
+
 	q := r.URL.Query()
 
 	var since, until time.Time
@@ -50,8 +56,10 @@ func (h *LogsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
+	level := strings.ToUpper(q.Get("level"))
+
 	filter := logging.LogFilter{
-		Level:     q.Get("level"),
+		Level:     level,
 		Component: q.Get("component"),
 		Source:    q.Get("source"),
 		MachineID: q.Get("machine_id"),
@@ -81,12 +89,21 @@ func (h *LogsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 
 // GetLogStats handles GET /api/v1/logs/stats
 func (h *LogsHandler) GetLogStats(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r, h.getClaims) {
+		return
+	}
+
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	if s := r.URL.Query().Get("since"); s != "" {
 		parsed, err := time.Parse(time.RFC3339, s)
 		if err != nil {
-			httputil.WriteError(w, http.StatusBadRequest, "invalid since parameter: expected RFC3339 format")
+			httputil.WriteError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
 			return
+		}
+		// Cap lookback to 90 days
+		minSince := time.Now().UTC().Add(-90 * 24 * time.Hour)
+		if parsed.Before(minSince) {
+			parsed = minSince
 		}
 		since = parsed
 	}

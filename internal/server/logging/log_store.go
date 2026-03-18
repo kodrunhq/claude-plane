@@ -170,8 +170,13 @@ func (ls *LogStore) Query(f LogFilter) ([]LogRecord, int, error) {
 		args = append(args, f.Until.UTC().Format(time.RFC3339Nano))
 	}
 	if f.Search != "" {
-		where = append(where, "(message LIKE ? OR error LIKE ?)")
-		term := "%" + f.Search + "%"
+		search := f.Search
+		if len(search) > 200 {
+			search = search[:200]
+		}
+		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(search)
+		where = append(where, "(message LIKE ? ESCAPE '\\' OR error LIKE ? ESCAPE '\\')")
+		term := "%" + escaped + "%"
 		args = append(args, term, term)
 	}
 

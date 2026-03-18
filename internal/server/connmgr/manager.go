@@ -247,6 +247,8 @@ func (cm *ConnectionManager) sweepStaleAgents() {
 		delete(cm.agents, agent.MachineID)
 		cm.mu.Unlock()
 
+		agent.Cancel() // Release goroutines blocked on the stream context
+
 		if err := cm.store.UpdateMachineStatus(agent.MachineID, "disconnected", time.Now()); err != nil {
 			cm.logger.Error("failed to update stale agent status", "machine_id", agent.MachineID, "error", err)
 		}
