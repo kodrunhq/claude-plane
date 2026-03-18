@@ -62,8 +62,28 @@ func (r *RetentionConfig) GetRetentionDays() int {
 
 // LogConfig configures structured logging behavior.
 type LogConfig struct {
-	Level  string `toml:"level"`  // debug, info, warn, error (default: info)
-	Format string `toml:"format"` // text, json (default: text)
+	Level         string `toml:"level"`          // debug, info, warn, error (default: info)
+	Format        string `toml:"format"`         // text, json (default: text)
+	RetentionDays int    `toml:"retention_days"` // days to retain logs (default: 7)
+	BufferSize    int    `toml:"buffer_size"`    // async write channel capacity (default: 1000)
+}
+
+// GetRetentionDays returns the configured log retention period in days.
+// Defaults to 7 days when retention_days is zero or negative.
+func (l *LogConfig) GetRetentionDays() int {
+	if l.RetentionDays <= 0 {
+		return 7
+	}
+	return l.RetentionDays
+}
+
+// GetBufferSize returns the configured buffer size for async log writing.
+// Defaults to 1000 when buffer_size is zero or negative.
+func (l *LogConfig) GetBufferSize() int {
+	if l.BufferSize <= 0 {
+		return 1000
+	}
+	return l.BufferSize
 }
 
 // ParseLevel returns the slog.Level for the configured log level string.
