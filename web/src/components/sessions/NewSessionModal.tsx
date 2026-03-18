@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { Bot, Terminal } from 'lucide-react';
+import { Bot, Terminal, FolderOpen } from 'lucide-react';
 import { useCreateSession } from '../../hooks/useSessions.ts';
 import { useMachines } from '../../hooks/useMachines.ts';
 import { extractTemplateVariables } from '../../lib/templateVars.ts';
 import { TemplatePicker } from '../templates/TemplatePicker.tsx';
+import { DirectoryBrowserModal } from './DirectoryBrowserModal.tsx';
 import type { SessionTemplate } from '../../types/template.ts';
 
 type SessionType = 'claude' | 'terminal';
@@ -33,11 +34,13 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
   const [sessionType, setSessionType] = useState<SessionType>('claude');
   const [machineId, setMachineId] = useState(preselectedMachineId ?? '');
   const [workingDir, setWorkingDir] = useState('');
-  const [command, setCommand] = useState('');
+  const [workingDirDirty, setWorkingDirDirty] = useState(false);
+  const [additionalArgs, setAdditionalArgs] = useState('');
   const [model, setModel] = useState('');
   const [skipPermissions, setSkipPermissions] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<SessionTemplate | null>(null);
   const [variables, setVariables] = useState<Record<string, string>>({});
+  const [browseOpen, setBrowseOpen] = useState(false);
 
   const templatePrompt = selectedTemplate?.initial_prompt ?? '';
   const variableNames = useMemo(
@@ -52,17 +55,30 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
     }
   }, [preselectedMachineId]);
 
+  // Pre-fill working directory from machine's home_dir when machine changes
+  useEffect(() => {
+    if (!workingDirDirty && machineId && machines) {
+      const machine = machines.find((m) => m.machine_id === machineId);
+      if (machine?.home_dir) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing derived state from machine selection
+        setWorkingDir(machine.home_dir);
+      }
+    }
+  }, [machineId, machines, workingDirDirty]);
+
   useEffect(() => {
     if (!open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting form on close
       setSessionType('claude');
       if (!preselectedMachineId) setMachineId('');
       setWorkingDir('');
-      setCommand('');
+      setWorkingDirDirty(false);
+      setAdditionalArgs('');
       setModel('');
       setSkipPermissions('');
       setSelectedTemplate(null);
       setVariables({});
+      setBrowseOpen(false);
     }
   }, [open, preselectedMachineId]);
 
@@ -89,13 +105,14 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
         ),
       );
 
-      const effectiveCommand = sessionType === 'terminal' ? 'bash' : command;
+      const args = additionalArgs.trim() ? additionalArgs.trim().split(/\s+/) : undefined;
 
       const session = await createSession.mutateAsync({
         machine_id: machineId,
         terminal_size: { cols, rows },
-        ...(effectiveCommand ? { command: effectiveCommand } : {}),
+        ...(sessionType === 'terminal' ? { command: 'bash' } : {}),
         ...(workingDir ? { working_dir: workingDir } : {}),
+        ...(sessionType === 'claude' && args ? { args } : {}),
         ...(sessionType === 'claude' && model ? { model } : {}),
         ...(sessionType === 'claude' && skipPermissions ? { skip_permissions: skipPermissions === '1' } : {}),
         ...(sessionType === 'claude' && selectedTemplate ? { template_id: selectedTemplate.template_id } : {}),
@@ -141,7 +158,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
                 type="button"
                 onClick={() => {
                   setSessionType('terminal');
-                  setCommand('');
+                  setAdditionalArgs('');
                   setModel('');
                   setSkipPermissions('');
                   setSelectedTemplate(null);
@@ -166,7 +183,6 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
                 onSelect={(template) => {
                   setSelectedTemplate(template);
                   setVariables({});
-                  if (template.command) setCommand(template.command);
                   if (template.working_dir) setWorkingDir(template.working_dir);
                 }}
               />
@@ -202,28 +218,43 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
             <label className="block text-sm text-text-secondary mb-1">
               Working Directory <span className="text-text-secondary/50">(optional)</span>
             </label>
-            <input
-              type="text"
-              value={workingDir}
-              onChange={(e) => setWorkingDir(e.target.value)}
-              placeholder="/home/user/project"
-              className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={workingDir}
+                onChange={(e) => {
+                  setWorkingDir(e.target.value);
+                  setWorkingDirDirty(true);
+                }}
+                placeholder="/home/user/project"
+                className="flex-1 rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
+              />
+              <button
+                type="button"
+                disabled={!machineId}
+                onClick={() => setBrowseOpen(true)}
+                className="px-3 py-2 rounded-md bg-bg-tertiary border border-gray-600 text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Browse directories"
+              >
+                <FolderOpen size={16} />
+              </button>
+            </div>
           </div>
 
           {sessionType === 'claude' && (
             <>
               <div>
                 <label className="block text-sm text-text-secondary mb-1">
-                  Command <span className="text-text-secondary/50">(defaults to "claude")</span>
+                  Additional Arguments <span className="text-text-secondary/50">(optional)</span>
                 </label>
                 <input
                   type="text"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  placeholder="claude"
+                  value={additionalArgs}
+                  onChange={(e) => setAdditionalArgs(e.target.value)}
+                  placeholder="--resume abc123, --verbose, etc."
                   className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/30"
                 />
+                <p className="text-xs text-text-secondary/50 mt-1">Extra CLI flags passed to claude</p>
               </div>
 
               <div>
@@ -290,6 +321,20 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
           </div>
         </form>
       </div>
+
+      {browseOpen && machineId && (
+        <DirectoryBrowserModal
+          open={browseOpen}
+          onClose={() => setBrowseOpen(false)}
+          onSelect={(path) => {
+            setWorkingDir(path);
+            setWorkingDirDirty(true);
+            setBrowseOpen(false);
+          }}
+          machineId={machineId}
+          initialPath={workingDir || undefined}
+        />
+      )}
     </div>,
     document.body,
   );

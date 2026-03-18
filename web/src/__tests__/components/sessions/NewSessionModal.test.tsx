@@ -60,8 +60,8 @@ describe('NewSessionModal', () => {
       <NewSessionModal open={true} onClose={() => {}} />,
     );
 
-    // Claude mode shows Command, Model, Skip Permissions fields
-    expect(screen.getByText(/Command/)).toBeInTheDocument();
+    // Claude mode shows Additional Arguments, Model, Skip Permissions fields
+    expect(screen.getByText(/Additional Arguments/)).toBeInTheDocument();
     expect(screen.getByText(/Model/)).toBeInTheDocument();
     expect(screen.getByText(/Skip Permissions/)).toBeInTheDocument();
   });
