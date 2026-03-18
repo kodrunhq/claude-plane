@@ -14,6 +14,7 @@ import { RunsPage } from './views/RunsPage.tsx'
 import { LoginPage } from './views/LoginPage.tsx'
 import { WebhooksPage, WebhookDeliveriesPage } from './views/WebhooksPage.tsx'
 import { EventsPage } from './views/EventsPage.tsx'
+import { LogsPage } from './views/LogsPage.tsx'
 import { AdminPage } from './views/AdminPage.tsx'
 import { ProvisioningPage } from './views/ProvisioningPage.tsx'
 import { CredentialsPage } from './views/CredentialsPage.tsx'
@@ -125,6 +126,7 @@ function App() {
             <Route path="/triggers" element={<TriggersPage />} />
             <Route path="/schedules" element={<SchedulesPage />} />
             <Route path="/events" element={<EventsPage />} />
+            <Route path="/logs" element={<LogsPage />} />
             <Route path="/users" element={<AdminPage />} />
             <Route path="/provisioning" element={<ProvisioningPage />} />
             <Route path="/credentials" element={<CredentialsPage />} />
