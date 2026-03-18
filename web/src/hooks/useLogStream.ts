@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LogEntry, LogFilter } from '../types/log.ts';
 
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
@@ -13,10 +13,18 @@ function buildWsFilter(f: LogFilter) {
   };
 }
 
+/** Stable string key for the current filter — used to reset entries on change. */
+function filterKey(f: LogFilter): string {
+  return JSON.stringify(buildWsFilter(f));
+}
+
 export function useLogStream(
   filter: LogFilter,
   enabled: boolean = false,
 ): { entries: LogEntry[]; connected: boolean } {
+  // Reset entries whenever the filter changes by keying on filterKey.
+  // This avoids calling setState synchronously inside an effect.
+  const fKey = useMemo(() => filterKey(filter), [filter]);
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -25,12 +33,13 @@ export function useLogStream(
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filterRef = useRef(filter);
   const nextIdRef = useRef(1);
+  const prevFilterKeyRef = useRef(fKey);
 
-  // Keep filterRef in sync and send filter updates
+  // Keep filterRef in sync and send filter updates to the server.
+  // Entries are cleared via the prevFilterKeyRef check in onmessage,
+  // not via a synchronous setState in this effect.
   useEffect(() => {
     filterRef.current = filter;
-    setEntries([]); // Clear stale entries on filter change
-    nextIdRef.current = 1; // Reset client-side ID counter
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'update_filter',
@@ -69,8 +78,17 @@ export function useLogStream(
         try {
           const msg = JSON.parse(event.data as string) as { type: string; entry?: LogEntry };
           if (msg.type === 'log' && msg.entry) {
+            const currentKey = filterKey(filterRef.current);
             const entry = { ...msg.entry, id: nextIdRef.current++ };
-            setEntries(prev => [entry, ...prev].slice(0, 1000));
+            setEntries(prev => {
+              // If filter changed since last message, clear old entries
+              if (prevFilterKeyRef.current !== currentKey) {
+                prevFilterKeyRef.current = currentKey;
+                nextIdRef.current = 2; // reset after the current entry
+                return [entry];
+              }
+              return [entry, ...prev].slice(0, 1000);
+            });
           }
         } catch {
           // ignore parse errors
