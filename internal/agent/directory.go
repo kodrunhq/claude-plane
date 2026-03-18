@@ -26,7 +26,10 @@ func (c *AgentClient) handleListDirectory(cmd *pb.ListDirectoryCmd, sendCh chan<
 	}
 
 	// Restrict browsing to the user's home directory.
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		c.logger.Debug("could not determine home directory", "error", err)
+	}
 	if homeDir != "" {
 		if !strings.HasPrefix(dirPath, homeDir+"/") && dirPath != homeDir {
 			c.sendDirectoryError(sendCh, requestID, dirPath, "path outside allowed directory")
@@ -50,8 +53,6 @@ func (c *AgentClient) handleListDirectory(cmd *pb.ListDirectoryCmd, sendCh chan<
 		entryType := "file"
 		if e.IsDir() {
 			entryType = "dir"
-		} else if e.Type()&os.ModeSymlink != 0 {
-			entryType = "symlink"
 		}
 		pbEntries = append(pbEntries, &pb.DirectoryEntry{
 			Name: e.Name(),

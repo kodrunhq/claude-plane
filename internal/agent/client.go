@@ -120,7 +120,10 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 		existingSessions = c.sessions.GetStates()
 	}
 
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		c.logger.Debug("could not determine home directory", "error", err)
+	}
 	resp, err := client.Register(ctx, &pb.RegisterRequest{
 		MachineId:        c.cfg.Agent.MachineID,
 		MaxSessions:      int32(c.cfg.Agent.MaxSessions),
