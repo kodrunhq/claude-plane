@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -239,12 +240,16 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		if err := agent.SendCommand(cmd); err != nil {
-			h.logger.Error("failed to send create session command", "error", err)
-			// Session was created in DB but command failed; update status
+			h.logger.Error("failed to send create session command",
+				"error", err,
+				"machine_id", req.MachineID,
+				"session_id", sessionID,
+			)
 			if err := h.store.UpdateSessionStatus(sessionID, store.StatusFailed); err != nil {
 				h.logger.Warn("failed to update session status after command dispatch failure", "error", err, "session_id", sessionID)
 			}
-			httputil.WriteError(w, http.StatusInternalServerError, "failed to dispatch session to agent")
+			h.publishEvent(r.Context(), event.NewDispatchFailedEvent(sessionID, req.MachineID, "", err.Error()))
+			httputil.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to dispatch session to agent: %v", err))
 			return
 		}
 	}
