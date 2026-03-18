@@ -189,8 +189,13 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 			recvErr = err
 			break
 		}
-		if c.sessions != nil {
-			c.sessions.HandleCommand(cmd)
+		switch cmd.GetCommand().(type) {
+		case *pb.ServerCommand_ListDirectory:
+			go c.handleListDirectory(cmd.GetListDirectory(), sendCh)
+		default:
+			if c.sessions != nil {
+				c.sessions.HandleCommand(cmd)
+			}
 		}
 	}
 
