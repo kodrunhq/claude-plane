@@ -25,6 +25,7 @@ message RegisterRequest {
   int32 max_sessions = 2;
   ResourceInfo resources = 3;
   repeated SessionState existing_sessions = 4;
+  string home_dir = 5;
 }
 
 message RegisterResponse {
@@ -59,6 +60,7 @@ message ServerCommand {
     InputDataCmd input_data = 6;
     RequestScrollbackCmd request_scrollback = 7;
     CleanupScrollbackCmd cleanup_scrollback = 8;
+    ListDirectoryCmd list_directory = 9;
   }
 }
 
@@ -105,6 +107,24 @@ message CleanupScrollbackCmd {
   string session_id = 1;
 }
 
+message ListDirectoryCmd {
+  string request_id = 1;
+  string path = 2;
+}
+
+message DirectoryEntry {
+  string name = 1;
+  string type = 2;
+}
+
+message DirectoryListingEvent {
+  string request_id = 1;
+  string path = 2;
+  repeated DirectoryEntry entries = 3;
+  string error = 4;
+  string parent = 5;
+}
+
 message TerminalSize {
   uint32 cols = 1;
   uint32 rows = 2;
@@ -122,6 +142,7 @@ message AgentEvent {
     TaskValuesEvent task_values = 6;
     StepIdleEvent step_idle = 7;
     LogBatch log_batch = 8;
+    DirectoryListingEvent directory_listing = 9;
   }
 }
 
