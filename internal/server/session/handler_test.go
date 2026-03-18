@@ -1381,3 +1381,64 @@ func TestCreateSession_ModelOverridesArg(t *testing.T) {
 	}
 }
 
+// --- skip_permissions injection tests ---
+
+func TestCreateSession_SkipPermissionsTrue(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a","skip_permissions":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if !containsFlag(createCmd.Args, "--dangerously-skip-permissions") {
+		t.Errorf("args = %v; want --dangerously-skip-permissions flag when skip_permissions=true", createCmd.Args)
+	}
+}
+
+func TestCreateSession_SkipPermissionsFalse(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a","skip_permissions":false}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if containsFlag(createCmd.Args, "--dangerously-skip-permissions") {
+		t.Errorf("args = %v; want NO --dangerously-skip-permissions flag when skip_permissions=false", createCmd.Args)
+	}
+}
+
+func TestCreateSession_SkipPermissionsOmitted(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if containsFlag(createCmd.Args, "--dangerously-skip-permissions") {
+		t.Errorf("args = %v; want NO --dangerously-skip-permissions flag when skip_permissions is omitted", createCmd.Args)
+	}
+}
