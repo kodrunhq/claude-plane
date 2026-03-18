@@ -1085,3 +1085,140 @@ func TestInjectSession_NonOwnerReturns404(t *testing.T) {
 		t.Errorf("inject by non-owner: status = %d, want 404; body = %s", w.Code, w.Body.String())
 	}
 }
+
+// --- GetSessionStats Tests ---
+
+func setupStatsTestHandler(t *testing.T, getClaims session.ClaimsGetter) (chi.Router, *store.Store) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	cm := connmgr.NewConnectionManager(&mockMachineStore{}, nil)
+	reg := session.NewRegistry(slog.Default())
+
+	handler := session.NewSessionHandler(st, cm, reg, getClaims, slog.Default())
+	r := chi.NewRouter()
+	r.Get("/api/v1/sessions/stats", handler.GetSessionStats)
+	return r, st
+}
+
+func TestGetSessionStats_NonAdminReturns403(t *testing.T) {
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "user-1", Role: "user"}
+	}
+	router, _ := setupStatsTestHandler(t, getClaims)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/stats", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestGetSessionStats_NilClaimsReturns403(t *testing.T) {
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return nil
+	}
+	router, _ := setupStatsTestHandler(t, getClaims)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/stats", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestGetSessionStats_Default24h(t *testing.T) {
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "admin-1", Role: "admin"}
+	}
+	router, st := setupStatsTestHandler(t, getClaims)
+
+	// Create a few sessions with different statuses
+	if err := st.UpsertMachine("machine-a", 5); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	for _, s := range []struct {
+		id     string
+		status string
+	}{
+		{"s1", store.StatusCompleted},
+		{"s2", store.StatusFailed},
+		{"s3", store.StatusRunning},
+	} {
+		if err := st.CreateSession(&store.Session{
+			SessionID: s.id,
+			MachineID: "machine-a",
+			Command:   "claude",
+			Status:    s.status,
+		}); err != nil {
+			t.Fatalf("CreateSession %s: %v", s.id, err)
+		}
+		if s.status == store.StatusCompleted || s.status == store.StatusFailed {
+			if err := st.UpdateSessionStatus(s.id, s.status); err != nil {
+				t.Fatalf("UpdateSessionStatus %s: %v", s.id, err)
+			}
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/stats", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if total := resp["total"].(float64); total != 3 {
+		t.Errorf("total = %v, want 3", total)
+	}
+	if succeeded := resp["succeeded"].(float64); succeeded != 1 {
+		t.Errorf("succeeded = %v, want 1", succeeded)
+	}
+	if failed := resp["failed"].(float64); failed != 1 {
+		t.Errorf("failed = %v, want 1", failed)
+	}
+}
+
+func TestGetSessionStats_InvalidSinceReturns400(t *testing.T) {
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "admin-1", Role: "admin"}
+	}
+	router, _ := setupStatsTestHandler(t, getClaims)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/stats?since=not-a-date", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestGetSessionStats_AcceptsFractionalSeconds(t *testing.T) {
+	getClaims := func(r *http.Request) *session.UserClaims {
+		return &session.UserClaims{UserID: "admin-1", Role: "admin"}
+	}
+	router, _ := setupStatsTestHandler(t, getClaims)
+
+	// JavaScript Date.toISOString() produces fractional seconds
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/stats?since=2026-03-17T12:00:00.123Z", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}

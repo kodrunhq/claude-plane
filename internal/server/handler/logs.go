@@ -21,6 +21,15 @@ func NewLogsHandler(store *logging.LogStore, getClaims ClaimsGetter) *LogsHandle
 	return &LogsHandler{store: store, getClaims: getClaims}
 }
 
+// parseTime tries RFC3339Nano first (handles fractional seconds from JavaScript
+// Date.toISOString()), then falls back to RFC3339.
+func parseTime(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
+}
+
 // ListLogs handles GET /api/v1/logs
 func (h *LogsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r, h.getClaims) {
@@ -31,7 +40,7 @@ func (h *LogsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 
 	var since, until time.Time
 	if s := q.Get("since"); s != "" {
-		parsed, err := time.Parse(time.RFC3339, s)
+		parsed, err := parseTime(s)
 		if err != nil {
 			httputil.WriteError(w, http.StatusBadRequest, "invalid since parameter: expected RFC3339 format")
 			return
@@ -39,7 +48,7 @@ func (h *LogsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 		since = parsed
 	}
 	if u := q.Get("until"); u != "" {
-		parsed, err := time.Parse(time.RFC3339, u)
+		parsed, err := parseTime(u)
 		if err != nil {
 			httputil.WriteError(w, http.StatusBadRequest, "invalid until parameter: expected RFC3339 format")
 			return
@@ -95,7 +104,7 @@ func (h *LogsHandler) GetLogStats(w http.ResponseWriter, r *http.Request) {
 
 	since := time.Now().UTC().Add(-24 * time.Hour)
 	if s := r.URL.Query().Get("since"); s != "" {
-		parsed, err := time.Parse(time.RFC3339, s)
+		parsed, err := parseTime(s)
 		if err != nil {
 			httputil.WriteError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
 			return

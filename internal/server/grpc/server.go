@@ -77,6 +77,7 @@ type agentService struct {
 	stepIdleHandler StepIdleHandler
 	cleanupStore    cleanupStore
 	logStore        *logging.LogStore
+	logBroadcaster  *logging.LogBroadcaster
 	ingestor        *ingest.ContentIngestor
 	logger          *slog.Logger
 }
@@ -168,6 +169,12 @@ func (s *GRPCServer) SetContentIngestor(ci *ingest.ContentIngestor) {
 // SetLogStore sets the log store for persisting agent log batches.
 func (s *GRPCServer) SetLogStore(ls *logging.LogStore) {
 	s.agentSvc.logStore = ls
+}
+
+// SetLogBroadcaster sets the broadcaster for live-streaming agent logs
+// to WebSocket subscribers.
+func (s *GRPCServer) SetLogBroadcaster(lb *logging.LogBroadcaster) {
+	s.agentSvc.logBroadcaster = lb
 }
 
 // Serve starts the gRPC server on the given listener.
@@ -553,6 +560,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					}
 					if err := s.logStore.InsertBatch(records); err != nil {
 						s.logger.Warn("failed to insert agent logs", "error", err, "machine_id", machineID)
+					}
+					// Broadcast agent logs to live WebSocket subscribers
+					if s.logBroadcaster != nil {
+						for _, r := range records {
+							s.logBroadcaster.Broadcast(r)
+						}
 					}
 				}
 			}

@@ -24,11 +24,13 @@ export function useLogStream(
   const mountedRef = useRef(true);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filterRef = useRef(filter);
+  const nextIdRef = useRef(1);
 
   // Keep filterRef in sync and send filter updates
   useEffect(() => {
     filterRef.current = filter;
     setEntries([]); // Clear stale entries on filter change
+    nextIdRef.current = 1; // Reset client-side ID counter
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'update_filter',
@@ -67,7 +69,8 @@ export function useLogStream(
         try {
           const msg = JSON.parse(event.data as string) as { type: string; entry?: LogEntry };
           if (msg.type === 'log' && msg.entry) {
-            setEntries(prev => [msg.entry!, ...prev].slice(0, 1000));
+            const entry = { ...msg.entry, id: nextIdRef.current++ };
+            setEntries(prev => [entry, ...prev].slice(0, 1000));
           }
         } catch {
           // ignore parse errors

@@ -19,17 +19,12 @@ export function LogsPage() {
   // Parse URL search params to pre-apply filters (responds to navigation changes)
   const [searchParams] = useSearchParams();
   useEffect(() => {
-    const urlFilter: Record<string, string | number> = {};
     const paramKeys = ['level', 'source', 'component', 'machine_id', 'session_id', 'search', 'since', 'until'] as const;
+    const urlFilter: Record<string, string | undefined> = {};
     for (const key of paramKeys) {
-      const val = searchParams.get(key);
-      if (val) {
-        urlFilter[key] = val;
-      }
+      urlFilter[key] = searchParams.get(key) ?? undefined;
     }
-    if (Object.keys(urlFilter).length > 0) {
-      setFilter(urlFilter);
-    }
+    setFilter(urlFilter);
   }, [searchParams, setFilter]);
 
   // REST query for non-live mode (disabled when live streaming is active)
@@ -56,7 +51,8 @@ export function LogsPage() {
   };
 
   const hasActiveFilters = Boolean(
-    filter.level || filter.source || filter.component || filter.machine_id || filter.search || filter.since,
+    filter.level || filter.source || filter.component || filter.machine_id ||
+    filter.session_id || filter.search || filter.since || filter.until,
   );
 
   if (error && !live) {
