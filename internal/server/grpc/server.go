@@ -242,15 +242,17 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	}
 
 	// Register with the DB-backed connection manager if available.
+	var ca *connmgr.ConnectedAgent
 	if s.agentConnMgr != nil {
 		var maxSessions int32
 		if entry, ok := s.streams.Get(machineID); ok {
 			maxSessions = entry.MaxSessions
 		}
-		ca := &connmgr.ConnectedAgent{
+		ca = &connmgr.ConnectedAgent{
 			MachineID:    machineID,
 			RegisteredAt: time.Now(),
 			MaxSessions:  maxSessions,
+			Ctx:          ctx,
 			Cancel:       cancel,
 			Stream:       stream,
 			SendCommand:  sendCommand,
@@ -298,11 +300,14 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	s.logger.Info("agent stream opened", "machine_id", machineID)
 	defer func() {
 		s.streams.RemoveIfToken(machineID, streamToken)
-		if s.agentConnMgr != nil && ctx.Err() == nil {
-			s.agentConnMgr.Disconnect(machineID)
+		if s.agentConnMgr != nil {
+			if s.agentConnMgr.DisconnectIfMatch(machineID, ca) {
+				s.logger.Info("agent disconnected (stream closed)", "machine_id", machineID)
+			} else {
+				s.logger.Info("agent stream closed (replaced by newer connection)", "machine_id", machineID)
+			}
 		}
 		cancel()
-		s.logger.Info("agent stream closed", "machine_id", machineID)
 	}()
 
 	// Receive loop: run Recv in a goroutine so ctx cancellation (from a
