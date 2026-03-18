@@ -25,8 +25,9 @@
 - **Job system** — Define multi-step jobs as DAGs, trigger runs, and let Claude work across machines with dependency-aware orchestration
 - **Real-time terminal** — Full terminal emulation via xterm.js with live WebSocket streaming
 - **External integrations** — Bridge component connects GitHub, Telegram, and Slack to trigger jobs and relay notifications
+- **System logging & monitoring** — Structured logs from server and agents with live streaming, filterable log viewer, dashboard health cards, and real-time toast alerts
 - **Zero-config networking** — Agents dial in to the server, so workers can be behind NATs and firewalls
-- **Single binary per role** — No runtime dependencies. `scp` the binary, add a config file, and run
+- **Single binary per role** — No runtime dependencies. `scp` the binary, add a config file, and run. Agents install as system services with one command
 - **mTLS security** — Agent-to-server communication secured with mutual TLS and a built-in CA
 
 ## Architecture
@@ -89,16 +90,26 @@ Replace `your-server` with `localhost` if running on the same machine, or the se
 
 **2. Generate a provisioning code** from the dashboard: go to the **Provisioning** page and create a new token. You'll get a 6-character code.
 
-**3. Join and start the agent:**
+**3. Join the server:**
 
 ```bash
 ./claude-plane-agent join ABC123 --server http://your-server:4200 --insecure
-./claude-plane-agent run --config ~/.claude-plane/agent.toml
 ```
 
-The `--insecure` flag is required when the server uses plain HTTP (the default Docker setup). For HTTPS deployments, omit it.
+**4. Install as a background service (recommended):**
 
-The `join` command downloads TLS certificates and writes the agent config automatically. The machine running the agent needs [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
+```bash
+sudo ./claude-plane-agent install-service --config ~/.claude-plane/agent.toml
+```
+
+That's it — the agent now runs as a systemd service (Linux) or launchd daemon (macOS). It survives SSH disconnects, starts on boot, and auto-restarts on crash.
+
+```bash
+sudo systemctl status claude-plane-agent    # check status
+sudo journalctl -u claude-plane-agent -f    # view logs
+```
+
+The `--insecure` flag on `join` is required when the server uses plain HTTP (the default Docker setup). For HTTPS deployments, omit it. The machine running the agent needs [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
 
 ### Build from source
 
