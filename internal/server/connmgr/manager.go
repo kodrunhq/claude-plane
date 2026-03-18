@@ -75,10 +75,11 @@ func (ca *ConnectedAgent) GetHealth() *HealthInfo {
 
 // AgentInfo is a public DTO for REST API responses.
 type AgentInfo struct {
-	MachineID   string    `json:"machine_id"`
-	Status      string    `json:"status"`
-	MaxSessions int32     `json:"max_sessions"`
-	ConnectedAt time.Time `json:"connected_at"`
+	MachineID   string      `json:"machine_id"`
+	Status      string      `json:"status"`
+	MaxSessions int32       `json:"max_sessions"`
+	ConnectedAt time.Time   `json:"connected_at"`
+	Health      *HealthInfo `json:"health,omitempty"`
 }
 
 // ConnectionManager tracks connected agents in-memory and persists status
@@ -274,6 +275,7 @@ func (cm *ConnectionManager) ListAgents() []AgentInfo {
 			Status:      "connected",
 			MaxSessions: a.MaxSessions,
 			ConnectedAt: a.RegisteredAt,
+			Health:      a.GetHealth(),
 		})
 	}
 	return result

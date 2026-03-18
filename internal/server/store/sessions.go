@@ -169,6 +169,19 @@ func (s *Store) DeleteSession(id string) error {
 	return nil
 }
 
+// GetSessionStats returns session counts by outcome since the given time.
+func (s *Store) GetSessionStats(since time.Time) (total, succeeded, failed int, err error) {
+	row := s.reader.QueryRow(`
+		SELECT
+			COUNT(*),
+			COUNT(CASE WHEN status IN ('completed', 'running', 'created') THEN 1 END),
+			COUNT(CASE WHEN status = 'failed' THEN 1 END)
+		FROM sessions
+		WHERE started_at >= ?`, since.UTC().Format(time.RFC3339))
+	err = row.Scan(&total, &succeeded, &failed)
+	return
+}
+
 func scanSessions(rows *sql.Rows) ([]Session, error) {
 	var sessions []Session
 	for rows.Next() {

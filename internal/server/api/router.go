@@ -69,6 +69,7 @@ type RouterDeps struct {
 	CredentialHandler   *handler.CredentialHandler
 	PreferencesHandler  *handler.PreferencesHandler
 	NotificationHandler *handler.NotificationHandler
+	LogsHandler         *handler.LogsHandler
 	APIKeyAuth          *APIKeyAuth
 	OnShutdown          func(func()) // optional callback to register shutdown hooks
 }
@@ -131,10 +132,17 @@ func NewRouter(deps RouterDeps) chi.Router {
 			if deps.SessionHandler != nil {
 				r.Post("/sessions", deps.SessionHandler.CreateSession)
 				r.Get("/sessions", deps.SessionHandler.ListSessions)
+				r.Get("/sessions/stats", deps.SessionHandler.GetSessionStats)
 				r.Get("/sessions/{sessionID}", deps.SessionHandler.GetSession)
 				r.Delete("/sessions/{sessionID}", deps.SessionHandler.TerminateSession)
 				r.Post("/sessions/{sessionID}/inject", deps.SessionHandler.InjectSession)
 				r.Get("/sessions/{sessionID}/injections", deps.SessionHandler.ListInjections)
+			}
+
+			// Log routes
+			if deps.LogsHandler != nil {
+				r.Get("/logs", deps.LogsHandler.ListLogs)
+				r.Get("/logs/stats", deps.LogsHandler.GetLogStats)
 			}
 		})
 	})

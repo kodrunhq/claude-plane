@@ -371,6 +371,8 @@ func newServeCmd() *cobra.Command {
 
 			notificationHandler := handler.NewNotificationHandler(s, notifiers, handlerClaimsGetter)
 
+			logsHandler := handler.NewLogsHandler(logStore)
+
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
 			// Credentials vault handler — encryption key is auto-generated if not configured.
@@ -443,6 +445,7 @@ func newServeCmd() *cobra.Command {
 				CredentialHandler:  credentialHandler,
 				PreferencesHandler:  preferencesHandler,
 				NotificationHandler: notificationHandler,
+				LogsHandler:         logsHandler,
 				APIKeyAuth:         apiKeyAuth,
 				OnShutdown: func(f func()) { shutdownHooks = append(shutdownHooks, f) },
 			})

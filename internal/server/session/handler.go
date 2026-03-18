@@ -523,6 +523,29 @@ func (h *SessionHandler) ListInjections(w http.ResponseWriter, r *http.Request) 
 	httputil.WriteJSON(w, http.StatusOK, injections)
 }
 
+// GetSessionStats handles GET /api/v1/sessions/stats
+func (h *SessionHandler) GetSessionStats(w http.ResponseWriter, r *http.Request) {
+	since := time.Now().UTC().Add(-24 * time.Hour)
+	if s := r.URL.Query().Get("since"); s != "" {
+		if parsed, err := time.Parse(time.RFC3339, s); err == nil {
+			since = parsed
+		}
+	}
+
+	total, succeeded, failed, err := h.store.GetSessionStats(since)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to get session stats")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"total":     total,
+		"succeeded": succeeded,
+		"failed":    failed,
+		"period":    "24h",
+	})
+}
+
 // authorizeSession returns true if the current user is allowed to access the session.
 // Admins can access any session; regular users can only access their own.
 // Returns true only when no claims getter is configured (explicitly unauthenticated mode).
