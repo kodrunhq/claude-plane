@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
   MACHINE_DISCONNECTED,
@@ -19,68 +20,75 @@ interface SystemEvent {
  * Call once in a top-level component (e.g. AppShell).
  */
 export function useSystemAlerts() {
+  const navigate = useNavigate();
   const handledRef = useRef(new Set<string>());
+  const navigateRef = useRef(navigate);
 
   useEffect(() => {
-    function handleEvent(e: Event) {
-      const detail = (e as CustomEvent<SystemEvent>).detail;
-      if (!detail?.event_type) return;
+    navigateRef.current = navigate;
+  }, [navigate]);
 
-      // Deduplicate by event_id when available
-      const id = detail.event_id;
-      if (id) {
-        if (handledRef.current.has(id)) return;
-        handledRef.current.add(id);
-        // Cap set size to prevent memory leak
-        if (handledRef.current.size > 1000) {
-          handledRef.current.clear();
-        }
-      }
+  const handleEvent = useCallback((e: Event) => {
+    const detail = (e as CustomEvent<SystemEvent>).detail;
+    if (!detail?.event_type) return;
 
-      const payload = detail.payload ?? {};
-
-      switch (detail.event_type) {
-        case MACHINE_DISCONNECTED:
-          toast.error(
-            `Agent ${String(payload.machine_id ?? 'unknown')} disconnected`,
-            {
-              description: 'The agent connection was lost.',
-              action: {
-                label: 'View Logs',
-                onClick: () =>
-                  window.location.assign(
-                    '/logs?source=server&component=connmgr',
-                  ),
-              },
-            },
-          );
-          break;
-
-        case MACHINE_STALE:
-          toast.warning(
-            `Agent ${String(payload.machine_id ?? 'unknown')} stale`,
-            {
-              description: 'Dead transport detected and cleaned up.',
-            },
-          );
-          break;
-
-        case SESSION_DISPATCH_FAILED:
-          toast.error('Session dispatch failed', {
-            description: String(payload.error ?? 'Unknown error'),
-            action: {
-              label: 'View Logs',
-              onClick: () =>
-                window.location.assign(
-                  '/logs?level=ERROR&component=session',
-                ),
-            },
-          });
-          break;
+    // Deduplicate by event_id when available
+    const id = detail.event_id;
+    if (id) {
+      if (handledRef.current.has(id)) return;
+      handledRef.current.add(id);
+      // Cap set size to prevent memory leak
+      if (handledRef.current.size > 1000) {
+        handledRef.current.clear();
       }
     }
 
+    const payload = detail.payload ?? {};
+
+    switch (detail.event_type) {
+      case MACHINE_DISCONNECTED:
+        toast.error(
+          `Agent ${String(payload.machine_id ?? 'unknown')} disconnected`,
+          {
+            description: 'The agent connection was lost.',
+            action: {
+              label: 'View Logs',
+              onClick: () =>
+                navigateRef.current('/logs?source=server&component=connmgr'),
+            },
+          },
+        );
+        break;
+
+      case MACHINE_STALE:
+        toast.warning(
+          `Agent ${String(payload.machine_id ?? 'unknown')} stale`,
+          {
+            description: 'Dead transport detected and cleaned up.',
+            action: {
+              label: 'View Logs',
+              onClick: () =>
+                navigateRef.current('/logs?source=server&component=connmgr'),
+            },
+          },
+        );
+        break;
+
+      case SESSION_DISPATCH_FAILED:
+        toast.error('Session dispatch failed', {
+          description: String(payload.error ?? 'Unknown error'),
+          action: {
+            label: 'View Logs',
+            onClick: () =>
+              navigateRef.current('/logs?level=ERROR&component=session'),
+          },
+        });
+        break;
+    }
+  }, []);
+
+  useEffect(() => {
     window.addEventListener('claude-plane-event', handleEvent);
     return () => window.removeEventListener('claude-plane-event', handleEvent);
-  }, []);
+  }, [handleEvent]);
 }

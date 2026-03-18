@@ -83,6 +83,10 @@ export const handlers = [
 
   http.get('/api/v1/events', () => HttpResponse.json(mockEvents)),
 
+  http.get('/api/v1/logs', () => HttpResponse.json({ logs: [], total: 0 })),
+  http.get('/api/v1/logs/stats', () => HttpResponse.json({ by_level: {}, by_component: {}, total: 0 })),
+  http.get('/api/v1/sessions/stats', () => HttpResponse.json({ total: 0, succeeded: 0, failed: 0, period: '24h' })),
+
   http.get('/api/v1/users/me/preferences', () =>
     HttpResponse.json({
       ui: {

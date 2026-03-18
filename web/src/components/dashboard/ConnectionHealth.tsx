@@ -25,9 +25,9 @@ function AgentCard({ machine }: { machine: Machine }) {
       </div>
 
       <div className="text-xs text-text-secondary space-y-1">
-        {machine.last_health && (
+        {machine.last_seen_at && (
           <p>
-            Last health: <TimeAgo date={machine.last_health} />
+            Last seen: <TimeAgo date={machine.last_seen_at} />
           </p>
         )}
         {machine.health ? (
