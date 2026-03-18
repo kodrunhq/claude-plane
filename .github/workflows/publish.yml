@@ -89,13 +89,22 @@ jobs:
           npm run lint
           npm run test -- --run
 
-      - name: Smoke test (build all binaries)
+      - name: Smoke test (build all binaries + verify agent embed)
         run: |
+          bash scripts/build-agent-binaries.sh
+          for f in internal/server/agentdl/binaries/claude-plane-agent-*; do
+            if [ ! -s "$f" ]; then
+              echo "::error::Agent binary missing or empty: $f"
+              exit 1
+            fi
+            echo "OK $f ($(stat -c%s "$f") bytes)"
+          done
           go build -o /tmp/claude-plane-server ./cmd/server
           go build -o /tmp/claude-plane-agent ./cmd/agent
           go build -o /tmp/claude-plane-bridge ./cmd/bridge
+          /tmp/claude-plane-agent install-service --help > /dev/null 2>&1
+          echo "OK agent install-service command present"
           /tmp/claude-plane-server version 2>/dev/null || true
-          /tmp/claude-plane-agent version 2>/dev/null || true
 
       - name: Create and push tag
         if: inputs.version_bump != 'current'
@@ -112,6 +121,20 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify goreleaser output
+        run: |
+          echo "==> Checking goreleaser dist/ output..."
+          ls -la dist/server_linux_amd64_v1/ 2>/dev/null || ls -la dist/server_linux_amd64*/ 2>/dev/null
+          ls -la dist/agent_linux_amd64_v1/ 2>/dev/null || ls -la dist/agent_linux_amd64*/ 2>/dev/null
+          AGENT_BIN=$(find dist/ -name 'claude-plane-agent' -path '*linux_amd64*' | head -1)
+          if [ -z "$AGENT_BIN" ]; then
+            echo "::error::Agent binary not found in goreleaser dist/"
+            exit 1
+          fi
+          "$AGENT_BIN" install-service --help > /dev/null 2>&1
+          echo "OK goreleaser agent has install-service"
+          echo "==> All release artifacts verified"
 
       # --- Docker: server image only ---
 

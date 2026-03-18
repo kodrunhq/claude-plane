@@ -41,11 +41,16 @@ jobs:
       - name: Test
         run: go test -race ./...
 
-      - name: Build server
+      - name: Build agent binaries for embedding
+        run: bash scripts/build-agent-binaries.sh
+
+      - name: Build server (with embedded agent binaries)
         run: go build -o /dev/null ./cmd/server
 
-      - name: Build agent
-        run: go build -o /dev/null ./cmd/agent
+      - name: Verify agent has install-service
+        run: |
+          go build -o /tmp/claude-plane-agent ./cmd/agent
+          /tmp/claude-plane-agent install-service --help > /dev/null 2>&1
 
   frontend:
     name: Frontend (Node)
