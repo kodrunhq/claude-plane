@@ -82,9 +82,39 @@ sudo -u claude-plane claude --version
 # 2. Set claude_cli_path in agent.toml to the full path
 ```
 
-## 6. Create systemd Service
+## Alternative: Quick Join
 
-Create `/etc/systemd/system/claude-plane-agent.service`:
+If the server admin has generated a provisioning short code, you can skip the manual certificate setup:
+
+```bash
+# Download from the server
+curl -o claude-plane-agent http://server:4200/dl/agent/linux-amd64
+chmod +x claude-plane-agent
+
+# Join with the short code
+./claude-plane-agent join CODE --server http://server:4200 --insecure
+
+# Install as a service
+sudo ./claude-plane-agent install-service --config ~/.claude-plane/agent.toml
+```
+
+## 6. Install as System Service
+
+The recommended way to run the agent is as a system service:
+
+```bash
+sudo claude-plane-agent install-service --config /etc/claude-plane/agent.toml
+```
+
+This automatically creates and enables:
+- **Linux**: A systemd service (`/etc/systemd/system/claude-plane-agent.service`)
+- **macOS**: A launchd daemon (`/Library/LaunchDaemons/com.claude-plane.agent.plist`)
+
+The service starts on boot, restarts on crash (5s delay), and runs as the specified user.
+
+### Manual systemd setup (alternative)
+
+If you prefer to create the service manually, create `/etc/systemd/system/claude-plane-agent.service`:
 
 ```ini
 [Unit]

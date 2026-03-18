@@ -41,6 +41,17 @@ The database file is created automatically if it doesn't exist. Migrations run o
 | `jwt_secret` | string | Yes | Secret key for signing JWT tokens. Must be at least 32 characters. |
 | `token_ttl` | string | No | JWT token lifetime as a Go duration string. Default: `"60m"` |
 
+### `[log]` — Logging
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `level` | string | No | `"info"` | Log level: `debug`, `info`, `warn`, `error` |
+| `format` | string | No | `"text"` | Log format: `text`, `json` |
+| `retention_days` | int | No | `7` | Auto-purge logs older than this many days |
+| `buffer_size` | int | No | `1000` | Async write buffer size |
+
+Logs are stored in a separate SQLite database (`logs.db`) alongside the main database. Both server and agent logs are captured — agents forward their logs to the server automatically via gRPC. Logs can be viewed in the web UI under **Logs** in the Monitoring section.
+
 ### Full Example
 
 ```toml
@@ -63,6 +74,12 @@ path = "/var/lib/claude-plane/claude-plane.db"
 [auth]
 jwt_secret = "generate-with-openssl-rand-base64-48-minimum-32-chars"
 token_ttl = "60m"
+
+[log]
+level = "info"
+format = "text"
+retention_days = 7
+buffer_size = 1000
 ```
 
 ---
@@ -128,4 +145,6 @@ claude-plane-server seed-admin --db claude-plane.db --email admin@example.com [-
 
 ```
 claude-plane-agent run --config agent.toml
+claude-plane-agent join CODE --server http://server:4200 [--insecure]
+claude-plane-agent install-service --config agent.toml
 ```

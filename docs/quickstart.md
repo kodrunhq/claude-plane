@@ -130,6 +130,12 @@ In a separate terminal:
 ./claude-plane-agent run --config agent.toml
 ```
 
+For production use, install as a system service instead:
+
+```bash
+sudo ./claude-plane-agent install-service --config agent.toml
+```
+
 ## Open the Dashboard
 
 Navigate to `http://localhost:4200` in your browser. Log in with the admin credentials from the setup.

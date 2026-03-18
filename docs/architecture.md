@@ -17,6 +17,7 @@ claude-plane consists of four components:
 - **REST API** — CRUD operations for sessions, machines, jobs, runs. JWT Bearer token auth.
 - **WebSocket (terminal)** — Per-session bidirectional stream for terminal I/O. Binary frames carry PTY data, text frames carry control messages (resize, auth).
 - **WebSocket (events)** — Multiplexed event stream for real-time UI updates (machine status, session changes).
+- **WebSocket (logs)** — Real-time log streaming (`/ws/logs`) with server-side filtering by level, component, source, and machine.
 
 ### Server to Agent (gRPC)
 
@@ -44,6 +45,7 @@ Defined in `proto/claudeplane/v1/agent.proto`:
 | `SessionExit` | Session terminated with exit code |
 | `Health` | Periodic resource usage report |
 | `ScrollbackChunk` | Buffered output replay data |
+| `LogBatch` | Forwarded agent log entries |
 
 ## Terminal Data Flow
 
@@ -109,6 +111,23 @@ Run starts:
 - Admin users can access all resources
 - Regular users can only access their own sessions, jobs, and runs
 - Session access is verified against the session's owner before allowing terminal connections
+
+## Logging System
+
+claude-plane includes a structured logging system for operational visibility:
+
+- **TeeHandler**: A custom `slog.Handler` that writes to both stderr and a separate SQLite database (`logs.db`). The SQLite sink is asynchronous (buffered channel + background batch writer) to avoid blocking request handling.
+- **Agent Log Forwarding**: Agents buffer their slog output and send it to the server as `LogBatch` events via the existing gRPC bidirectional stream. A feedback loop guard prevents recursive log sends when the gRPC transport itself errors.
+- **LogBroadcaster**: Fan-out hub for real-time WebSocket streaming. The `/ws/logs` endpoint subscribes to the broadcaster with server-side filtering (level, component, source, machine).
+- **Retention**: A background cleaner purges logs older than the configured retention period (default: 7 days), deleting in batches of 10,000 to avoid long-held locks.
+
+### Connection Health
+
+The connection manager includes proactive stale detection:
+
+- **DisconnectIfMatch**: Pointer-based identity check for safe disconnect — prevents a replaced stream from evicting a newer connection.
+- **Health Sweep**: Every 30 seconds, the connection manager checks all registered agents' stream contexts. Dead transports are cleaned up immediately and a `machine.stale` event is published.
+- **gRPC Keepalive**: 30s ping interval, 10s timeout on both server and agent sides for transport-level dead connection detection.
 
 ## Data Model
 
