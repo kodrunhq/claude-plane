@@ -13,12 +13,13 @@ import (
 
 // machineResponse is the JSON representation of a machine for API responses.
 type machineResponse struct {
-	MachineID      string              `json:"machine_id"`
-	DisplayName    string              `json:"display_name"`
-	Status         string              `json:"status"`
-	MaxSessions    int32               `json:"max_sessions"`
-	LastSeenAt     *time.Time          `json:"last_seen_at,omitempty"`
-	CreatedAt      time.Time           `json:"created_at"`
+	MachineID      string                 `json:"machine_id"`
+	DisplayName    string                 `json:"display_name"`
+	Status         string                 `json:"status"`
+	MaxSessions    int32                  `json:"max_sessions"`
+	HomeDir        string                 `json:"home_dir"`
+	LastSeenAt     *time.Time             `json:"last_seen_at,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
 	Health         *machineHealthResponse `json:"health,omitempty"`
 }
 
@@ -38,6 +39,7 @@ func (h *Handlers) buildMachineResponse(m store.Machine) machineResponse {
 		DisplayName: m.DisplayName,
 		Status:      m.Status,
 		MaxSessions: m.MaxSessions,
+		HomeDir:     m.HomeDir,
 		LastSeenAt:  m.LastSeenAt,
 		CreatedAt:   m.CreatedAt,
 	}

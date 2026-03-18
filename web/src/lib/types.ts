@@ -12,6 +12,7 @@ export interface Machine {
   display_name: string;
   status: 'connected' | 'disconnected';
   max_sessions: number;
+  home_dir: string;
   last_health: string;
   last_seen_at: string;
   cert_expires: string;
