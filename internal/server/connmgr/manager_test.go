@@ -1,6 +1,7 @@
 package connmgr
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -251,6 +252,90 @@ func TestRegister_DBFailureDoesNotDeleteNewerConnection(t *testing.T) {
 		if err := got.SendCommand(nil); err != nil {
 			t.Error("agent in map should not be the failed agent2")
 		}
+	}
+}
+
+func TestDisconnectIfMatch_MatchingAgent(t *testing.T) {
+	cm, ms := newTestManager()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	agent := &ConnectedAgent{
+		MachineID:    "worker-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       cancel,
+		Ctx:          ctx,
+	}
+	if err := cm.Register("worker-1", agent); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	disconnected := cm.DisconnectIfMatch("worker-1", agent)
+	if !disconnected {
+		t.Fatal("expected DisconnectIfMatch to return true for matching agent")
+	}
+	if got := cm.GetAgent("worker-1"); got != nil {
+		t.Fatal("expected agent to be removed after DisconnectIfMatch")
+	}
+
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	found := false
+	for _, c := range ms.statusUpds {
+		if c.MachineID == "worker-1" && c.Status == "disconnected" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected UpdateMachineStatus(disconnected) call")
+	}
+}
+
+func TestDisconnectIfMatch_DifferentAgent(t *testing.T) {
+	cm, _ := newTestManager()
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	oldAgent := &ConnectedAgent{
+		MachineID:    "worker-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       cancel1,
+		Ctx:          ctx1,
+	}
+	newAgent := &ConnectedAgent{
+		MachineID:    "worker-1",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       cancel2,
+		Ctx:          ctx2,
+	}
+
+	if err := cm.Register("worker-1", oldAgent); err != nil {
+		t.Fatalf("register old: %v", err)
+	}
+	if err := cm.Register("worker-1", newAgent); err != nil {
+		t.Fatalf("register new: %v", err)
+	}
+
+	disconnected := cm.DisconnectIfMatch("worker-1", oldAgent)
+	if disconnected {
+		t.Fatal("expected false for non-matching agent")
+	}
+	if got := cm.GetAgent("worker-1"); got != newAgent {
+		t.Fatal("new agent should still be registered")
+	}
+}
+
+func TestDisconnectIfMatch_NotRegistered(t *testing.T) {
+	cm, _ := newTestManager()
+	agent := &ConnectedAgent{MachineID: "worker-1"}
+	disconnected := cm.DisconnectIfMatch("worker-1", agent)
+	if disconnected {
+		t.Fatal("expected false when machine not registered")
 	}
 }
 

@@ -41,6 +41,8 @@ type ConnectedAgent struct {
 	RegisteredAt time.Time
 	MaxSessions  int32
 	Cancel       context.CancelFunc
+	// Ctx is the stream context — checked by the health sweep to detect dead transports.
+	Ctx          context.Context
 	// Stream holds the gRPC stream reference. Typed as interface{} to avoid
 	// importing proto package; will be type-asserted when needed.
 	Stream interface{}
@@ -179,6 +181,29 @@ func (cm *ConnectionManager) Disconnect(machineID string) {
 
 	cm.logger.Info("agent disconnected", "machine_id", machineID)
 	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
+}
+
+// DisconnectIfMatch removes the agent only if the provided pointer matches
+// the currently registered agent. This prevents a closing stream from
+// removing a newer replacement connection. Returns true if the agent was
+// actually removed.
+func (cm *ConnectionManager) DisconnectIfMatch(machineID string, agent *ConnectedAgent) bool {
+	cm.mu.Lock()
+	current, exists := cm.agents[machineID]
+	if !exists || current != agent {
+		cm.mu.Unlock()
+		return false
+	}
+	delete(cm.agents, machineID)
+	cm.mu.Unlock()
+
+	if err := cm.store.UpdateMachineStatus(machineID, "disconnected", time.Now()); err != nil {
+		cm.logger.Error("failed to update status on disconnect", "machine_id", machineID, "error", err)
+	}
+
+	cm.logger.Info("agent disconnected", "machine_id", machineID)
+	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
+	return true
 }
 
 // GetAgent returns the ConnectedAgent for the given machineID, or nil if not connected.
