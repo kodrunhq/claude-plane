@@ -11,6 +11,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/cliutil"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
@@ -495,20 +496,20 @@ func TestParseArgs(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := parseArgs(tc.input)
+			got := cliutil.ParseArgs(tc.input)
 			if tc.want == nil {
 				if len(got) != 0 {
-					t.Errorf("parseArgs(%q) = %v, want empty", tc.input, got)
+					t.Errorf("cliutil.ParseArgs(%q) = %v, want empty", tc.input, got)
 				}
 				return
 			}
 			if len(got) != len(tc.want) {
-				t.Errorf("parseArgs(%q) len = %d, want %d", tc.input, len(got), len(tc.want))
+				t.Errorf("cliutil.ParseArgs(%q) len = %d, want %d", tc.input, len(got), len(tc.want))
 				return
 			}
 			for i := range got {
 				if got[i] != tc.want[i] {
-					t.Errorf("parseArgs(%q)[%d] = %q, want %q", tc.input, i, got[i], tc.want[i])
+					t.Errorf("cliutil.ParseArgs(%q)[%d] = %q, want %q", tc.input, i, got[i], tc.want[i])
 				}
 			}
 		})

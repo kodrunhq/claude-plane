@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/cliutil"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
@@ -286,7 +286,7 @@ func (e *SessionStepExecutor) executeClaudeSession(
 	if command == "" {
 		command = defaultCommand
 	}
-	args := parseArgs(runStep.ArgsSnapshot)
+	args := cliutil.ParseArgs(runStep.ArgsSnapshot)
 
 	// Inject --dangerously-skip-permissions if snapshot says so.
 	// NOTE: A nil SkipPermissionsSnapshot currently means "skip permissions" by default for jobs,
@@ -294,13 +294,13 @@ func (e *SessionStepExecutor) executeClaudeSession(
 	// TODO(kodrun#prefs-in-snapshot): In a future iteration, resolve a nil value against the user's
 	// preferences at snapshot time instead of defaulting here in the executor.
 	if runStep.SkipPermissionsSnapshot == nil || *runStep.SkipPermissionsSnapshot != 0 {
-		args = stripFlag(args, "--dangerously-skip-permissions")
+		args = cliutil.StripFlag(args, "--dangerously-skip-permissions")
 		args = append([]string{"--dangerously-skip-permissions"}, args...)
 	}
 
 	// Inject --model if set in snapshot, stripping any existing --model from user-supplied args.
 	if runStep.ModelSnapshot != "" {
-		args = stripFlagWithValue(args, "--model")
+		args = cliutil.StripFlagWithValue(args, "--model")
 		args = append(args, "--model", runStep.ModelSnapshot)
 	}
 
@@ -398,7 +398,7 @@ func (e *SessionStepExecutor) executeShellTask(
 	// malicious parameter value replacing the command with an arbitrary binary).
 	// Only Args are resolved, which limits the blast radius to argument values.
 	resolvedArgsJSON := resolveField(runStep.ArgsSnapshot, resolveCtx)
-	args := parseArgs(resolvedArgsJSON)
+	args := cliutil.ParseArgs(resolvedArgsJSON)
 
 	workingDir := runStep.WorkingDirSnapshot
 
@@ -650,15 +650,15 @@ func (e *SessionStepExecutor) executeSharedFirstStep(
 	if command == "" {
 		command = defaultCommand
 	}
-	args := parseArgs(runStep.ArgsSnapshot)
+	args := cliutil.ParseArgs(runStep.ArgsSnapshot)
 
 	if runStep.SkipPermissionsSnapshot == nil || *runStep.SkipPermissionsSnapshot != 0 {
-		args = stripFlag(args, "--dangerously-skip-permissions")
+		args = cliutil.StripFlag(args, "--dangerously-skip-permissions")
 		args = append([]string{"--dangerously-skip-permissions"}, args...)
 	}
 
 	if runStep.ModelSnapshot != "" {
-		args = stripFlagWithValue(args, "--model")
+		args = cliutil.StripFlagWithValue(args, "--model")
 		args = append(args, "--model", runStep.ModelSnapshot)
 	}
 
@@ -891,45 +891,3 @@ func (e *SessionStepExecutor) sendKill(machineID, sessionID string) {
 	}
 }
 
-// stripFlag removes all occurrences of a standalone flag from args.
-func stripFlag(args []string, flag string) []string {
-	result := make([]string, 0, len(args))
-	for _, a := range args {
-		if a != flag {
-			result = append(result, a)
-		}
-	}
-	return result
-}
-
-// stripFlagWithValue removes a flag and its following value from args (e.g., --model opus).
-func stripFlagWithValue(args []string, flag string) []string {
-	result := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		if a == flag {
-			skip = true
-			continue
-		}
-		result = append(result, a)
-	}
-	return result
-}
-
-// parseArgs parses a JSON-encoded array string into a []string.
-// Returns an empty slice on empty input or any parse error.
-func parseArgs(argsSnapshot string) []string {
-	trimmed := strings.TrimSpace(argsSnapshot)
-	if trimmed == "" {
-		return []string{}
-	}
-	var args []string
-	if err := json.Unmarshal([]byte(trimmed), &args); err != nil {
-		return []string{}
-	}
-	return args
-}
