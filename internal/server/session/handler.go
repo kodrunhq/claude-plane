@@ -17,6 +17,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/cliutil"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
@@ -182,6 +183,12 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	// WorkingDir left empty intentionally — the agent inherits its own cwd.
 	if req.TerminalSize == nil {
 		req.TerminalSize = &terminalSize{Rows: 24, Cols: 80}
+	}
+
+	// Inject --model flag into args when model is specified.
+	if req.Model != "" {
+		req.Args = cliutil.StripFlagWithValue(req.Args, "--model")
+		req.Args = append(req.Args, "--model", req.Model)
 	}
 
 	// Verify agent is connected
