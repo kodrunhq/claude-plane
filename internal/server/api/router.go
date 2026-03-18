@@ -58,6 +58,7 @@ type RouterDeps struct {
 	SessionHandler      *session.SessionHandler
 	WSHandler           http.HandlerFunc
 	EventsWSHandler     http.HandlerFunc
+	LogsWSHandler       http.HandlerFunc
 	JobHandler          *handler.JobHandler
 	RunHandler          *handler.RunHandler
 	EventHandler        *handler.EventHandler
@@ -105,6 +106,9 @@ func NewRouter(deps RouterDeps) chi.Router {
 	}
 	if deps.EventsWSHandler != nil {
 		r.Get("/ws/events", deps.EventsWSHandler)
+	}
+	if deps.LogsWSHandler != nil {
+		r.Get("/ws/logs", deps.LogsWSHandler)
 	}
 
 	// 5 requests per minute per IP for auth endpoints

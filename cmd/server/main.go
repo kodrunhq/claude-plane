@@ -348,6 +348,7 @@ func newServeCmd() *cobra.Command {
 
 			wsHandler := session.HandleTerminalWS(s, connMgr, registry, authSvc, slog.Default())
 			eventsWSHandler := session.HandleEventsWS(authSvc, wsFanout, slog.Default())
+			logsWSHandler := session.HandleLogsWS(authSvc, teeHandler.Broadcaster(), slog.Default())
 
 			jobHandler := handler.NewJobHandler(s, handlerClaimsGetter)
 			runHandler := handler.NewRunHandler(s, orch, handlerClaimsGetter)
@@ -434,6 +435,7 @@ func newServeCmd() *cobra.Command {
 				SessionHandler:     sessionHandler,
 				WSHandler:          wsHandler,
 				EventsWSHandler:    eventsWSHandler,
+				LogsWSHandler:      logsWSHandler,
 				JobHandler:         jobHandler,
 				RunHandler:         runHandler,
 				EventHandler:       eventHandler,
