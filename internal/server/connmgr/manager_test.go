@@ -367,6 +367,56 @@ func TestStartHealthCheck_RemovesStaleAgent(t *testing.T) {
 	}
 }
 
+func TestSweepStaleAgents_MixedHealthyAndStale(t *testing.T) {
+	cm, _ := newTestManager()
+
+	// Live agent: context is NOT cancelled.
+	liveCtx, liveCancel := context.WithCancel(context.Background())
+	defer liveCancel()
+	liveAgent := &ConnectedAgent{
+		MachineID:    "healthy-worker",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       liveCancel,
+		Ctx:          liveCtx,
+	}
+
+	// Stale agent: context is already cancelled.
+	staleCtx, staleCancel := context.WithCancel(context.Background())
+	staleCancel() // cancel immediately to simulate dead transport
+	staleAgent := &ConnectedAgent{
+		MachineID:    "stale-worker",
+		RegisteredAt: time.Now(),
+		MaxSessions:  5,
+		Cancel:       func() {},
+		Ctx:          staleCtx,
+	}
+
+	// Insert both directly into the agents map (same package access).
+	cm.mu.Lock()
+	cm.agents["healthy-worker"] = liveAgent
+	cm.agents["stale-worker"] = staleAgent
+	cm.mu.Unlock()
+
+	cm.sweepStaleAgents()
+
+	// Live agent should remain.
+	if got := cm.GetAgent("healthy-worker"); got == nil {
+		t.Error("expected healthy agent to remain after sweep")
+	}
+
+	// Stale agent should be removed.
+	if got := cm.GetAgent("stale-worker"); got != nil {
+		t.Error("expected stale agent to be removed after sweep")
+	}
+
+	// Verify total agents count.
+	agents := cm.ListAgents()
+	if len(agents) != 1 {
+		t.Errorf("expected 1 agent after sweep, got %d", len(agents))
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	cm, _ := newTestManager()
 

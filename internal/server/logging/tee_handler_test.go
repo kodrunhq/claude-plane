@@ -231,3 +231,61 @@ func TestLogBroadcaster_FilterByComponent(t *testing.T) {
 		// good
 	}
 }
+
+func TestTeeHandler_WithAttrs_ExtractsComponent(t *testing.T) {
+	store := newTestLogStore(t)
+
+	inner := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+	h := NewTeeHandler(inner, store, 100)
+
+	logger := slog.New(h).With("component", "grpc")
+	logger.Info("test msg")
+
+	// Wait for async flush then close.
+	time.Sleep(700 * time.Millisecond)
+	h.Close()
+
+	records, total, err := store.Query(LogFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected 1 record in store, got %d", total)
+	}
+	if records[0].Component != "grpc" {
+		t.Errorf("Component = %q, want %q", records[0].Component, "grpc")
+	}
+}
+
+func TestLogBroadcaster_UpdateFilter(t *testing.T) {
+	b := NewLogBroadcaster()
+	sub, err := b.Subscribe(LogFilter{Level: "ERROR"})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer b.Unsubscribe(sub)
+
+	// WARN is below ERROR threshold — should NOT arrive.
+	b.Broadcast(LogRecord{Level: "WARN", Message: "should not arrive"})
+
+	select {
+	case rec := <-sub.Ch:
+		t.Fatalf("expected no record with ERROR filter, got %+v", rec)
+	case <-time.After(100 * time.Millisecond):
+		// good — nothing received
+	}
+
+	// Now relax the filter to WARN.
+	sub.UpdateFilter(LogFilter{Level: "WARN"})
+
+	b.Broadcast(LogRecord{Level: "WARN", Message: "should arrive"})
+
+	select {
+	case got := <-sub.Ch:
+		if got.Message != "should arrive" {
+			t.Errorf("message = %q, want %q", got.Message, "should arrive")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for WARN record after UpdateFilter")
+	}
+}
