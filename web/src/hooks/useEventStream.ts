@@ -93,6 +93,13 @@ export function useEventStream() {
             // localStorage unavailable — skip notification counter
           }
 
+          // Broadcast every event as a DOM CustomEvent so other hooks
+          // (e.g. useSystemAlerts, HealthIndicator) can react without
+          // coupling to this module.
+          window.dispatchEvent(
+            new CustomEvent('claude-plane-event', { detail: msg }),
+          );
+
           switch (msg.event_type) {
             case SESSION_STARTED:
             case SESSION_EXITED:
