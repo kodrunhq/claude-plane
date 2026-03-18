@@ -16,20 +16,23 @@ type Machine struct {
 	DisplayName  string
 	Status       string
 	MaxSessions  int32
+	HomeDir      string
 	LastHealth   *string
 	LastSeenAt   *time.Time
 	CertExpires  *time.Time
 	CreatedAt    time.Time
 }
 
-// UpsertMachine inserts a new machine or updates max_sessions if it already exists.
+// UpsertMachine inserts a new machine or updates max_sessions and home_dir if it already exists.
 // New machines start with status "disconnected".
-func (s *Store) UpsertMachine(machineID string, maxSessions int32) error {
+func (s *Store) UpsertMachine(machineID string, maxSessions int32, homeDir string) error {
 	_, err := s.writer.Exec(`
-		INSERT INTO machines (machine_id, max_sessions)
-		VALUES (?, ?)
-		ON CONFLICT(machine_id) DO UPDATE SET max_sessions = excluded.max_sessions
-	`, machineID, maxSessions)
+		INSERT INTO machines (machine_id, max_sessions, home_dir)
+		VALUES (?, ?, ?)
+		ON CONFLICT(machine_id) DO UPDATE SET
+			max_sessions = excluded.max_sessions,
+			home_dir = excluded.home_dir
+	`, machineID, maxSessions, homeDir)
 	if err != nil {
 		return fmt.Errorf("upsert machine %q: %w", machineID, err)
 	}
@@ -94,7 +97,7 @@ func (s *Store) SoftDeleteMachine(machineID string) error {
 // ListMachines returns all non-deleted machines ordered by machine_id.
 func (s *Store) ListMachines() ([]Machine, error) {
 	rows, err := s.reader.Query(`
-		SELECT machine_id, display_name, status, max_sessions,
+		SELECT machine_id, display_name, status, max_sessions, home_dir,
 		       last_health, last_seen_at, cert_expires_at, created_at
 		FROM machines WHERE deleted_at IS NULL ORDER BY machine_id
 	`)
@@ -109,7 +112,7 @@ func (s *Store) ListMachines() ([]Machine, error) {
 		var displayName, lastHealth sql.NullString
 		var lastSeenAt, certExpires sql.NullTime
 		if err := rows.Scan(
-			&m.MachineID, &displayName, &m.Status, &m.MaxSessions,
+			&m.MachineID, &displayName, &m.Status, &m.MaxSessions, &m.HomeDir,
 			&lastHealth, &lastSeenAt, &certExpires, &m.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan machine row: %w", err)
@@ -137,11 +140,11 @@ func (s *Store) GetMachine(machineID string) (*Machine, error) {
 	var displayName, lastHealth sql.NullString
 	var lastSeenAt, certExpires sql.NullTime
 	err := s.reader.QueryRow(`
-		SELECT machine_id, display_name, status, max_sessions,
+		SELECT machine_id, display_name, status, max_sessions, home_dir,
 		       last_health, last_seen_at, cert_expires_at, created_at
 		FROM machines WHERE machine_id = ? AND deleted_at IS NULL
 	`, machineID).Scan(
-		&m.MachineID, &displayName, &m.Status, &m.MaxSessions,
+		&m.MachineID, &displayName, &m.Status, &m.MaxSessions, &m.HomeDir,
 		&lastHealth, &lastSeenAt, &certExpires, &m.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {

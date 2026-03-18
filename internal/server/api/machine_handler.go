@@ -3,22 +3,26 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
 
 // machineResponse is the JSON representation of a machine for API responses.
 type machineResponse struct {
-	MachineID      string              `json:"machine_id"`
-	DisplayName    string              `json:"display_name"`
-	Status         string              `json:"status"`
-	MaxSessions    int32               `json:"max_sessions"`
-	LastSeenAt     *time.Time          `json:"last_seen_at,omitempty"`
-	CreatedAt      time.Time           `json:"created_at"`
+	MachineID      string                 `json:"machine_id"`
+	DisplayName    string                 `json:"display_name"`
+	Status         string                 `json:"status"`
+	MaxSessions    int32                  `json:"max_sessions"`
+	HomeDir        string                 `json:"home_dir"`
+	LastSeenAt     *time.Time             `json:"last_seen_at,omitempty"`
+	CreatedAt      time.Time              `json:"created_at"`
 	Health         *machineHealthResponse `json:"health,omitempty"`
 }
 
@@ -38,6 +42,7 @@ func (h *Handlers) buildMachineResponse(m store.Machine) machineResponse {
 		DisplayName: m.DisplayName,
 		Status:      m.Status,
 		MaxSessions: m.MaxSessions,
+		HomeDir:     m.HomeDir,
 		LastSeenAt:  m.LastSeenAt,
 		CreatedAt:   m.CreatedAt,
 	}
@@ -178,4 +183,95 @@ func (h *Handlers) DeleteMachine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// browseDirectoryResponse is the JSON response for the browse directory endpoint.
+type browseDirectoryResponse struct {
+	Path    string                  `json:"path"`
+	Parent  string                  `json:"parent"`
+	Entries []browseDirectoryEntry  `json:"entries"`
+}
+
+type browseDirectoryEntry struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// BrowseDirectory handles GET /api/v1/machines/{machineID}/browse?path=/some/path.
+// It sends a ListDirectoryCmd to the agent via gRPC and waits for the response
+// with a 10-second timeout.
+func (h *Handlers) BrowseDirectory(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil || claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	machineID := chi.URLParam(r, "machineID")
+
+	agent := h.connMgr.GetAgent(machineID)
+	if agent == nil {
+		writeError(w, http.StatusNotFound, "machine not connected")
+		return
+	}
+
+	if h.broker == nil {
+		writeError(w, http.StatusServiceUnavailable, "directory browsing not available")
+		return
+	}
+
+	dirPath := r.URL.Query().Get("path")
+	if dirPath == "" {
+		// Use the machine's stored home_dir as the default, fall back to "/".
+		if machine, err := h.store.GetMachine(machineID); err == nil && machine.HomeDir != "" {
+			dirPath = machine.HomeDir
+		} else {
+			dirPath = "/"
+		}
+	}
+
+	requestID := uuid.New().String()
+	ch := h.broker.Register(requestID, machineID)
+
+	cmd := &pb.ServerCommand{
+		Command: &pb.ServerCommand_ListDirectory{
+			ListDirectory: &pb.ListDirectoryCmd{
+				RequestId: requestID,
+				Path:      dirPath,
+			},
+		},
+	}
+
+	if err := agent.SendCommand(cmd); err != nil {
+		h.broker.Cancel(requestID)
+		writeError(w, http.StatusBadGateway, "failed to send command to agent")
+		return
+	}
+
+	select {
+	case evt := <-ch:
+		if errMsg := evt.GetError(); errMsg != "" {
+			slog.Warn("agent directory browse error", "machine_id", machineID, "path", dirPath, "error", errMsg)
+			writeError(w, http.StatusBadRequest, "directory not accessible")
+			return
+		}
+		entries := make([]browseDirectoryEntry, 0, len(evt.GetEntries()))
+		for _, e := range evt.GetEntries() {
+			entries = append(entries, browseDirectoryEntry{
+				Name: e.GetName(),
+				Type: e.GetType(),
+			})
+		}
+		writeJSON(w, http.StatusOK, browseDirectoryResponse{
+			Path:    evt.GetPath(),
+			Parent:  evt.GetParent(),
+			Entries: entries,
+		})
+	case <-time.After(10 * time.Second):
+		h.broker.Cancel(requestID)
+		writeError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	case <-r.Context().Done():
+		h.broker.Cancel(requestID)
+		return
+	}
 }

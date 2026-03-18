@@ -40,7 +40,7 @@ func seedInjectionDeps(t *testing.T, s *Store, suffix string) (sessionID, userID
 	}
 
 	machineID := "machine-inj-" + suffix
-	err = s.UpsertMachine(machineID, 5)
+	err = s.UpsertMachine(machineID, 5, "")
 	if err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}

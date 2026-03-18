@@ -8,6 +8,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/kodrunhq/claude-plane/internal/server/auth"
+	"github.com/kodrunhq/claude-plane/internal/server/broker"
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
@@ -19,14 +20,15 @@ type Handlers struct {
 	store            *store.Store
 	authSvc          *auth.Service
 	connMgr          *connmgr.ConnectionManager
+	broker           *broker.RequestBroker
 	registrationMode string
 	inviteCode       string
 }
 
 // NewHandlers creates a new Handlers instance with the given dependencies.
 // registrationMode controls self-registration: "open" (anyone), "invite" (requires code), "closed" (disabled).
-// Defaults to "closed" if empty.
-func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.ConnectionManager, registrationMode, inviteCode string) *Handlers {
+// Defaults to "closed" if empty. The broker parameter may be nil when directory browsing is not needed.
+func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.ConnectionManager, b *broker.RequestBroker, registrationMode, inviteCode string) *Handlers {
 	if registrationMode == "" {
 		registrationMode = "closed"
 	}
@@ -34,6 +36,7 @@ func NewHandlers(s *store.Store, authSvc *auth.Service, connMgr *connmgr.Connect
 		store:            s,
 		authSvc:          authSvc,
 		connMgr:          connMgr,
+		broker:           b,
 		registrationMode: registrationMode,
 		inviteCode:       inviteCode,
 	}
@@ -131,6 +134,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 			r.Get("/machines/{machineID}", h.GetMachine)
 			r.Put("/machines/{machineID}", h.UpdateMachine)
 			r.Delete("/machines/{machineID}", h.DeleteMachine)
+			r.Get("/machines/{machineID}/browse", h.BrowseDirectory)
 
 			// Session routes
 			if deps.SessionHandler != nil {

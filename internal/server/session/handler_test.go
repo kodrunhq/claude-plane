@@ -32,7 +32,7 @@ func (n *noopSubscriber) Subscribe(_ string, _ event.HandlerFunc, _ event.Subscr
 // mockMachineStore implements connmgr.MachineStore for tests.
 type mockMachineStore struct{}
 
-func (m *mockMachineStore) UpsertMachine(string, int32) error                   { return nil }
+func (m *mockMachineStore) UpsertMachine(string, int32, string) error            { return nil }
 func (m *mockMachineStore) UpdateMachineStatus(string, string, time.Time) error { return nil }
 
 // commandRecorder records commands sent to a mock agent.
@@ -92,7 +92,7 @@ func TestCreateSession(t *testing.T) {
 	_, cm, recorder, st, router := setupTestHandler(t)
 
 	// Register a connected agent with machine
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -149,7 +149,7 @@ func TestCreateSessionMachineNotConnected(t *testing.T) {
 func TestListSessions(t *testing.T) {
 	_, cm, recorder, st, router := setupTestHandler(t)
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -193,7 +193,7 @@ func TestListSessions(t *testing.T) {
 func TestTerminateSession(t *testing.T) {
 	_, cm, recorder, st, router := setupTestHandler(t)
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -279,7 +279,7 @@ func TestGetSession_AuthorizationNonOwner(t *testing.T) {
 	createTestUser(t, st, "user-other")
 
 	// Register agent
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -342,7 +342,7 @@ func TestGetSession_AdminCanAccessAny(t *testing.T) {
 
 	createTestUser(t, st, "user-owner")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -396,7 +396,7 @@ func TestListSessions_FiltersByOwnership(t *testing.T) {
 	createTestUser(t, st, "user-a")
 	createTestUser(t, st, "user-b")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -489,7 +489,7 @@ func setupTemplateTestEnv(t *testing.T, userID string) (
 	reg := session.NewRegistry(slog.Default())
 	recorder := &commandRecorder{}
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -808,7 +808,7 @@ func TestAuthorizeSession_NilClaimsDenied(t *testing.T) {
 
 	createTestUser(t, st, "user-owner")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -873,7 +873,7 @@ func setupInjectTestEnv(t *testing.T) (chi.Router, *store.Store, string) {
 
 	createTestUser(t, st, "inject-user")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -1044,7 +1044,7 @@ func TestInjectSession_NonOwnerReturns404(t *testing.T) {
 	createTestUser(t, st, "owner-user")
 	createTestUser(t, st, "other-user")
 
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
@@ -1143,7 +1143,7 @@ func TestGetSessionStats_Default24h(t *testing.T) {
 	router, st := setupStatsTestHandler(t, getClaims)
 
 	// Create a few sessions with different statuses
-	if err := st.UpsertMachine("machine-a", 5); err != nil {
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	for _, s := range []struct {
@@ -1220,5 +1220,225 @@ func TestGetSessionStats_AcceptsFractionalSeconds(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d; body = %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+// --- Helper for model/skip_permissions tests ---
+
+// setupModelTestEnv sets up a handler with a connected agent. Returns router,
+// recorder, and store. Uses nil getClaims (unauthenticated mode).
+func setupModelTestEnv(t *testing.T) (chi.Router, *commandRecorder, *store.Store) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	cm := connmgr.NewConnectionManager(&mockMachineStore{}, nil)
+	reg := session.NewRegistry(slog.Default())
+	recorder := &commandRecorder{}
+
+	if err := st.UpsertMachine("machine-a", 5, ""); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	if err := cm.Register("machine-a", &connmgr.ConnectedAgent{
+		MachineID:   "machine-a",
+		MaxSessions: 5,
+		SendCommand: recorder.send,
+	}); err != nil {
+		t.Fatalf("failed to register agent: %v", err)
+	}
+
+	handler := session.NewSessionHandler(st, cm, reg, nil, slog.Default())
+	r := chi.NewRouter()
+	r.Post("/api/v1/sessions", handler.CreateSession)
+
+	return r, recorder, st
+}
+
+// lastCreateSession extracts the CreateSessionCmd from the last recorded command.
+func lastCreateSession(t *testing.T, recorder *commandRecorder) *pb.CreateSessionCmd {
+	t.Helper()
+	cmd := recorder.last()
+	if cmd == nil {
+		t.Fatal("expected a command to be sent, got none")
+	}
+	createCmd := cmd.GetCreateSession()
+	if createCmd == nil {
+		t.Fatal("expected CreateSession command in last recorded command")
+	}
+	return createCmd
+}
+
+// containsFlag returns true when flag appears at least once in args.
+func containsFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+// countFlag counts exact occurrences of flag in args.
+func countFlag(args []string, flag string) int {
+	n := 0
+	for _, a := range args {
+		if a == flag {
+			n++
+		}
+	}
+	return n
+}
+
+// --- Model injection tests ---
+
+func TestCreateSession_ModelInjection(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a","model":"sonnet"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	// Args must contain --model sonnet
+	if !containsFlag(createCmd.Args, "--model") {
+		t.Errorf("args = %v; want --model flag present", createCmd.Args)
+	}
+	found := false
+	for i, a := range createCmd.Args {
+		if a == "--model" && i+1 < len(createCmd.Args) && createCmd.Args[i+1] == "sonnet" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("args = %v; want [... --model sonnet ...]", createCmd.Args)
+	}
+}
+
+func TestCreateSession_ModelEmpty_NoInjection(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if containsFlag(createCmd.Args, "--model") {
+		t.Errorf("args = %v; want no --model flag when model is empty", createCmd.Args)
+	}
+}
+
+func TestCreateSession_ModelOverridesArg(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	// Caller passes --model opus in args AND model:"sonnet" — sonnet must win.
+	body := `{"machine_id":"machine-a","args":["--model","opus"],"model":"sonnet"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	// Exactly one --model occurrence
+	if n := countFlag(createCmd.Args, "--model"); n != 1 {
+		t.Errorf("--model appears %d times in args %v; want exactly 1", n, createCmd.Args)
+	}
+
+	// Value must be sonnet, not opus
+	for i, a := range createCmd.Args {
+		if a == "--model" {
+			if i+1 >= len(createCmd.Args) {
+				t.Fatalf("--model flag has no value in args %v", createCmd.Args)
+			}
+			if createCmd.Args[i+1] != "sonnet" {
+				t.Errorf("--model value = %q, want sonnet; args = %v", createCmd.Args[i+1], createCmd.Args)
+			}
+			break
+		}
+	}
+}
+
+// --- skip_permissions injection tests ---
+
+func TestCreateSession_SkipPermissionsTrue(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a","skip_permissions":true}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if !containsFlag(createCmd.Args, "--dangerously-skip-permissions") {
+		t.Errorf("args = %v; want --dangerously-skip-permissions flag when skip_permissions=true", createCmd.Args)
+	}
+}
+
+func TestCreateSession_SkipPermissionsFalse(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a","skip_permissions":false}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if containsFlag(createCmd.Args, "--dangerously-skip-permissions") {
+		t.Errorf("args = %v; want NO --dangerously-skip-permissions flag when skip_permissions=false", createCmd.Args)
+	}
+}
+
+func TestCreateSession_SkipPermissionsOmitted(t *testing.T) {
+	router, recorder, _ := setupModelTestEnv(t)
+
+	body := `{"machine_id":"machine-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sessions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	createCmd := lastCreateSession(t, recorder)
+
+	if containsFlag(createCmd.Args, "--dangerously-skip-permissions") {
+		t.Errorf("args = %v; want NO --dangerously-skip-permissions flag when skip_permissions is omitted", createCmd.Args)
 	}
 }

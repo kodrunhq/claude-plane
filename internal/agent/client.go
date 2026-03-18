@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -119,10 +120,15 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 		existingSessions = c.sessions.GetStates()
 	}
 
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		c.logger.Debug("could not determine home directory", "error", err)
+	}
 	resp, err := client.Register(ctx, &pb.RegisterRequest{
 		MachineId:        c.cfg.Agent.MachineID,
 		MaxSessions:      int32(c.cfg.Agent.MaxSessions),
 		ExistingSessions: existingSessions,
+		HomeDir:          homeDir,
 	})
 	if err != nil {
 		return fmt.Errorf("register: %w", err)
@@ -186,8 +192,13 @@ func (c *AgentClient) connectAndServe(ctx context.Context) error {
 			recvErr = err
 			break
 		}
-		if c.sessions != nil {
-			c.sessions.HandleCommand(cmd)
+		switch cmd.GetCommand().(type) {
+		case *pb.ServerCommand_ListDirectory:
+			go c.handleListDirectory(cmd.GetListDirectory(), sendCh)
+		default:
+			if c.sessions != nil {
+				c.sessions.HandleCommand(cmd)
+			}
 		}
 	}
 

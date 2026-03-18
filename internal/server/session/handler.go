@@ -17,6 +17,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
+	"github.com/kodrunhq/claude-plane/internal/shared/cliutil"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
@@ -84,7 +85,7 @@ type createSessionRequest struct {
 	EnvVars         map[string]string `json:"env_vars"`
 	InitialPrompt   string            `json:"initial_prompt"`
 	Model           string            `json:"model"`
-	SkipPermissions string            `json:"skip_permissions"`
+	SkipPermissions *bool             `json:"skip_permissions"`
 	// Template fields
 	TemplateID   string            `json:"template_id"`
 	TemplateName string            `json:"template_name"`
@@ -184,6 +185,19 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		req.TerminalSize = &terminalSize{Rows: 24, Cols: 80}
 	}
 
+	// Inject --model flag into args when model is specified.
+	if req.Model != "" {
+		req.Args = cliutil.StripFlagWithValue(req.Args, "--model")
+		req.Args = append(req.Args, "--model", req.Model)
+	}
+
+	// Always strip --dangerously-skip-permissions from user-supplied args to prevent
+	// bypass via the freeform args field, then re-add only when explicitly requested.
+	req.Args = cliutil.StripFlag(req.Args, "--dangerously-skip-permissions")
+	if req.SkipPermissions != nil && *req.SkipPermissions {
+		req.Args = append([]string{"--dangerously-skip-permissions"}, req.Args...)
+	}
+
 	// Verify agent is connected
 	agent := h.connMgr.GetAgent(req.MachineID)
 	if agent == nil {
@@ -209,7 +223,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		WorkingDir:    req.WorkingDir,
 		Status:        store.StatusCreated,
 		Model:         req.Model,
-		SkipPerms:     req.SkipPermissions,
+		SkipPerms:     boolToSkipPerms(req.SkipPermissions),
 		EnvVars:       marshalJSON(req.EnvVars),
 		Args:          marshalJSON(req.Args),
 		InitialPrompt: req.InitialPrompt,
@@ -584,6 +598,18 @@ func parseTime(s string) (time.Time, error) {
 		return t, nil
 	}
 	return time.Parse(time.RFC3339, s)
+}
+
+// boolToSkipPerms converts a *bool skip_permissions field to the string
+// representation used by the store ("1", "0", or "" when nil).
+func boolToSkipPerms(b *bool) string {
+	if b == nil {
+		return ""
+	}
+	if *b {
+		return "1"
+	}
+	return "0"
 }
 
 // marshalJSON serializes a value to a JSON string. Returns an empty string

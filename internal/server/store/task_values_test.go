@@ -10,7 +10,7 @@ func TestTaskValues_SetAndGet(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "do it",
@@ -48,7 +48,7 @@ func TestTaskValues_MultipleKeys(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "do it",
@@ -82,7 +82,7 @@ func TestTaskValues_GetForUpstreamSteps(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step1, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "p1",
@@ -128,7 +128,7 @@ func TestTaskValues_KeyValidation(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "p",
@@ -177,7 +177,7 @@ func TestTaskValues_SizeLimit(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "p",
@@ -206,7 +206,7 @@ func TestTaskValues_MaxPerStep(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "p",
@@ -237,7 +237,7 @@ func TestTaskValues_DeleteForStep(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "p",
@@ -267,7 +267,7 @@ func TestTaskValues_UpsertExistingKey(t *testing.T) {
 	s := newTestStoreForJobs(t)
 	ctx := context.Background()
 
-	_ = s.UpsertMachine("m1", 5)
+	_ = s.UpsertMachine("m1", 5, "")
 	job := testCreateJob(t, s, "Job", "", "")
 	step, _ := s.CreateStep(ctx, CreateStepParams{
 		JobID: job.JobID, Name: "s1", MachineID: "m1", Prompt: "p",

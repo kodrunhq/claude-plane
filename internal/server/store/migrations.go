@@ -532,6 +532,11 @@ ALTER TABLE sessions ADD COLUMN env_vars TEXT DEFAULT '';`,
 		);
 		`,
 	},
+	{
+		Version:     18,
+		Description: "add home_dir to machines",
+		SQL:         `ALTER TABLE machines ADD COLUMN home_dir TEXT NOT NULL DEFAULT '';`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

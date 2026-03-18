@@ -36,7 +36,7 @@ func setupTestAPI(t *testing.T) *httptest.Server {
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
 
-	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
+	handlers := api.NewHandlers(s, authSvc, cm, nil, "open", "")
 	router := api.NewRouter(api.RouterDeps{Handlers: handlers})
 	return httptest.NewServer(router)
 }
@@ -346,7 +346,7 @@ func setupTestAPIWithMode(t *testing.T, mode, inviteCode string) *httptest.Serve
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
 
-	handlers := api.NewHandlers(s, authSvc, cm, mode, inviteCode)
+	handlers := api.NewHandlers(s, authSvc, cm, nil, mode, inviteCode)
 	router := api.NewRouter(api.RouterDeps{Handlers: handlers})
 	return httptest.NewServer(router)
 }

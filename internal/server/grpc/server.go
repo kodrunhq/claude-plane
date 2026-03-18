@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kodrunhq/claude-plane/internal/server/broker"
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
@@ -79,6 +80,7 @@ type agentService struct {
 	logStore        *logging.LogStore
 	logBroadcaster  *logging.LogBroadcaster
 	ingestor        *ingest.ContentIngestor
+	broker          *broker.RequestBroker
 	logger          *slog.Logger
 }
 
@@ -110,6 +112,7 @@ func NewGRPCServer(tlsCfg *tls.Config, agentConnMgr *connmgr.ConnectionManager, 
 	svc := &agentService{
 		streams:      streams,
 		agentConnMgr: agentConnMgr,
+		broker:       broker.New(),
 		logger:       logger,
 	}
 	pb.RegisterAgentServiceServer(srv, svc)
@@ -196,6 +199,12 @@ func (s *GRPCServer) AgentConnectionManager() *connmgr.ConnectionManager {
 	return s.agentConnMgr
 }
 
+// Broker returns the request broker used for correlating directory listing
+// request-response pairs over gRPC streams.
+func (s *GRPCServer) Broker() *broker.RequestBroker {
+	return s.agentSvc.broker
+}
+
 // Register handles an agent registration request.
 // It extracts the machine-id from the interceptor-enriched context,
 // validates the request, and adds the agent to the connection manager.
@@ -216,6 +225,7 @@ func (s *agentService) Register(ctx context.Context, req *pb.RegisterRequest) (*
 		MachineID:     machineID,
 		StreamToken:   token,
 		MaxSessions:   req.GetMaxSessions(),
+		HomeDir:       req.GetHomeDir(),
 		ConnectedAt:   time.Now(),
 		SessionStates: req.GetExistingSessions(),
 	})
@@ -259,13 +269,16 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 	var ca *connmgr.ConnectedAgent
 	if s.agentConnMgr != nil {
 		var maxSessions int32
+		var homeDir string
 		if entry, ok := s.streams.Get(machineID); ok {
 			maxSessions = entry.MaxSessions
+			homeDir = entry.HomeDir
 		}
 		ca = &connmgr.ConnectedAgent{
 			MachineID:    machineID,
 			RegisteredAt: time.Now(),
 			MaxSessions:  maxSessions,
+			HomeDir:      homeDir,
 			Ctx:          ctx,
 			Cancel:       cancel,
 			Stream:       stream,
@@ -505,6 +518,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 				if s.stepIdleHandler != nil {
 					s.stepIdleHandler.OnStepIdle(si.GetSessionId())
 				}
+			}
+
+			// Handle directory listing responses — deliver to waiting broker callers.
+			if dl := res.event.GetDirectoryListing(); dl != nil {
+				s.broker.Resolve(dl.GetRequestId(), machineID, dl)
 			}
 
 			// Handle agent log batches — insert into the logs database.

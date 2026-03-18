@@ -42,7 +42,7 @@ func setupTestAPIWithStore(t *testing.T) *testAPIEnv {
 	authSvc := auth.NewService([]byte("test-secret-key-32-bytes-long!!!"), 15*time.Minute, blocklist)
 	cm := connmgr.NewConnectionManager(s, nil)
 
-	handlers := api.NewHandlers(s, authSvc, cm, "open", "")
+	handlers := api.NewHandlers(s, authSvc, cm, nil, "open", "")
 	router := api.NewRouter(api.RouterDeps{Handlers: handlers})
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
@@ -124,7 +124,7 @@ func TestUpdateMachine_HappyPath(t *testing.T) {
 	token := registerAndLoginAdmin(t, env, "admin-happy@example.com", "password123", "Admin User")
 
 	// Seed a machine in the store.
-	if err := env.Store.UpsertMachine("test-machine-1", 5); err != nil {
+	if err := env.Store.UpsertMachine("test-machine-1", 5, ""); err != nil {
 		t.Fatalf("seed machine: %v", err)
 	}
 
@@ -237,7 +237,7 @@ func TestDeleteMachine_Disconnected(t *testing.T) {
 	env := setupTestAPIWithStore(t)
 	token := registerAndLoginAdmin(t, env, "admin-del@example.com", "password123", "Admin User")
 
-	if err := env.Store.UpsertMachine("del-machine", 5); err != nil {
+	if err := env.Store.UpsertMachine("del-machine", 5, ""); err != nil {
 		t.Fatalf("seed machine: %v", err)
 	}
 
@@ -274,7 +274,7 @@ func TestDeleteMachine_ForbiddenForNonAdmin(t *testing.T) {
 	resp.Body.Close()
 	token := loginUser(t, env.Server, "regular-del@example.com", "password123")
 
-	if err := env.Store.UpsertMachine("del-machine-2", 5); err != nil {
+	if err := env.Store.UpsertMachine("del-machine-2", 5, ""); err != nil {
 		t.Fatalf("seed machine: %v", err)
 	}
 
@@ -320,5 +320,52 @@ func TestListMachinesUnauthenticated(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestBrowseDirectory_ForbiddenForNonAdmin(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+
+	resp := registerUser(t, env.Server, "regular-browse@example.com", "password123", "Regular User")
+	resp.Body.Close()
+	token := loginUser(t, env.Server, "regular-browse@example.com", "password123")
+
+	if err := env.Store.UpsertMachine("browse-machine", 5, ""); err != nil {
+		t.Fatalf("seed machine: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", env.Server.URL+"/api/v1/machines/browse-machine/browse?path=/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	browseResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("browse request: %v", err)
+	}
+	defer browseResp.Body.Close()
+
+	if browseResp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for non-admin user, got %d", browseResp.StatusCode)
+	}
+}
+
+func TestBrowseDirectory_MachineNotConnected(t *testing.T) {
+	env := setupTestAPIWithStore(t)
+	token := registerAndLoginAdmin(t, env, "admin-browse@example.com", "password123", "Admin User")
+
+	// Seed a machine in the store but do NOT register it in the connection manager
+	// so it appears as not connected.
+	if err := env.Store.UpsertMachine("disconnected-machine", 5, ""); err != nil {
+		t.Fatalf("seed machine: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", env.Server.URL+"/api/v1/machines/disconnected-machine/browse?path=/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	browseResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("browse request: %v", err)
+	}
+	defer browseResp.Body.Close()
+
+	if browseResp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for disconnected machine, got %d", browseResp.StatusCode)
 	}
 }

@@ -21,7 +21,7 @@ func newTestStore(t *testing.T) *Store {
 func TestUpsertMachine(t *testing.T) {
 	s := newTestStore(t)
 
-	if err := s.UpsertMachine("m-001", 5); err != nil {
+	if err := s.UpsertMachine("m-001", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 
@@ -46,10 +46,10 @@ func TestUpsertMachine(t *testing.T) {
 func TestUpsertMachineUpdate(t *testing.T) {
 	s := newTestStore(t)
 
-	if err := s.UpsertMachine("m-001", 5); err != nil {
+	if err := s.UpsertMachine("m-001", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine (first): %v", err)
 	}
-	if err := s.UpsertMachine("m-001", 10); err != nil {
+	if err := s.UpsertMachine("m-001", 10, ""); err != nil {
 		t.Fatalf("UpsertMachine (second): %v", err)
 	}
 
@@ -65,7 +65,7 @@ func TestUpsertMachineUpdate(t *testing.T) {
 func TestUpdateMachineStatus(t *testing.T) {
 	s := newTestStore(t)
 
-	if err := s.UpsertMachine("m-001", 5); err != nil {
+	if err := s.UpsertMachine("m-001", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func TestListMachines(t *testing.T) {
 	s := newTestStore(t)
 
 	for _, id := range []string{"m-003", "m-001", "m-002"} {
-		if err := s.UpsertMachine(id, 5); err != nil {
+		if err := s.UpsertMachine(id, 5, ""); err != nil {
 			t.Fatalf("UpsertMachine(%q): %v", id, err)
 		}
 	}
@@ -120,7 +120,7 @@ func TestListMachines(t *testing.T) {
 func TestUpdateMachineDisplayName(t *testing.T) {
 	s := newTestStore(t)
 
-	if err := s.UpsertMachine("m-001", 5); err != nil {
+	if err := s.UpsertMachine("m-001", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 
@@ -166,7 +166,7 @@ func TestSoftDeleteMachine(t *testing.T) {
 
 	// Create three machines.
 	for _, id := range []string{"m-001", "m-002", "m-003"} {
-		if err := s.UpsertMachine(id, 5); err != nil {
+		if err := s.UpsertMachine(id, 5, ""); err != nil {
 			t.Fatalf("UpsertMachine(%q): %v", id, err)
 		}
 	}
@@ -209,7 +209,7 @@ func TestSoftDeleteMachineNotFound(t *testing.T) {
 func TestSoftDeleteMachineIdempotent(t *testing.T) {
 	s := newTestStore(t)
 
-	if err := s.UpsertMachine("m-001", 5); err != nil {
+	if err := s.UpsertMachine("m-001", 5, ""); err != nil {
 		t.Fatalf("UpsertMachine: %v", err)
 	}
 	if err := s.SoftDeleteMachine("m-001"); err != nil {

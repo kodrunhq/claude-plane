@@ -17,7 +17,7 @@ import (
 // MachineStore is the subset of store operations needed by ConnectionManager.
 // This interface allows testing with a mock store.
 type MachineStore interface {
-	UpsertMachine(machineID string, maxSessions int32) error
+	UpsertMachine(machineID string, maxSessions int32, homeDir string) error
 	UpdateMachineStatus(machineID, status string, lastSeenAt time.Time) error
 }
 
@@ -40,6 +40,7 @@ type ConnectedAgent struct {
 	MachineID    string
 	RegisteredAt time.Time
 	MaxSessions  int32
+	HomeDir      string
 	Cancel       context.CancelFunc
 	// Ctx is the stream context — checked by the health sweep to detect dead transports.
 	Ctx          context.Context
@@ -147,7 +148,7 @@ func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) e
 
 	// Persist to DB outside the lock. On failure, roll back the in-memory state
 	// only if it's still our agent (a newer connection may have replaced us).
-	if err := cm.store.UpsertMachine(machineID, agent.MaxSessions); err != nil {
+	if err := cm.store.UpsertMachine(machineID, agent.MaxSessions, agent.HomeDir); err != nil {
 		cm.mu.Lock()
 		if cm.agents[machineID] == agent {
 			delete(cm.agents, machineID)

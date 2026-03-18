@@ -28,6 +28,7 @@ type RegisterRequest struct {
 	MaxSessions      int32                  `protobuf:"varint,2,opt,name=max_sessions,json=maxSessions,proto3" json:"max_sessions,omitempty"`
 	Resources        *ResourceInfo          `protobuf:"bytes,3,opt,name=resources,proto3" json:"resources,omitempty"`
 	ExistingSessions []*SessionState        `protobuf:"bytes,4,rep,name=existing_sessions,json=existingSessions,proto3" json:"existing_sessions,omitempty"`
+	HomeDir          string                 `protobuf:"bytes,5,opt,name=home_dir,json=homeDir,proto3" json:"home_dir,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -88,6 +89,13 @@ func (x *RegisterRequest) GetExistingSessions() []*SessionState {
 		return x.ExistingSessions
 	}
 	return nil
+}
+
+func (x *RegisterRequest) GetHomeDir() string {
+	if x != nil {
+		return x.HomeDir
+	}
+	return ""
 }
 
 type RegisterResponse struct {
@@ -298,6 +306,7 @@ type ServerCommand struct {
 	//	*ServerCommand_InputData
 	//	*ServerCommand_RequestScrollback
 	//	*ServerCommand_CleanupScrollback
+	//	*ServerCommand_ListDirectory
 	Command       isServerCommand_Command `protobuf_oneof:"command"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -412,6 +421,15 @@ func (x *ServerCommand) GetCleanupScrollback() *CleanupScrollbackCmd {
 	return nil
 }
 
+func (x *ServerCommand) GetListDirectory() *ListDirectoryCmd {
+	if x != nil {
+		if x, ok := x.Command.(*ServerCommand_ListDirectory); ok {
+			return x.ListDirectory
+		}
+	}
+	return nil
+}
+
 type isServerCommand_Command interface {
 	isServerCommand_Command()
 }
@@ -448,6 +466,10 @@ type ServerCommand_CleanupScrollback struct {
 	CleanupScrollback *CleanupScrollbackCmd `protobuf:"bytes,8,opt,name=cleanup_scrollback,json=cleanupScrollback,proto3,oneof"`
 }
 
+type ServerCommand_ListDirectory struct {
+	ListDirectory *ListDirectoryCmd `protobuf:"bytes,9,opt,name=list_directory,json=listDirectory,proto3,oneof"`
+}
+
 func (*ServerCommand_CreateSession) isServerCommand_Command() {}
 
 func (*ServerCommand_AttachSession) isServerCommand_Command() {}
@@ -463,6 +485,8 @@ func (*ServerCommand_InputData) isServerCommand_Command() {}
 func (*ServerCommand_RequestScrollback) isServerCommand_Command() {}
 
 func (*ServerCommand_CleanupScrollback) isServerCommand_Command() {}
+
+func (*ServerCommand_ListDirectory) isServerCommand_Command() {}
 
 type CreateSessionCmd struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -904,6 +928,186 @@ func (x *CleanupScrollbackCmd) GetSessionId() string {
 	return ""
 }
 
+type ListDirectoryCmd struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDirectoryCmd) Reset() {
+	*x = ListDirectoryCmd{}
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDirectoryCmd) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDirectoryCmd) ProtoMessage() {}
+
+func (x *ListDirectoryCmd) ProtoReflect() protoreflect.Message {
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDirectoryCmd.ProtoReflect.Descriptor instead.
+func (*ListDirectoryCmd) Descriptor() ([]byte, []int) {
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListDirectoryCmd) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ListDirectoryCmd) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type DirectoryEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DirectoryEntry) Reset() {
+	*x = DirectoryEntry{}
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DirectoryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DirectoryEntry) ProtoMessage() {}
+
+func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DirectoryEntry.ProtoReflect.Descriptor instead.
+func (*DirectoryEntry) Descriptor() ([]byte, []int) {
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *DirectoryEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DirectoryEntry) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+type DirectoryListingEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Entries       []*DirectoryEntry      `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	Parent        string                 `protobuf:"bytes,5,opt,name=parent,proto3" json:"parent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DirectoryListingEvent) Reset() {
+	*x = DirectoryListingEvent{}
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DirectoryListingEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DirectoryListingEvent) ProtoMessage() {}
+
+func (x *DirectoryListingEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DirectoryListingEvent.ProtoReflect.Descriptor instead.
+func (*DirectoryListingEvent) Descriptor() ([]byte, []int) {
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DirectoryListingEvent) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *DirectoryListingEvent) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *DirectoryListingEvent) GetEntries() []*DirectoryEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *DirectoryListingEvent) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *DirectoryListingEvent) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
 type TerminalSize struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Cols          uint32                 `protobuf:"varint,1,opt,name=cols,proto3" json:"cols,omitempty"`
@@ -914,7 +1118,7 @@ type TerminalSize struct {
 
 func (x *TerminalSize) Reset() {
 	*x = TerminalSize{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[13]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -926,7 +1130,7 @@ func (x *TerminalSize) String() string {
 func (*TerminalSize) ProtoMessage() {}
 
 func (x *TerminalSize) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[13]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -939,7 +1143,7 @@ func (x *TerminalSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSize.ProtoReflect.Descriptor instead.
 func (*TerminalSize) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TerminalSize) GetCols() uint32 {
@@ -968,6 +1172,7 @@ type AgentEvent struct {
 	//	*AgentEvent_TaskValues
 	//	*AgentEvent_StepIdle
 	//	*AgentEvent_LogBatch
+	//	*AgentEvent_DirectoryListing
 	Event         isAgentEvent_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -975,7 +1180,7 @@ type AgentEvent struct {
 
 func (x *AgentEvent) Reset() {
 	*x = AgentEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[14]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -987,7 +1192,7 @@ func (x *AgentEvent) String() string {
 func (*AgentEvent) ProtoMessage() {}
 
 func (x *AgentEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[14]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1000,7 +1205,7 @@ func (x *AgentEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentEvent.ProtoReflect.Descriptor instead.
 func (*AgentEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AgentEvent) GetEvent() isAgentEvent_Event {
@@ -1082,6 +1287,15 @@ func (x *AgentEvent) GetLogBatch() *LogBatch {
 	return nil
 }
 
+func (x *AgentEvent) GetDirectoryListing() *DirectoryListingEvent {
+	if x != nil {
+		if x, ok := x.Event.(*AgentEvent_DirectoryListing); ok {
+			return x.DirectoryListing
+		}
+	}
+	return nil
+}
+
 type isAgentEvent_Event interface {
 	isAgentEvent_Event()
 }
@@ -1118,6 +1332,10 @@ type AgentEvent_LogBatch struct {
 	LogBatch *LogBatch `protobuf:"bytes,8,opt,name=log_batch,json=logBatch,proto3,oneof"`
 }
 
+type AgentEvent_DirectoryListing struct {
+	DirectoryListing *DirectoryListingEvent `protobuf:"bytes,9,opt,name=directory_listing,json=directoryListing,proto3,oneof"`
+}
+
 func (*AgentEvent_SessionOutput) isAgentEvent_Event() {}
 
 func (*AgentEvent_SessionStatus) isAgentEvent_Event() {}
@@ -1134,6 +1352,8 @@ func (*AgentEvent_StepIdle) isAgentEvent_Event() {}
 
 func (*AgentEvent_LogBatch) isAgentEvent_Event() {}
 
+func (*AgentEvent_DirectoryListing) isAgentEvent_Event() {}
+
 type TaskValuesEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -1144,7 +1364,7 @@ type TaskValuesEvent struct {
 
 func (x *TaskValuesEvent) Reset() {
 	*x = TaskValuesEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[15]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1156,7 +1376,7 @@ func (x *TaskValuesEvent) String() string {
 func (*TaskValuesEvent) ProtoMessage() {}
 
 func (x *TaskValuesEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[15]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1169,7 +1389,7 @@ func (x *TaskValuesEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskValuesEvent.ProtoReflect.Descriptor instead.
 func (*TaskValuesEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TaskValuesEvent) GetSessionId() string {
@@ -1195,7 +1415,7 @@ type StepIdleEvent struct {
 
 func (x *StepIdleEvent) Reset() {
 	*x = StepIdleEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[16]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1207,7 +1427,7 @@ func (x *StepIdleEvent) String() string {
 func (*StepIdleEvent) ProtoMessage() {}
 
 func (x *StepIdleEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[16]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1220,7 +1440,7 @@ func (x *StepIdleEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepIdleEvent.ProtoReflect.Descriptor instead.
 func (*StepIdleEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *StepIdleEvent) GetSessionId() string {
@@ -1241,7 +1461,7 @@ type SessionOutputEvent struct {
 
 func (x *SessionOutputEvent) Reset() {
 	*x = SessionOutputEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[17]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1253,7 +1473,7 @@ func (x *SessionOutputEvent) String() string {
 func (*SessionOutputEvent) ProtoMessage() {}
 
 func (x *SessionOutputEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[17]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1266,7 +1486,7 @@ func (x *SessionOutputEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionOutputEvent.ProtoReflect.Descriptor instead.
 func (*SessionOutputEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SessionOutputEvent) GetSessionId() string {
@@ -1300,7 +1520,7 @@ type SessionStatusEvent struct {
 
 func (x *SessionStatusEvent) Reset() {
 	*x = SessionStatusEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[18]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +1532,7 @@ func (x *SessionStatusEvent) String() string {
 func (*SessionStatusEvent) ProtoMessage() {}
 
 func (x *SessionStatusEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[18]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +1545,7 @@ func (x *SessionStatusEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionStatusEvent.ProtoReflect.Descriptor instead.
 func (*SessionStatusEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SessionStatusEvent) GetSessionId() string {
@@ -1354,7 +1574,7 @@ type SessionExitEvent struct {
 
 func (x *SessionExitEvent) Reset() {
 	*x = SessionExitEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[19]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1366,7 +1586,7 @@ func (x *SessionExitEvent) String() string {
 func (*SessionExitEvent) ProtoMessage() {}
 
 func (x *SessionExitEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[19]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1379,7 +1599,7 @@ func (x *SessionExitEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionExitEvent.ProtoReflect.Descriptor instead.
 func (*SessionExitEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SessionExitEvent) GetSessionId() string {
@@ -1426,7 +1646,7 @@ type HealthEvent struct {
 
 func (x *HealthEvent) Reset() {
 	*x = HealthEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[20]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1438,7 +1658,7 @@ func (x *HealthEvent) String() string {
 func (*HealthEvent) ProtoMessage() {}
 
 func (x *HealthEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[20]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1451,7 +1671,7 @@ func (x *HealthEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthEvent.ProtoReflect.Descriptor instead.
 func (*HealthEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *HealthEvent) GetCpuUsagePercent() float32 {
@@ -1523,7 +1743,7 @@ type ScrollbackChunkEvent struct {
 
 func (x *ScrollbackChunkEvent) Reset() {
 	*x = ScrollbackChunkEvent{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[21]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1535,7 +1755,7 @@ func (x *ScrollbackChunkEvent) String() string {
 func (*ScrollbackChunkEvent) ProtoMessage() {}
 
 func (x *ScrollbackChunkEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[21]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1548,7 +1768,7 @@ func (x *ScrollbackChunkEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScrollbackChunkEvent.ProtoReflect.Descriptor instead.
 func (*ScrollbackChunkEvent) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{21}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ScrollbackChunkEvent) GetSessionId() string {
@@ -1595,7 +1815,7 @@ type LogBatch struct {
 
 func (x *LogBatch) Reset() {
 	*x = LogBatch{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[22]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1607,7 +1827,7 @@ func (x *LogBatch) String() string {
 func (*LogBatch) ProtoMessage() {}
 
 func (x *LogBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[22]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1620,7 +1840,7 @@ func (x *LogBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogBatch.ProtoReflect.Descriptor instead.
 func (*LogBatch) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *LogBatch) GetEntries() []*LogEntry {
@@ -1645,7 +1865,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[23]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1657,7 +1877,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_claudeplane_v1_agent_proto_msgTypes[23]
+	mi := &file_claudeplane_v1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1670,7 +1890,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_claudeplane_v1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *LogEntry) GetTimestamp() string {
@@ -1726,13 +1946,14 @@ var File_claudeplane_v1_agent_proto protoreflect.FileDescriptor
 
 const file_claudeplane_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1aclaudeplane/v1/agent.proto\x12\x0eclaudeplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xda\x01\n" +
+	"\x1aclaudeplane/v1/agent.proto\x12\x0eclaudeplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf5\x01\n" +
 	"\x0fRegisterRequest\x12\x1d\n" +
 	"\n" +
 	"machine_id\x18\x01 \x01(\tR\tmachineId\x12!\n" +
 	"\fmax_sessions\x18\x02 \x01(\x05R\vmaxSessions\x12:\n" +
 	"\tresources\x18\x03 \x01(\v2\x1c.claudeplane.v1.ResourceInfoR\tresources\x12I\n" +
-	"\x11existing_sessions\x18\x04 \x03(\v2\x1c.claudeplane.v1.SessionStateR\x10existingSessions\"z\n" +
+	"\x11existing_sessions\x18\x04 \x03(\v2\x1c.claudeplane.v1.SessionStateR\x10existingSessions\x12\x19\n" +
+	"\bhome_dir\x18\x05 \x01(\tR\ahomeDir\"z\n" +
 	"\x10RegisterResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +
 	"\rreject_reason\x18\x02 \x01(\tR\frejectReason\x12%\n" +
@@ -1751,7 +1972,7 @@ const file_claudeplane_v1_agent_proto_rawDesc = "" +
 	"\texit_code\x18\x05 \x01(\x05H\x01R\bexitCode\x88\x01\x01B\v\n" +
 	"\t_ended_atB\f\n" +
 	"\n" +
-	"_exit_code\"\xfb\x04\n" +
+	"_exit_code\"\xc6\x05\n" +
 	"\rServerCommand\x12I\n" +
 	"\x0ecreate_session\x18\x01 \x01(\v2 .claudeplane.v1.CreateSessionCmdH\x00R\rcreateSession\x12I\n" +
 	"\x0eattach_session\x18\x02 \x01(\v2 .claudeplane.v1.AttachSessionCmdH\x00R\rattachSession\x12I\n" +
@@ -1761,7 +1982,8 @@ const file_claudeplane_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"input_data\x18\x06 \x01(\v2\x1c.claudeplane.v1.InputDataCmdH\x00R\tinputData\x12U\n" +
 	"\x12request_scrollback\x18\a \x01(\v2$.claudeplane.v1.RequestScrollbackCmdH\x00R\x11requestScrollback\x12U\n" +
-	"\x12cleanup_scrollback\x18\b \x01(\v2$.claudeplane.v1.CleanupScrollbackCmdH\x00R\x11cleanupScrollbackB\t\n" +
+	"\x12cleanup_scrollback\x18\b \x01(\v2$.claudeplane.v1.CleanupScrollbackCmdH\x00R\x11cleanupScrollback\x12I\n" +
+	"\x0elist_directory\x18\t \x01(\v2 .claudeplane.v1.ListDirectoryCmdH\x00R\rlistDirectoryB\t\n" +
 	"\acommand\"\xac\x03\n" +
 	"\x10CreateSessionCmd\x12\x1d\n" +
 	"\n" +
@@ -1802,10 +2024,24 @@ const file_claudeplane_v1_agent_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"5\n" +
 	"\x14CleanupScrollbackCmd\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"6\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"E\n" +
+	"\x10ListDirectoryCmd\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\"8\n" +
+	"\x0eDirectoryEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\"\xb2\x01\n" +
+	"\x15DirectoryListingEvent\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x128\n" +
+	"\aentries\x18\x03 \x03(\v2\x1e.claudeplane.v1.DirectoryEntryR\aentries\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x12\x16\n" +
+	"\x06parent\x18\x05 \x01(\tR\x06parent\"6\n" +
 	"\fTerminalSize\x12\x12\n" +
 	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
-	"\x04rows\x18\x02 \x01(\rR\x04rows\"\xbb\x04\n" +
+	"\x04rows\x18\x02 \x01(\rR\x04rows\"\x91\x05\n" +
 	"\n" +
 	"AgentEvent\x12K\n" +
 	"\x0esession_output\x18\x01 \x01(\v2\".claudeplane.v1.SessionOutputEventH\x00R\rsessionOutput\x12K\n" +
@@ -1816,7 +2052,8 @@ const file_claudeplane_v1_agent_proto_rawDesc = "" +
 	"\vtask_values\x18\x06 \x01(\v2\x1f.claudeplane.v1.TaskValuesEventH\x00R\n" +
 	"taskValues\x12<\n" +
 	"\tstep_idle\x18\a \x01(\v2\x1d.claudeplane.v1.StepIdleEventH\x00R\bstepIdle\x127\n" +
-	"\tlog_batch\x18\b \x01(\v2\x18.claudeplane.v1.LogBatchH\x00R\blogBatchB\a\n" +
+	"\tlog_batch\x18\b \x01(\v2\x18.claudeplane.v1.LogBatchH\x00R\blogBatch\x12T\n" +
+	"\x11directory_listing\x18\t \x01(\v2%.claudeplane.v1.DirectoryListingEventH\x00R\x10directoryListingB\a\n" +
 	"\x05event\"\xb0\x01\n" +
 	"\x0fTaskValuesEvent\x12\x1d\n" +
 	"\n" +
@@ -1893,7 +2130,7 @@ func file_claudeplane_v1_agent_proto_rawDescGZIP() []byte {
 	return file_claudeplane_v1_agent_proto_rawDescData
 }
 
-var file_claudeplane_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_claudeplane_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_claudeplane_v1_agent_proto_goTypes = []any{
 	(*RegisterRequest)(nil),       // 0: claudeplane.v1.RegisterRequest
 	(*RegisterResponse)(nil),      // 1: claudeplane.v1.RegisterResponse
@@ -1908,27 +2145,30 @@ var file_claudeplane_v1_agent_proto_goTypes = []any{
 	(*InputDataCmd)(nil),          // 10: claudeplane.v1.InputDataCmd
 	(*RequestScrollbackCmd)(nil),  // 11: claudeplane.v1.RequestScrollbackCmd
 	(*CleanupScrollbackCmd)(nil),  // 12: claudeplane.v1.CleanupScrollbackCmd
-	(*TerminalSize)(nil),          // 13: claudeplane.v1.TerminalSize
-	(*AgentEvent)(nil),            // 14: claudeplane.v1.AgentEvent
-	(*TaskValuesEvent)(nil),       // 15: claudeplane.v1.TaskValuesEvent
-	(*StepIdleEvent)(nil),         // 16: claudeplane.v1.StepIdleEvent
-	(*SessionOutputEvent)(nil),    // 17: claudeplane.v1.SessionOutputEvent
-	(*SessionStatusEvent)(nil),    // 18: claudeplane.v1.SessionStatusEvent
-	(*SessionExitEvent)(nil),      // 19: claudeplane.v1.SessionExitEvent
-	(*HealthEvent)(nil),           // 20: claudeplane.v1.HealthEvent
-	(*ScrollbackChunkEvent)(nil),  // 21: claudeplane.v1.ScrollbackChunkEvent
-	(*LogBatch)(nil),              // 22: claudeplane.v1.LogBatch
-	(*LogEntry)(nil),              // 23: claudeplane.v1.LogEntry
-	nil,                           // 24: claudeplane.v1.CreateSessionCmd.EnvVarsEntry
-	nil,                           // 25: claudeplane.v1.TaskValuesEvent.ValuesEntry
-	nil,                           // 26: claudeplane.v1.LogEntry.AttrsEntry
-	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
+	(*ListDirectoryCmd)(nil),      // 13: claudeplane.v1.ListDirectoryCmd
+	(*DirectoryEntry)(nil),        // 14: claudeplane.v1.DirectoryEntry
+	(*DirectoryListingEvent)(nil), // 15: claudeplane.v1.DirectoryListingEvent
+	(*TerminalSize)(nil),          // 16: claudeplane.v1.TerminalSize
+	(*AgentEvent)(nil),            // 17: claudeplane.v1.AgentEvent
+	(*TaskValuesEvent)(nil),       // 18: claudeplane.v1.TaskValuesEvent
+	(*StepIdleEvent)(nil),         // 19: claudeplane.v1.StepIdleEvent
+	(*SessionOutputEvent)(nil),    // 20: claudeplane.v1.SessionOutputEvent
+	(*SessionStatusEvent)(nil),    // 21: claudeplane.v1.SessionStatusEvent
+	(*SessionExitEvent)(nil),      // 22: claudeplane.v1.SessionExitEvent
+	(*HealthEvent)(nil),           // 23: claudeplane.v1.HealthEvent
+	(*ScrollbackChunkEvent)(nil),  // 24: claudeplane.v1.ScrollbackChunkEvent
+	(*LogBatch)(nil),              // 25: claudeplane.v1.LogBatch
+	(*LogEntry)(nil),              // 26: claudeplane.v1.LogEntry
+	nil,                           // 27: claudeplane.v1.CreateSessionCmd.EnvVarsEntry
+	nil,                           // 28: claudeplane.v1.TaskValuesEvent.ValuesEntry
+	nil,                           // 29: claudeplane.v1.LogEntry.AttrsEntry
+	(*timestamppb.Timestamp)(nil), // 30: google.protobuf.Timestamp
 }
 var file_claudeplane_v1_agent_proto_depIdxs = []int32{
 	2,  // 0: claudeplane.v1.RegisterRequest.resources:type_name -> claudeplane.v1.ResourceInfo
 	3,  // 1: claudeplane.v1.RegisterRequest.existing_sessions:type_name -> claudeplane.v1.SessionState
-	27, // 2: claudeplane.v1.SessionState.started_at:type_name -> google.protobuf.Timestamp
-	27, // 3: claudeplane.v1.SessionState.ended_at:type_name -> google.protobuf.Timestamp
+	30, // 2: claudeplane.v1.SessionState.started_at:type_name -> google.protobuf.Timestamp
+	30, // 3: claudeplane.v1.SessionState.ended_at:type_name -> google.protobuf.Timestamp
 	5,  // 4: claudeplane.v1.ServerCommand.create_session:type_name -> claudeplane.v1.CreateSessionCmd
 	6,  // 5: claudeplane.v1.ServerCommand.attach_session:type_name -> claudeplane.v1.AttachSessionCmd
 	7,  // 6: claudeplane.v1.ServerCommand.detach_session:type_name -> claudeplane.v1.DetachSessionCmd
@@ -1937,30 +2177,33 @@ var file_claudeplane_v1_agent_proto_depIdxs = []int32{
 	10, // 9: claudeplane.v1.ServerCommand.input_data:type_name -> claudeplane.v1.InputDataCmd
 	11, // 10: claudeplane.v1.ServerCommand.request_scrollback:type_name -> claudeplane.v1.RequestScrollbackCmd
 	12, // 11: claudeplane.v1.ServerCommand.cleanup_scrollback:type_name -> claudeplane.v1.CleanupScrollbackCmd
-	24, // 12: claudeplane.v1.CreateSessionCmd.env_vars:type_name -> claudeplane.v1.CreateSessionCmd.EnvVarsEntry
-	13, // 13: claudeplane.v1.CreateSessionCmd.terminal_size:type_name -> claudeplane.v1.TerminalSize
-	13, // 14: claudeplane.v1.ResizeTerminalCmd.size:type_name -> claudeplane.v1.TerminalSize
-	17, // 15: claudeplane.v1.AgentEvent.session_output:type_name -> claudeplane.v1.SessionOutputEvent
-	18, // 16: claudeplane.v1.AgentEvent.session_status:type_name -> claudeplane.v1.SessionStatusEvent
-	20, // 17: claudeplane.v1.AgentEvent.health:type_name -> claudeplane.v1.HealthEvent
-	21, // 18: claudeplane.v1.AgentEvent.scrollback_chunk:type_name -> claudeplane.v1.ScrollbackChunkEvent
-	19, // 19: claudeplane.v1.AgentEvent.session_exit:type_name -> claudeplane.v1.SessionExitEvent
-	15, // 20: claudeplane.v1.AgentEvent.task_values:type_name -> claudeplane.v1.TaskValuesEvent
-	16, // 21: claudeplane.v1.AgentEvent.step_idle:type_name -> claudeplane.v1.StepIdleEvent
-	22, // 22: claudeplane.v1.AgentEvent.log_batch:type_name -> claudeplane.v1.LogBatch
-	25, // 23: claudeplane.v1.TaskValuesEvent.values:type_name -> claudeplane.v1.TaskValuesEvent.ValuesEntry
-	27, // 24: claudeplane.v1.SessionExitEvent.exited_at:type_name -> google.protobuf.Timestamp
-	23, // 25: claudeplane.v1.LogBatch.entries:type_name -> claudeplane.v1.LogEntry
-	26, // 26: claudeplane.v1.LogEntry.attrs:type_name -> claudeplane.v1.LogEntry.AttrsEntry
-	0,  // 27: claudeplane.v1.AgentService.Register:input_type -> claudeplane.v1.RegisterRequest
-	14, // 28: claudeplane.v1.AgentService.CommandStream:input_type -> claudeplane.v1.AgentEvent
-	1,  // 29: claudeplane.v1.AgentService.Register:output_type -> claudeplane.v1.RegisterResponse
-	4,  // 30: claudeplane.v1.AgentService.CommandStream:output_type -> claudeplane.v1.ServerCommand
-	29, // [29:31] is the sub-list for method output_type
-	27, // [27:29] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	13, // 12: claudeplane.v1.ServerCommand.list_directory:type_name -> claudeplane.v1.ListDirectoryCmd
+	27, // 13: claudeplane.v1.CreateSessionCmd.env_vars:type_name -> claudeplane.v1.CreateSessionCmd.EnvVarsEntry
+	16, // 14: claudeplane.v1.CreateSessionCmd.terminal_size:type_name -> claudeplane.v1.TerminalSize
+	16, // 15: claudeplane.v1.ResizeTerminalCmd.size:type_name -> claudeplane.v1.TerminalSize
+	14, // 16: claudeplane.v1.DirectoryListingEvent.entries:type_name -> claudeplane.v1.DirectoryEntry
+	20, // 17: claudeplane.v1.AgentEvent.session_output:type_name -> claudeplane.v1.SessionOutputEvent
+	21, // 18: claudeplane.v1.AgentEvent.session_status:type_name -> claudeplane.v1.SessionStatusEvent
+	23, // 19: claudeplane.v1.AgentEvent.health:type_name -> claudeplane.v1.HealthEvent
+	24, // 20: claudeplane.v1.AgentEvent.scrollback_chunk:type_name -> claudeplane.v1.ScrollbackChunkEvent
+	22, // 21: claudeplane.v1.AgentEvent.session_exit:type_name -> claudeplane.v1.SessionExitEvent
+	18, // 22: claudeplane.v1.AgentEvent.task_values:type_name -> claudeplane.v1.TaskValuesEvent
+	19, // 23: claudeplane.v1.AgentEvent.step_idle:type_name -> claudeplane.v1.StepIdleEvent
+	25, // 24: claudeplane.v1.AgentEvent.log_batch:type_name -> claudeplane.v1.LogBatch
+	15, // 25: claudeplane.v1.AgentEvent.directory_listing:type_name -> claudeplane.v1.DirectoryListingEvent
+	28, // 26: claudeplane.v1.TaskValuesEvent.values:type_name -> claudeplane.v1.TaskValuesEvent.ValuesEntry
+	30, // 27: claudeplane.v1.SessionExitEvent.exited_at:type_name -> google.protobuf.Timestamp
+	26, // 28: claudeplane.v1.LogBatch.entries:type_name -> claudeplane.v1.LogEntry
+	29, // 29: claudeplane.v1.LogEntry.attrs:type_name -> claudeplane.v1.LogEntry.AttrsEntry
+	0,  // 30: claudeplane.v1.AgentService.Register:input_type -> claudeplane.v1.RegisterRequest
+	17, // 31: claudeplane.v1.AgentService.CommandStream:input_type -> claudeplane.v1.AgentEvent
+	1,  // 32: claudeplane.v1.AgentService.Register:output_type -> claudeplane.v1.RegisterResponse
+	4,  // 33: claudeplane.v1.AgentService.CommandStream:output_type -> claudeplane.v1.ServerCommand
+	32, // [32:34] is the sub-list for method output_type
+	30, // [30:32] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_claudeplane_v1_agent_proto_init() }
@@ -1978,8 +2221,9 @@ func file_claudeplane_v1_agent_proto_init() {
 		(*ServerCommand_InputData)(nil),
 		(*ServerCommand_RequestScrollback)(nil),
 		(*ServerCommand_CleanupScrollback)(nil),
+		(*ServerCommand_ListDirectory)(nil),
 	}
-	file_claudeplane_v1_agent_proto_msgTypes[14].OneofWrappers = []any{
+	file_claudeplane_v1_agent_proto_msgTypes[17].OneofWrappers = []any{
 		(*AgentEvent_SessionOutput)(nil),
 		(*AgentEvent_SessionStatus)(nil),
 		(*AgentEvent_Health)(nil),
@@ -1988,6 +2232,7 @@ func file_claudeplane_v1_agent_proto_init() {
 		(*AgentEvent_TaskValues)(nil),
 		(*AgentEvent_StepIdle)(nil),
 		(*AgentEvent_LogBatch)(nil),
+		(*AgentEvent_DirectoryListing)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1995,7 +2240,7 @@ func file_claudeplane_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_claudeplane_v1_agent_proto_rawDesc), len(file_claudeplane_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

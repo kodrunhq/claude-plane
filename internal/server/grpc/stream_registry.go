@@ -24,6 +24,7 @@ type StreamEntry struct {
 	MachineID     string
 	StreamToken   uint64 // unique per connection, used to prevent stale removal
 	MaxSessions   int32
+	HomeDir       string
 	ConnectedAt   time.Time
 	SessionStates []*pb.SessionState
 }
