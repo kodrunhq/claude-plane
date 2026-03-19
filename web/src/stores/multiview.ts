@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Workspace, Pane, LayoutPreset, LayoutConfig } from '../types/multiview';
+import { generateUUID } from '../lib/uuid';
 
 const SCRATCH_KEY = 'claude-plane:multiview:scratch';
 const WORKSPACES_KEY = 'claude-plane:multiview:workspaces';
@@ -52,7 +53,7 @@ function defaultPresetForCount(count: number): LayoutPreset {
 
 function makePanes(sessionIds: readonly string[]): readonly Pane[] {
   return sessionIds.map((sessionId) => ({
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     sessionId,
   }));
 }
@@ -60,7 +61,7 @@ function makePanes(sessionIds: readonly string[]): readonly Pane[] {
 function makeWorkspace(sessionIds: readonly string[], name: string | null = null): Workspace {
   const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     name,
     layout: { preset: defaultPresetForCount(sessionIds.length) },
     panes: makePanes(sessionIds),
@@ -167,7 +168,7 @@ export const useMultiviewStore = create<MultiviewState>((set, get) => ({
     const now = new Date().toISOString();
     const copy: Workspace = {
       ...activeWorkspace,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name,
       createdAt: now,
       updatedAt: now,
@@ -235,7 +236,7 @@ export const useMultiviewStore = create<MultiviewState>((set, get) => ({
     const { activeWorkspace } = get();
     if (!activeWorkspace || activeWorkspace.panes.length >= 6) return;
 
-    const newPanes = [...activeWorkspace.panes, { id: crypto.randomUUID(), sessionId }];
+    const newPanes = [...activeWorkspace.panes, { id: generateUUID(), sessionId }];
     const updated = updateActiveWorkspace(activeWorkspace, {
       panes: newPanes,
       layout: { preset: defaultPresetForCount(newPanes.length) },

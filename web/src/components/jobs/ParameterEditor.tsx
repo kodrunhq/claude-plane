@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { generateUUID } from '../../lib/uuid';
 
 const PARAM_KEY_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -15,7 +16,7 @@ interface ParameterEditorProps {
 }
 
 function generateId(): string {
-  return crypto.randomUUID();
+  return generateUUID();
 }
 
 function toEntries(params: Record<string, string>): ParameterEntry[] {

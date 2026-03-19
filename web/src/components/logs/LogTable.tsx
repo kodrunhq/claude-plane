@@ -167,7 +167,7 @@ function LogRow({
         <td className="px-4 py-2.5 text-text-secondary font-mono text-xs">{entry.component}</td>
         <td className="px-4 py-2.5 text-text-primary truncate max-w-md">{entry.message}</td>
         <td className="px-4 py-2.5 text-text-secondary font-mono text-xs">
-          {entry.machine_id ? entry.machine_id.slice(0, 8) : '\u2014'}
+          {entry.machine_id || '\u2014'}
         </td>
       </tr>
       {isExpanded && <ExpandedRow entry={entry} />}

@@ -70,8 +70,8 @@ export function SessionHeader({ session, isLoading, onTerminate }: SessionHeader
               title={session.machine_id}
             >
               <Monitor size={12} className="opacity-60" />
-              <span className="font-mono truncate max-w-[100px]">
-                {session.machine_id.slice(0, 8)}
+              <span className="font-mono truncate max-w-[160px]">
+                {session.machine_id}
               </span>
             </span>
 

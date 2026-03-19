@@ -15,8 +15,8 @@ interface RunsTableProps {
 function formatMachineIds(ids: string | undefined): string {
   if (!ids) return '—';
   const machines = ids.split(',');
-  if (machines.length === 1) return machines[0].slice(0, 12);
-  return `${machines[0].slice(0, 12)} +${machines.length - 1}`;
+  if (machines.length === 1) return machines[0];
+  return `${machines[0]} +${machines.length - 1}`;
 }
 
 export function RunsTable({ runs, showJobName = false, compact = false, onRowClick }: RunsTableProps) {

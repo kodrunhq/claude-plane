@@ -337,7 +337,8 @@ func (sm *SessionManager) handleAttach(cmd *pb.AttachSessionCmd) {
 
 	// Tell the server this session has ended — prevents the browser from
 	// showing a "Connected" indicator on a dead session where typing does nothing.
-	sm.sendEvent(&pb.AgentEvent{
+	// Use blocking send so this isn't dropped after the scrollback replay.
+	sm.sendEventBlocking(&pb.AgentEvent{
 		Event: &pb.AgentEvent_SessionStatus{
 			SessionStatus: &pb.SessionStatusEvent{
 				SessionId: sessionID,
@@ -427,7 +428,9 @@ func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
 		if n > 0 {
 			data := make([]byte, n)
 			copy(data, buf[:n])
-			sm.sendEvent(&pb.AgentEvent{
+			// Use blocking send to prevent silently dropping scrollback data.
+			// Dropping chunks causes blank terminals when viewing completed sessions.
+			if !sm.sendEventBlocking(&pb.AgentEvent{
 				Event: &pb.AgentEvent_ScrollbackChunk{
 					ScrollbackChunk: &pb.ScrollbackChunkEvent{
 						SessionId:  sessionID,
@@ -436,7 +439,10 @@ func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
 						TotalBytes: offset + int64(n),
 					},
 				},
-			})
+			}) {
+				sm.logger.Error("aborting scrollback replay due to send timeout", "session_id", sessionID)
+				break
+			}
 			offset += int64(n)
 		}
 		if readErr == io.EOF {
@@ -453,7 +459,9 @@ func (sm *SessionManager) sendScrollbackChunks(sessionID, path string) {
 }
 
 func (sm *SessionManager) sendFinalScrollbackMarker(sessionID string, offset int64) {
-	sm.sendEvent(&pb.AgentEvent{
+	// Use blocking send for the final marker — this must not be dropped or
+	// the browser stays stuck in "replaying" state.
+	sm.sendEventBlocking(&pb.AgentEvent{
 		Event: &pb.AgentEvent_ScrollbackChunk{
 			ScrollbackChunk: &pb.ScrollbackChunkEvent{
 				SessionId:  sessionID,
@@ -703,6 +711,32 @@ func (sm *SessionManager) sendEvent(evt *pb.AgentEvent) {
 				"event_type", fmt.Sprintf("%T", evt.GetEvent()),
 			)
 		}
+	}
+}
+
+// sendEventBlocking sends an event with a timeout, blocking until space is
+// available. Used for scrollback replay where dropping data causes blank
+// terminals. Returns false if the send timed out.
+func (sm *SessionManager) sendEventBlocking(evt *pb.AgentEvent) bool {
+	sm.relayMu.Lock()
+	ch := sm.sendCh
+	sm.relayMu.Unlock()
+
+	if ch == nil {
+		return false
+	}
+
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case ch <- evt:
+		return true
+	case <-timer.C:
+		sm.logger.Error("send channel full after timeout, dropping scrollback event",
+			"event_type", fmt.Sprintf("%T", evt.GetEvent()),
+		)
+		return false
 	}
 }
 

@@ -105,7 +105,7 @@ export function useTerminalSession(
             clearTimeout(scrollbackTimeout);
             setStatus('live');
           } else if (msg.type === 'session_ended') {
-            setStatus('disconnected');
+            setStatus('ended');
           }
         } catch {
           // Ignore unparseable control messages

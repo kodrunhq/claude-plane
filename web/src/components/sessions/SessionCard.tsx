@@ -71,8 +71,8 @@ export function SessionCard({ session, onAttach, onTerminate, selectable, select
       </div>
 
       <div className="flex items-center justify-between text-xs text-text-secondary">
-        <span className="font-mono truncate max-w-[120px] opacity-60" title={session.machine_id}>
-          {session.machine_id.slice(0, 8)}
+        <span className="font-mono truncate max-w-[160px] opacity-60" title={session.machine_id}>
+          {session.machine_id}
         </span>
         <TimeAgo date={session.updated_at} className="text-text-secondary" />
       </div>

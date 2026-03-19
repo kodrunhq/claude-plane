@@ -375,9 +375,9 @@ function StatCard({
       } as React.CSSProperties}
     >
       <div className={`${a.iconClass} shrink-0`}>{icon}</div>
-      <div>
-        <p className="text-2xl font-bold text-text-primary font-mono tabular-nums">{value}</p>
-        <p className="text-xs text-text-secondary">{label}</p>
+      <div className="min-w-0">
+        <p className="text-2xl font-bold text-text-primary font-mono tabular-nums truncate">{value}</p>
+        <p className="text-xs text-text-secondary truncate">{label}</p>
       </div>
     </div>
   );
