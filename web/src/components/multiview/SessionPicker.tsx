@@ -19,7 +19,7 @@ export function SessionPicker({ onSelect, onClose, excludeSessionIds = [] }: Ses
 
   const machineMap = useMemo(() => {
     const map = new Map<string, string>();
-    machines?.forEach((m) => map.set(m.machine_id, m.display_name ?? m.machine_id.slice(0, 8)));
+    machines?.forEach((m) => map.set(m.machine_id, m.display_name ?? m.machine_id));
     return map;
   }, [machines]);
 
@@ -90,7 +90,7 @@ export function SessionPicker({ onSelect, onClose, excludeSessionIds = [] }: Ses
             <option value="all">All machines</option>
             {machines?.map((m) => (
               <option key={m.machine_id} value={m.machine_id}>
-                {m.display_name ?? m.machine_id.slice(0, 8)}
+                {m.display_name ?? m.machine_id}
               </option>
             ))}
           </select>

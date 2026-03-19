@@ -159,6 +159,11 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 		},
 	}); err != nil {
 		logger.Warn("failed to attach session on agent", "session_id", sessionID, "machine_id", machineID, "error", err)
+		// Notify the browser so it doesn't hang in "Connecting" state.
+		// Send scrollback_end first (so the client transitions out of replaying)
+		// then session_ended (so it knows the session can't be viewed).
+		reg.PublishControl(sessionID, []byte(`{"type":"scrollback_end"}`))
+		reg.PublishControl(sessionID, []byte(`{"type":"session_ended","status":"disconnected"}`))
 	}
 
 	// Writer goroutine: reads from subscriber channel and writes to WebSocket.

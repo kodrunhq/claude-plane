@@ -14,6 +14,7 @@ const statusLabels: Record<TerminalStatus, string> = {
   connecting: 'Connecting...',
   replaying: 'Loading history...',
   live: 'Connected',
+  ended: 'Session ended',
   disconnected: 'Disconnected',
 };
 
@@ -21,6 +22,7 @@ const statusColors: Record<TerminalStatus, string> = {
   connecting: 'text-yellow-400',
   replaying: 'text-blue-400',
   live: 'text-green-400',
+  ended: 'text-text-secondary',
   disconnected: 'text-red-400',
 };
 
@@ -50,7 +52,9 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
                 ? 'bg-green-400'
                 : status === 'connecting' || status === 'replaying'
                   ? 'bg-yellow-400 animate-pulse'
-                  : 'bg-red-400'
+                  : status === 'ended'
+                    ? 'bg-gray-400'
+                    : 'bg-red-400'
             }`}
           />
           <span className={statusColors[status]}>{statusLabels[status]}</span>

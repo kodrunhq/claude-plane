@@ -1,10 +1,11 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, FolderOpen } from 'lucide-react';
 import type { Task, UpdateTaskParams, Job } from '../../types/job.ts';
 import type { Machine } from '../../lib/types.ts';
 import type { SessionTemplate } from '../../types/template.ts';
 import { useTemplates } from '../../hooks/useTemplates.ts';
 import { useJobs } from '../../hooks/useJobs.ts';
+import { DirectoryBrowserModal } from '../sessions/DirectoryBrowserModal.tsx';
 
 interface TaskEditorProps {
   task: Task | null;
@@ -72,11 +73,11 @@ function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateTaskPar
     };
   }
 
-  // Shell task
+  // Shell task — no command field; the shell runs args directly
   return {
     ...base,
     prompt: '',
-    command: data.get('command') as string,
+    command: '',
     args: data.get('args') as string,
     model: undefined,
     skip_permissions: undefined,
@@ -142,11 +143,8 @@ function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean
     );
   }
 
-  // Shell
-  return (
-    (data.get('command') as string) !== (task.command || '') ||
-    (data.get('args') as string) !== (task.args ?? '')
-  );
+  // Shell — no command field
+  return (data.get('args') as string) !== (task.args ?? '');
 }
 
 function TemplatePreview({ template }: { template: SessionTemplate }) {
@@ -317,6 +315,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
   const { data: jobs } = useJobs();
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [taskType, setTaskType] = useState<TaskType>(() => task ? resolveTaskType(task) : 'claude');
+  const [browseOpen, setBrowseOpen] = useState(false);
   const [maxRetriesState, setMaxRetriesState] = useState(task?.max_retries ?? 0);
   const [targetJobId, setTargetJobId] = useState(task?.target_job_id ?? '');
 
@@ -438,6 +437,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
   }
 
   return (
+    <>
     <form
       ref={formRef}
       onSubmit={handleSubmit}
@@ -561,7 +561,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
             <option value="">Select machine...</option>
             {machines.map((m) => (
               <option key={m.machine_id} value={m.machine_id}>
-                {m.display_name || m.machine_id.slice(0, 8)}
+                {m.display_name || m.machine_id}
               </option>
             ))}
           </select>
@@ -640,37 +640,44 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
       {taskType !== 'run_job' && (
         <div>
           <label htmlFor="task-workdir" className="block text-xs text-text-secondary mb-1">Working Directory</label>
-          <input
-            id="task-workdir"
-            name="working_dir"
-            type="text"
-            defaultValue={task.working_dir}
-            key={task.step_id + '-workdir'}
-            className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
-            placeholder="/home/user/project"
-          />
+          <div className="flex gap-2">
+            <input
+              id="task-workdir"
+              name="working_dir"
+              type="text"
+              defaultValue={task.working_dir}
+              key={task.step_id + '-workdir'}
+              className="flex-1 px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+              placeholder="/home/user/project"
+            />
+            <button
+              type="button"
+              onClick={() => setBrowseOpen(true)}
+              disabled={!formRef.current?.querySelector<HTMLSelectElement>('[name="machine_id"]')?.value}
+              className="px-3 py-1.5 rounded-md bg-bg-tertiary border border-border-primary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Browse directories"
+            >
+              <FolderOpen size={16} />
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Command -- claude and shell only */}
-      {taskType !== 'run_job' && (
+      {/* Command -- claude only */}
+      {taskType === 'claude' && (
         <div>
           <label htmlFor="task-command" className="block text-xs text-text-secondary mb-1">
-            Command{taskType === 'shell' ? ' (required)' : ''}
+            Command
           </label>
           <input
             id="task-command"
             name="command"
             type="text"
-            defaultValue={taskType === 'claude' ? (task.command || 'claude') : (task.command || '')}
+            defaultValue={task.command || 'claude'}
             key={task.step_id + '-command-' + taskType}
-            required={taskType === 'shell'}
-            placeholder={taskType === 'shell' ? 'e.g., ./deploy.sh, python script.py' : undefined}
             className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
           />
-          {taskType === 'claude' && (
-            <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
-          )}
+          <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
         </div>
       )}
 
@@ -773,5 +780,30 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         </button>
       </div>
     </form>
+
+    {browseOpen && (() => {
+      const machineId = formRef.current?.querySelector<HTMLSelectElement>('[name="machine_id"]')?.value;
+      const workdir = formRef.current?.querySelector<HTMLInputElement>('[name="working_dir"]')?.value;
+      return machineId ? (
+        <DirectoryBrowserModal
+          open={browseOpen}
+          onClose={() => setBrowseOpen(false)}
+          onSelect={(path) => {
+            const input = formRef.current?.querySelector<HTMLInputElement>('[name="working_dir"]');
+            if (input) {
+              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value',
+              )?.set;
+              nativeInputValueSetter?.call(input, path);
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            setBrowseOpen(false);
+          }}
+          machineId={machineId}
+          initialPath={workdir || undefined}
+        />
+      ) : null;
+    })()}
+    </>
   );
 }

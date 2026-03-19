@@ -124,8 +124,8 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
             </button>
           </div>
         )}
-        <span className="font-mono text-xs truncate max-w-[140px] opacity-60 text-text-secondary" title={machine.machine_id}>
-          {machine.machine_id.slice(0, 12)}
+        <span className="font-mono text-xs truncate max-w-[200px] opacity-60 text-text-secondary" title={machine.machine_id}>
+          {machine.machine_id}
         </span>
       </div>
 

@@ -106,7 +106,7 @@ export function CommandPalette() {
         results.push({
           id: session.session_id,
           label: `Session ${session.session_id.slice(0, 8)}`,
-          description: `${session.status} on ${session.machine_id.slice(0, 12)}`,
+          description: `${session.status} on ${session.machine_id}`,
           path: `/sessions/${session.session_id}`,
           group: 'Sessions',
         });

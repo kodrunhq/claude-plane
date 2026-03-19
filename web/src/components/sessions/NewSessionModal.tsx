@@ -208,7 +208,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
               <option value="">Select a machine...</option>
               {onlineMachines.map((m) => (
                 <option key={m.machine_id} value={m.machine_id}>
-                  {m.display_name || m.machine_id} ({m.machine_id.slice(0, 8)})
+                  {m.display_name || m.machine_id}
                 </option>
               ))}
             </select>
