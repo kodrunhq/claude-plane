@@ -25,9 +25,9 @@ describe('MachinesPage', () => {
     renderWithProviders(<MachinesPage />);
 
     await waitFor(() => {
-      // MachineCard renders machine_id.slice(0, 12)
-      expect(screen.getByText(mockMachines[0].machine_id.slice(0, 12))).toBeInTheDocument();
-      expect(screen.getByText(mockMachines[1].machine_id.slice(0, 12))).toBeInTheDocument();
+      // MachineCard renders full machine_id
+      expect(screen.getByText(mockMachines[0].machine_id)).toBeInTheDocument();
+      expect(screen.getByText(mockMachines[1].machine_id)).toBeInTheDocument();
     });
   });
 

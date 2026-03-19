@@ -41,8 +41,8 @@ describe('SessionHeader', () => {
     // Command
     expect(screen.getByText('claude --model opus')).toBeInTheDocument();
 
-    // Machine ID truncated
-    expect(screen.getByText('worker-a')).toBeInTheDocument();
+    // Machine ID (full)
+    expect(screen.getByText('worker-abcd1234')).toBeInTheDocument();
 
     // Working directory
     expect(screen.getByText('/home/user/project')).toBeInTheDocument();

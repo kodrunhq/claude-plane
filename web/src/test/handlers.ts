@@ -3,9 +3,10 @@
 import { http, HttpResponse } from 'msw';
 import type { Session } from '../types/session.ts';
 import type { Machine } from '../lib/types.ts';
-import type { Job, Run } from '../types/job.ts';
+import type { Job, Run, Task, RunTask } from '../types/job.ts';
 import type { SessionTemplate } from '../types/template.ts';
 import type { Event } from '../types/event.ts';
+import type { BrowseResponse } from '../api/machines.ts';
 import {
   buildSession,
   buildMachine,
@@ -13,6 +14,9 @@ import {
   buildRun,
   buildTemplate,
   buildEvent,
+  buildTask,
+  buildRunTask,
+  buildBrowseResponse,
 } from './factories.ts';
 
 // Pre-built mock data arrays for assertions in tests
@@ -44,6 +48,18 @@ export const mockEvents: Event[] = [
   buildEvent({ event_id: 'evt-100', event_type: 'session.started' }),
   buildEvent({ event_id: 'evt-101', event_type: 'machine.connected' }),
 ];
+
+export const mockTasks: Task[] = [
+  buildTask({ step_id: 'step-100', job_id: 'job-100', name: 'Analyze codebase', task_type: 'claude', prompt: 'Analyze the project structure' }),
+  buildTask({ step_id: 'step-101', job_id: 'job-100', name: 'Run linter', task_type: 'shell', command: 'npm', args: 'run lint', prompt: '' }),
+];
+
+export const mockRunTasks: RunTask[] = [
+  buildRunTask({ run_step_id: 'rstep-100', run_id: 'run-100', step_id: 'step-100', status: 'completed' }),
+  buildRunTask({ run_step_id: 'rstep-101', run_id: 'run-100', step_id: 'step-101', status: 'running' }),
+];
+
+export const mockBrowseResponse: BrowseResponse = buildBrowseResponse();
 
 // Handlers array — add to or override per-test with server.use(...)
 export const handlers = [
@@ -97,4 +113,109 @@ export const handlers = [
       },
     }),
   ),
+
+  // --- Session mutations ---
+  http.post('/api/v1/sessions', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const session = buildSession({
+      machine_id: (body.machine_id as string) ?? 'machine-100',
+      status: 'running',
+    });
+    return HttpResponse.json(session, { status: 201 });
+  }),
+  http.delete('/api/v1/sessions/:id', () => new HttpResponse(null, { status: 204 })),
+
+  // --- Job mutations ---
+  http.post('/api/v1/jobs', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const job = buildJob({ name: (body.name as string) ?? 'New Job' });
+    return HttpResponse.json(job, { status: 201 });
+  }),
+  http.put('/api/v1/jobs/:id', async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const existing = mockJobs.find((j) => j.job_id === params.id);
+    const job = buildJob({ ...existing, ...body as Partial<Job> });
+    return HttpResponse.json(job);
+  }),
+  http.delete('/api/v1/jobs/:id', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/v1/jobs/:id/clone', ({ params }) => {
+    const job = buildJob({ name: `Clone of ${params.id}` });
+    return HttpResponse.json({ job, steps: [], dependencies: [] }, { status: 201 });
+  }),
+
+  // --- Task (step) mutations ---
+  http.post('/api/v1/jobs/:jobId/steps', async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const task = buildTask({
+      job_id: params.jobId as string,
+      name: (body.name as string) ?? 'New Task',
+      machine_id: (body.machine_id as string) ?? 'machine-100',
+    });
+    return HttpResponse.json(task, { status: 201 });
+  }),
+  http.put('/api/v1/jobs/:jobId/steps/:stepId', () =>
+    HttpResponse.json({ status: 'ok' }),
+  ),
+  http.delete('/api/v1/jobs/:jobId/steps/:stepId', () =>
+    new HttpResponse(null, { status: 204 }),
+  ),
+
+  // --- Dependency mutations ---
+  http.post('/api/v1/jobs/:jobId/steps/:stepId/deps', async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>;
+    return HttpResponse.json(
+      { step_id: params.stepId, depends_on: body.depends_on },
+      { status: 201 },
+    );
+  }),
+  http.delete('/api/v1/jobs/:jobId/steps/:stepId/deps/:depId', () =>
+    new HttpResponse(null, { status: 204 }),
+  ),
+
+  // --- Run mutations ---
+  http.post('/api/v1/jobs/:jobId/runs', ({ params }) => {
+    const run = buildRun({ job_id: params.jobId as string, status: 'pending' });
+    return HttpResponse.json(run, { status: 201 });
+  }),
+  http.post('/api/v1/runs/:id/cancel', ({ params }) => {
+    const run = buildRun({ run_id: params.id as string, status: 'cancelled' });
+    return HttpResponse.json(run);
+  }),
+  http.post('/api/v1/runs/:runId/steps/:stepId/retry', () =>
+    HttpResponse.json({ status: 'ok' }),
+  ),
+  http.post('/api/v1/runs/:id/repair', () =>
+    HttpResponse.json({ status: 'ok' }),
+  ),
+
+  // --- Machine mutations ---
+  http.put('/api/v1/machines/:id', async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const existing = mockMachines.find((m) => m.machine_id === params.id);
+    const machine = buildMachine({ ...existing, display_name: (body.display_name as string) ?? 'Updated' });
+    return HttpResponse.json(machine);
+  }),
+  http.delete('/api/v1/machines/:id', () => new HttpResponse(null, { status: 204 })),
+  http.get('/api/v1/machines/:id/browse', () =>
+    HttpResponse.json(mockBrowseResponse),
+  ),
+
+  // --- Template mutations ---
+  http.post('/api/v1/templates', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const template = buildTemplate({ name: (body.name as string) ?? 'New Template' });
+    return HttpResponse.json(template, { status: 201 });
+  }),
+  http.put('/api/v1/templates/:id', async ({ request, params }) => {
+    const body = await request.json() as Record<string, unknown>;
+    const existing = mockTemplates.find((t) => t.template_id === params.id);
+    const template = buildTemplate({ ...existing, ...body as Partial<SessionTemplate> });
+    return HttpResponse.json(template);
+  }),
+  http.delete('/api/v1/templates/:id', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/v1/templates/:id/clone', ({ params }) => {
+    const existing = mockTemplates.find((t) => t.template_id === params.id);
+    const template = buildTemplate({ name: `Copy of ${existing?.name ?? params.id}` });
+    return HttpResponse.json(template, { status: 201 });
+  }),
 ];

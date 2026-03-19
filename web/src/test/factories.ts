@@ -2,9 +2,10 @@
 
 import type { Session } from '../types/session.ts';
 import type { Machine } from '../lib/types.ts';
-import type { Job, Run } from '../types/job.ts';
+import type { Job, Run, Task, RunTask } from '../types/job.ts';
 import type { SessionTemplate } from '../types/template.ts';
 import type { Event } from '../types/event.ts';
+import type { BrowseResponse } from '../api/machines.ts';
 
 const counters: Record<string, number> = {};
 
@@ -92,6 +93,48 @@ export function buildEvent(overrides?: Partial<Event>): Event {
     timestamp: NOW,
     source: 'test',
     payload: {},
+    ...overrides,
+  };
+}
+
+export function buildTask(overrides?: Partial<Task>): Task {
+  const id = nextId('step');
+  return {
+    step_id: id,
+    job_id: 'job-1',
+    name: `Task ${id}`,
+    prompt: 'Do something useful',
+    machine_id: 'machine-1',
+    working_dir: '/home/user/project',
+    command: 'claude',
+    args: '',
+    sort_order: 0,
+    task_type: 'claude',
+    ...overrides,
+  };
+}
+
+export function buildRunTask(overrides?: Partial<RunTask>): RunTask {
+  const id = nextId('rstep');
+  return {
+    run_step_id: id,
+    run_id: 'run-1',
+    step_id: 'step-1',
+    status: 'completed',
+    attempt: 1,
+    ...overrides,
+  };
+}
+
+export function buildBrowseResponse(overrides?: Partial<BrowseResponse>): BrowseResponse {
+  return {
+    path: '/home/user',
+    entries: [
+      { name: 'Documents', type: 'dir' },
+      { name: 'projects', type: 'dir' },
+      { name: '.bashrc', type: 'file' },
+    ],
+    parent: '/',
     ...overrides,
   };
 }
