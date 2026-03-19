@@ -86,6 +86,10 @@ func (m *mockStore) UpdateRunStepStatus(_ context.Context, _, _, _ string, _ int
 	return m.updateRunStepErr
 }
 
+func (m *mockStore) UpdateRunStepErrorMessage(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // hasSession returns true if at least one session exists in the store.
 func (m *mockStore) hasSession() bool {
 	m.mu.Lock()
@@ -522,7 +526,7 @@ func TestCompleteStep_UnknownSession(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	// Should not panic for unknown session.
-	exec.completeStep("nonexistent-session", 0)
+	exec.completeStep(context.Background(), "nonexistent-session", 0)
 }
 
 func TestNewSessionStepExecutor_NilLogger(t *testing.T) {

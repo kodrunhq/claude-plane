@@ -8,6 +8,9 @@ import type { TerminalStatus } from '../types/session.ts';
 
 export type { TerminalStatus };
 
+/** Terminal statuses that represent a final state — ws.onclose must not override them. */
+const TERMINAL_STATUSES: ReadonlySet<TerminalStatus> = new Set(['ended', 'agent_offline']);
+
 export function useTerminalSession(
   sessionId: string,
   containerRef: RefObject<HTMLDivElement | null>,
@@ -67,6 +70,13 @@ export function useTerminalSession(
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // Track whether we've received session_ended so scrollback_end can
+    // transition directly to the correct final state instead of 'live'.
+    let receivedSessionEnded = false;
+    // Track the status field from session_ended to distinguish agent-offline
+    // from normal session termination.
+    let sessionEndedStatus = '';
+
     // WebSocket connection
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(
@@ -100,12 +110,26 @@ export function useTerminalSession(
         term.write(new Uint8Array(event.data));
       } else {
         try {
-          const msg = JSON.parse(event.data as string) as { type: string };
+          const msg = JSON.parse(event.data as string) as { type: string; status?: string };
           if (msg.type === 'scrollback_end') {
             clearTimeout(scrollbackTimeout);
-            setStatus('live');
+            // If session_ended already arrived (dead session replay), go
+            // straight to final state instead of transitioning to 'live'.
+            if (receivedSessionEnded) {
+              setStatus(sessionEndedStatus === 'disconnected' ? 'agent_offline' : 'ended');
+            } else {
+              setStatus('live');
+            }
           } else if (msg.type === 'session_ended') {
-            setStatus('ended');
+            receivedSessionEnded = true;
+            sessionEndedStatus = msg.status ?? '';
+            // If the agent couldn't serve scrollback (offline), distinguish
+            // from a normal session end.
+            if (msg.status === 'disconnected') {
+              setStatus('agent_offline');
+            } else {
+              setStatus('ended');
+            }
           }
         } catch {
           // Ignore unparseable control messages
@@ -118,14 +142,18 @@ export function useTerminalSession(
     };
 
     ws.onclose = () => {
-      setStatus('disconnected');
+      // Only transition to 'disconnected' if not already in a terminal state.
+      // The session_ended control message arrives before ws.onclose for dead
+      // sessions — we must not override 'ended' or 'agent_offline'.
+      setStatus((prev) => (TERMINAL_STATUSES.has(prev) ? prev : 'disconnected'));
     };
 
     wsRef.current = ws;
 
-    // Keystrokes -> server (binary frames)
+    // Keystrokes -> server (binary frames).
+    // Guard against sending to ended sessions — the PTY is dead.
     const onDataDisposable = term.onData((data: string) => {
-      if (ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN && !receivedSessionEnded) {
         ws.send(new TextEncoder().encode(data));
       }
     });

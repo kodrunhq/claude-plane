@@ -242,6 +242,7 @@ type RunStep struct {
 	TargetJobIDSnapshot          string     `json:"target_job_id_snapshot,omitempty"`
 	JobParamsSnapshot            string     `json:"job_params_snapshot,omitempty"`
 	OnFailure                    string     `json:"on_failure,omitempty"`
+	ErrorMessage                 string     `json:"error_message,omitempty"`
 }
 
 // JobDetail is a job with its steps and dependency edges.
@@ -806,7 +807,8 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 		        COALESCE(run_if_snapshot, 'all_success'), COALESCE(max_retries_snapshot, 0),
 		        COALESCE(retry_delay_seconds_snapshot, 30), COALESCE(attempt, 1),
 		        COALESCE(parameters_snapshot, ''),
-		        COALESCE(target_job_id_snapshot, ''), COALESCE(job_params_snapshot, '')
+		        COALESCE(target_job_id_snapshot, ''), COALESCE(job_params_snapshot, ''),
+		        COALESCE(error_message, '')
 		 FROM run_steps WHERE run_id = ?`, runID,
 	)
 	if err != nil {
@@ -830,7 +832,8 @@ func (s *Store) GetRunWithSteps(ctx context.Context, runID string) (*RunDetail, 
 			&rs.RunIfSnapshot, &rs.MaxRetriesSnapshot,
 			&rs.RetryDelaySecondsSnapshot, &rs.Attempt,
 			&rs.ParametersSnapshot,
-			&rs.TargetJobIDSnapshot, &rs.JobParamsSnapshot); err != nil {
+			&rs.TargetJobIDSnapshot, &rs.JobParamsSnapshot,
+			&rs.ErrorMessage); err != nil {
 			return nil, fmt.Errorf("scan run step: %w", err)
 		}
 		rs.OnFailure = rs.OnFailureSnapshot
@@ -903,6 +906,21 @@ func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
 		return fmt.Errorf("run %s: %w", runID, ErrNotFound)
+	}
+	return nil
+}
+
+// UpdateRunStepErrorMessage sets the error_message on a run step.
+func (s *Store) UpdateRunStepErrorMessage(ctx context.Context, runStepID, message string) error {
+	result, err := s.writer.ExecContext(ctx,
+		`UPDATE run_steps SET error_message = ? WHERE run_step_id = ?`,
+		message, runStepID,
+	)
+	if err != nil {
+		return fmt.Errorf("update run step error message: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("run step %s: %w", runStepID, ErrNotFound)
 	}
 	return nil
 }

@@ -48,6 +48,17 @@ function TriggerBadge({ triggerType, triggerDetail }: { triggerType: string; tri
   );
 }
 
+/** Parse args_snapshot (may be JSON array or plain string) into a display string. */
+function formatArgs(raw: string): string {
+  try {
+    const arr: unknown = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr.join(' ');
+  } catch {
+    // Not JSON — use as-is
+  }
+  return raw;
+}
+
 export function RunDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -256,18 +267,32 @@ export function RunDetail() {
       <div className="flex-1 min-h-0">
         {selectedRunTask?.session_id ? (
           <div className="h-full flex flex-col">
-            <div className="px-3 py-1.5 bg-bg-secondary border-b border-border-primary text-xs text-text-secondary flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                {selectedTaskName ?? 'Task'} - {selectedRunTask.status}
-                {selectedRunTask.task_type_snapshot && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-secondary/70 text-[10px]">
-                    {selectedRunTask.task_type_snapshot}
-                  </span>
+            <div className="px-3 py-1.5 bg-bg-secondary border-b border-border-primary text-xs text-text-secondary space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  {selectedTaskName ?? 'Task'} - {selectedRunTask.status}
+                  {selectedRunTask.task_type_snapshot && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-bg-tertiary text-text-secondary/70 text-[10px]">
+                      {selectedRunTask.task_type_snapshot}
+                    </span>
+                  )}
+                  <AttemptBadge attempt={selectedRunTask.attempt} />
+                  {selectedRunTask.exit_code != null && selectedRunTask.exit_code !== 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-red-600/20 text-red-400 text-[10px] font-medium">
+                      exit {selectedRunTask.exit_code}
+                    </span>
+                  )}
+                </span>
+                {selectedRunTask.error_message && (
+                  <span className="text-red-400 truncate ml-2">{selectedRunTask.error_message}</span>
                 )}
-                <AttemptBadge attempt={selectedRunTask.attempt} />
-              </span>
-              {selectedRunTask.error && (
-                <span className="text-red-400 truncate ml-2">{selectedRunTask.error}</span>
+              </div>
+              {selectedRunTask.command_snapshot && (
+                <div className="font-mono text-[10px] text-text-secondary/70 truncate">
+                  {selectedRunTask.command_snapshot}
+                  {selectedRunTask.args_snapshot ? ` ${formatArgs(selectedRunTask.args_snapshot)}` : ''}
+                  {selectedRunTask.working_dir_snapshot ? ` (in ${selectedRunTask.working_dir_snapshot})` : ''}
+                </div>
               )}
             </div>
             <TerminalView sessionId={selectedRunTask.session_id} className="flex-1" />

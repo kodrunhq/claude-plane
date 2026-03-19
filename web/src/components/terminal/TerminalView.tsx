@@ -16,6 +16,7 @@ const statusLabels: Record<TerminalStatus, string> = {
   live: 'Connected',
   ended: 'Session ended',
   disconnected: 'Disconnected',
+  agent_offline: 'Agent offline',
 };
 
 const statusColors: Record<TerminalStatus, string> = {
@@ -24,6 +25,7 @@ const statusColors: Record<TerminalStatus, string> = {
   live: 'text-green-400',
   ended: 'text-text-secondary',
   disconnected: 'text-red-400',
+  agent_offline: 'text-orange-400',
 };
 
 export function TerminalView({ sessionId, onStatusChange, className = '', useWebGL, fontSize }: TerminalViewProps) {
@@ -54,13 +56,22 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
                   ? 'bg-yellow-400 animate-pulse'
                   : status === 'ended'
                     ? 'bg-gray-400'
-                    : 'bg-red-400'
+                    : status === 'agent_offline'
+                      ? 'bg-orange-400'
+                      : 'bg-red-400'
             }`}
           />
           <span className={statusColors[status]}>{statusLabels[status]}</span>
         </div>
         <span className="text-text-secondary font-mono">{sessionId.slice(0, 8)}</span>
       </div>
+
+      {/* Agent offline overlay */}
+      {status === 'agent_offline' && (
+        <div className="px-4 py-2 bg-orange-900/20 border-b border-orange-600/30 text-xs text-orange-400">
+          The agent that ran this session is offline. Session replay is unavailable until it reconnects.
+        </div>
+      )}
 
       {/* Terminal container */}
       <div
