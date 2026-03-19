@@ -328,6 +328,16 @@ func (e *SessionStepExecutor) executeClaudeSession(
 		return
 	}
 
+	// Link session to run step immediately so the frontend can reference
+	// the session even if the command fails to send to the agent.
+	if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, sessionID, 0); err != nil {
+		e.logger.Warn("failed to link session to run step",
+			"run_step_id", runStep.RunStepID,
+			"session_id", sessionID,
+			"error", err,
+		)
+	}
+
 	cmd := &pb.ServerCommand{
 		Command: &pb.ServerCommand_CreateSession{
 			CreateSession: &pb.CreateSessionCmd{
@@ -419,6 +429,16 @@ func (e *SessionStepExecutor) executeShellTask(
 		)
 		onComplete(runStep.StepID, failureExitCode)
 		return
+	}
+
+	// Link session to run step immediately so the frontend can reference
+	// the session even if the command fails to send to the agent.
+	if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, sessionID, 0); err != nil {
+		e.logger.Warn("failed to link session to run step",
+			"run_step_id", runStep.RunStepID,
+			"session_id", sessionID,
+			"error", err,
+		)
 	}
 
 	cmd := &pb.ServerCommand{
@@ -693,6 +713,16 @@ func (e *SessionStepExecutor) executeSharedFirstStep(
 		)
 		onComplete(runStep.StepID, failureExitCode)
 		return
+	}
+
+	// Link session to run step immediately so the frontend can reference
+	// the session even if the command fails to send to the agent.
+	if err := e.store.UpdateRunStepStatus(ctx, runStep.RunStepID, store.StatusRunning, sessionID, 0); err != nil {
+		e.logger.Warn("failed to link session to run step",
+			"run_step_id", runStep.RunStepID,
+			"session_id", sessionID,
+			"error", err,
+		)
 	}
 
 	cmd := &pb.ServerCommand{
