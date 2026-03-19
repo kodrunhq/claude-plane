@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/setup.ts';
 import { renderWithProviders, screen, waitFor } from '../../test/render.tsx';
 import { SessionsPage } from '../../views/SessionsPage.tsx';
-import { buildSession, buildMachine } from '../../test/factories.ts';
+import { buildSession } from '../../test/factories.ts';
 import { mockMachines } from '../../test/handlers.ts';
 
 const runningSessions = [

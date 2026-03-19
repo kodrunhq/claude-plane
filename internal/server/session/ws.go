@@ -164,6 +164,20 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 		// then session_ended (so it knows the session can't be viewed).
 		reg.PublishControl(sessionID, []byte(`{"type":"scrollback_end"}`))
 		reg.PublishControl(sessionID, []byte(`{"type":"session_ended","status":"disconnected"}`))
+		// Drain the subscriber channel to deliver the control messages, then close.
+		go func() {
+			for msg := range ch {
+				msgType := websocket.MessageBinary
+				if msg.IsControl {
+					msgType = websocket.MessageText
+				}
+				if writeErr := conn.Write(ctx, msgType, msg.Data); writeErr != nil {
+					break
+				}
+			}
+			conn.Close(websocket.StatusNormalClosure, "agent not connected")
+		}()
+		return
 	}
 
 	// Writer goroutine: reads from subscriber channel and writes to WebSocket.

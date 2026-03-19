@@ -38,19 +38,20 @@ function renderEditor(task: Task, props?: Record<string, unknown>) {
 }
 
 describe('TaskEditor', () => {
-  // ── Bug regression: shell task type was incorrectly showing Command field ─
-  // The bug caused shell tasks to render the "Command" input, but shell tasks
-  // run args directly and should NOT have a Command field.
-  it('does NOT show Command field when task type is shell', async () => {
-    const task = buildTask({ task_type: 'shell', command: '' });
+  // Shell tasks require a Command field (the binary to execute).
+  // The backend validates that shell steps have a non-empty Command.
+  it('shows Command field when task type is shell', async () => {
+    const task = buildTask({ task_type: 'shell', command: '/usr/bin/make' });
     const { user } = renderEditor(task);
 
     // Switch to Shell tab to make sure we're in shell mode
     const shellButton = screen.getByRole('button', { name: 'Shell' });
     await user.click(shellButton);
 
-    // Command input should NOT exist for shell tasks
-    expect(document.getElementById('task-command')).toBeNull();
+    // Command input should exist for shell tasks
+    const commandInput = document.getElementById('task-command') as HTMLInputElement;
+    expect(commandInput).not.toBeNull();
+    expect(commandInput.value).toBe('/usr/bin/make');
   });
 
   it('shows Command field when task type is claude', () => {

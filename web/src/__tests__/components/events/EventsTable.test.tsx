@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
 import { EventsTable } from '../../../components/events/EventsTable';
 import { renderWithProviders } from '../../../test/render';

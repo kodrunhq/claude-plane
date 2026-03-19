@@ -73,11 +73,11 @@ function getFormParams(form: HTMLFormElement, taskType: TaskType): UpdateTaskPar
     };
   }
 
-  // Shell task — no command field; the shell runs args directly
+  // Shell task — command is the binary to run, args are the arguments
   return {
     ...base,
     prompt: '',
-    command: '',
+    command: data.get('command') as string,
     args: data.get('args') as string,
     model: undefined,
     skip_permissions: undefined,
@@ -143,8 +143,11 @@ function isDirty(form: HTMLFormElement, task: Task, taskType: TaskType): boolean
     );
   }
 
-  // Shell — no command field
-  return (data.get('args') as string) !== (task.args ?? '');
+  // Shell — check both command and args
+  return (
+    (data.get('command') as string) !== (task.command ?? '') ||
+    (data.get('args') as string) !== (task.args ?? '')
+  );
 }
 
 function TemplatePreview({ template }: { template: SessionTemplate }) {
@@ -316,6 +319,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [taskType, setTaskType] = useState<TaskType>(() => task ? resolveTaskType(task) : 'claude');
   const [browseOpen, setBrowseOpen] = useState(false);
+  const [selectedMachineId, setSelectedMachineId] = useState(task?.machine_id ?? '');
   const [maxRetriesState, setMaxRetriesState] = useState(task?.max_retries ?? 0);
   const [targetJobId, setTargetJobId] = useState(task?.target_job_id ?? '');
 
@@ -352,6 +356,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
     if (task) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local form state on task selection change
       setTaskType(resolveTaskType(task));
+      setSelectedMachineId(task.machine_id ?? '');
       setMaxRetriesState(task.max_retries ?? 0);
       setTargetJobId(task.target_job_id ?? '');
     }
@@ -556,6 +561,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
             name="machine_id"
             defaultValue={task.machine_id}
             key={task.step_id + '-machine'}
+            onChange={(e) => setSelectedMachineId(e.target.value)}
             className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary"
           >
             <option value="">Select machine...</option>
@@ -653,7 +659,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
             <button
               type="button"
               onClick={() => setBrowseOpen(true)}
-              disabled={!formRef.current?.querySelector<HTMLSelectElement>('[name="machine_id"]')?.value}
+              disabled={!selectedMachineId}
               className="px-3 py-1.5 rounded-md bg-bg-tertiary border border-border-primary text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Browse directories"
             >
@@ -663,21 +669,25 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
         </div>
       )}
 
-      {/* Command -- claude only */}
-      {taskType === 'claude' && (
+      {/* Command -- claude and shell */}
+      {(taskType === 'claude' || taskType === 'shell') && (
         <div>
           <label htmlFor="task-command" className="block text-xs text-text-secondary mb-1">
-            Command
+            Command {taskType === 'shell' && <span className="text-red-400">*</span>}
           </label>
           <input
             id="task-command"
             name="command"
             type="text"
-            defaultValue={task.command || 'claude'}
+            defaultValue={taskType === 'claude' ? (task.command || 'claude') : (task.command ?? '')}
             key={task.step_id + '-command-' + taskType}
+            required={taskType === 'shell'}
             className="w-full px-3 py-1.5 text-sm rounded-md bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:border-accent-primary font-mono"
+            placeholder={taskType === 'shell' ? '/usr/bin/make' : undefined}
           />
-          <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
+          {taskType === 'claude' && (
+            <p className="text-[10px] text-text-secondary/70 mt-0.5">(defaults to claude)</p>
+          )}
         </div>
       )}
 
@@ -781,29 +791,25 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
       </div>
     </form>
 
-    {browseOpen && (() => {
-      const machineId = formRef.current?.querySelector<HTMLSelectElement>('[name="machine_id"]')?.value;
-      const workdir = formRef.current?.querySelector<HTMLInputElement>('[name="working_dir"]')?.value;
-      return machineId ? (
-        <DirectoryBrowserModal
-          open={browseOpen}
-          onClose={() => setBrowseOpen(false)}
-          onSelect={(path) => {
-            const input = formRef.current?.querySelector<HTMLInputElement>('[name="working_dir"]');
-            if (input) {
-              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value',
-              )?.set;
-              nativeInputValueSetter?.call(input, path);
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            setBrowseOpen(false);
-          }}
-          machineId={machineId}
-          initialPath={workdir || undefined}
-        />
-      ) : null;
-    })()}
+    {browseOpen && selectedMachineId && (
+      <DirectoryBrowserModal
+        open={browseOpen}
+        onClose={() => setBrowseOpen(false)}
+        onSelect={(path) => {
+          const input = formRef.current?.querySelector<HTMLInputElement>('[name="working_dir"]');
+          if (input) {
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value',
+            )?.set;
+            nativeInputValueSetter?.call(input, path);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          setBrowseOpen(false);
+        }}
+        machineId={selectedMachineId}
+        initialPath={task.working_dir || undefined}
+      />
+    )}
     </>
   );
 }

@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/setup.ts';
 import { renderWithProviders, screen, waitFor } from '../../test/render.tsx';
 import { RunsPage } from '../../views/RunsPage.tsx';
-import { mockRuns, mockJobs } from '../../test/handlers.ts';
+import { mockRuns } from '../../test/handlers.ts';
 import { buildRun } from '../../test/factories.ts';
 
 // Mock useNavigate

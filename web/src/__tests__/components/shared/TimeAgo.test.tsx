@@ -72,8 +72,8 @@ describe('TimeAgo', () => {
     expect(screen.getByText(/2 minutes ago/i)).toBeInTheDocument();
   });
 
-  it('handles invalid date gracefully (empty title)', () => {
-    // formatTimeAgo throws for invalid dates since date-fns cannot parse them
+  it('throws on invalid date input', () => {
+    // date-fns cannot parse invalid date strings, so the component throws during render
     expect(() => render(<TimeAgo date="not-a-date" />)).toThrow();
   });
 });

@@ -49,7 +49,7 @@ describe('MachineCard', () => {
 
   describe('machine identification', () => {
     it('displays the full machine_id (not truncated)', () => {
-      const { machine } = renderCard({
+      renderCard({
         machine_id: 'very-long-machine-identifier-abcdef1234567890',
       });
       // The machine_id should appear in full via the title attribute and as text

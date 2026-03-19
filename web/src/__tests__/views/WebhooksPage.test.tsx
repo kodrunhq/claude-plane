@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/setup.ts';
 import { renderWithProviders, screen, waitFor } from '../../test/render.tsx';
@@ -164,7 +164,7 @@ describe('WebhooksPage', () => {
     expect(screen.getByText('Learn about webhook signing and integrations')).toBeInTheDocument();
   });
 
-  it('submits create webhook form', async () => {
+  it('renders webhook form inside create drawer without auto-submitting', async () => {
     let createCalled = false;
     setupWebhooksHandler();
     server.use(
@@ -200,8 +200,7 @@ describe('WebhooksPage', () => {
       expect(screen.getByRole('heading', { name: 'New Webhook' })).toBeInTheDocument();
     });
 
-    // The WebhookForm should be visible in the drawer
-    // We verify the drawer opened, which implies the form is rendered
+    // The WebhookForm should be visible in the drawer but not yet submitted
     expect(createCalled).toBe(false);
   });
 });
