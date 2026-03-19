@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { generateUUID } from '../../lib/uuid';
 
@@ -55,9 +55,18 @@ function validateKey(key: string): string | null {
 export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) {
   const [entries, setEntries] = useState<ParameterEntry[]>(() => toEntries(parameters));
 
-  // Sync from parent when parameters change externally (e.g. server load).
+  // Track the last value we emitted via onChange so we can distinguish
+  // parent updates caused by our own edits (skip sync) from external
+  // changes like a server load (need sync).
   const serializedParams = useMemo(() => JSON.stringify(parameters), [parameters]);
+  const lastEmittedRef = useRef(serializedParams);
+
   useEffect(() => {
+    // Skip sync when the incoming value matches what we last emitted —
+    // this prevents regenerating entry IDs (and losing input focus) on
+    // every keystroke.
+    if (lastEmittedRef.current === serializedParams) return;
+    lastEmittedRef.current = serializedParams;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server data to local entries on external parameter change
     setEntries(toEntries(parameters));
   }, [serializedParams]); // eslint-disable-line react-hooks/exhaustive-deps -- parameters is captured via serializedParams
@@ -83,6 +92,7 @@ export function ParameterEditor({ parameters, onChange }: ParameterEditorProps) 
       if (hasEmptyKey) return;
       const record = toRecord(updated);
       if (record !== null) {
+        lastEmittedRef.current = JSON.stringify(record);
         onChange(record);
       }
     },

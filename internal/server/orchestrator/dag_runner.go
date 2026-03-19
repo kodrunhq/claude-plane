@@ -455,15 +455,18 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 		d.failed = true
 
 		if rs.OnFailure == "fail_run" {
-			// Mark remaining pending steps as skipped
+			// Mark remaining pending steps as skipped and running steps as cancelled.
+			// Running steps may exist in parallel branches of the DAG.
 			for _, s := range d.steps {
 				if s.Status == store.StatusPending {
 					s.Status = store.StatusSkipped
 					d.updateRunStepInDB(s.RunStepID, store.StatusSkipped, "", 0)
+				} else if s.Status == store.StatusRunning && s.StepID != stepID {
+					s.Status = store.StatusCancelled
+					d.updateRunStepInDB(s.RunStepID, store.StatusCancelled, "", 0)
 				}
 			}
 			d.cancel()
-			ctx := d.ctx
 			if d.onRunComplete != nil {
 				cb := d.onRunComplete
 				runID := d.runID
@@ -471,7 +474,9 @@ func (d *DAGRunner) OnStepCompleted(stepID string, exitCode int) {
 			}
 			d.closeDone()
 			d.mu.Unlock()
-			d.publishStepEvent(ctx, event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
+			// Use context.Background() because d.cancel() above invalidated d.ctx.
+			// The event must still be persisted and fanned out to subscribers.
+			d.publishStepEvent(context.Background(), event.TypeJobRunStepFailed, capturedRunStepID, capturedStepID, store.StatusFailed)
 			if runComplete != nil {
 				runComplete()
 			}
