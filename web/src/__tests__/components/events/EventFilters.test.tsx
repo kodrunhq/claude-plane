@@ -10,10 +10,10 @@ const defaultFilters: EventFilterValues = {
 };
 
 describe('EventFilters', () => {
-  let onChange: ReturnType<typeof vi.fn>;
+  let onChange: ReturnType<typeof vi.fn<(filters: EventFilterValues) => void>>;
 
   beforeEach(() => {
-    onChange = vi.fn();
+    onChange = vi.fn<(filters: EventFilterValues) => void>();
   });
 
   it('renders the type pattern input with placeholder', () => {

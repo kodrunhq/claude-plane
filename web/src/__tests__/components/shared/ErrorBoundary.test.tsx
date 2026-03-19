@@ -1,10 +1,11 @@
+import type React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ErrorBoundary } from '../../../components/shared/ErrorBoundary.tsx';
 
-// A component that throws on render
-function ThrowingComponent({ message }: { message: string }) {
+// A component that throws on render — return type annotation satisfies JSX element constraint
+function ThrowingComponent({ message }: { message: string }): React.ReactNode {
   throw new Error(message);
 }
 
@@ -60,11 +61,13 @@ describe('ErrorBoundary', () => {
       href: '',
     } as Location);
 
-    // We need to use Object.defineProperty for setting href
+    // Override location.href via Object.defineProperty to avoid strict type issues
     const originalLocation = window.location;
-    // @ts-expect-error -- overriding location for test
-    delete window.location;
-    window.location = { ...originalLocation, href: '' } as Location;
+    const hrefDescriptor = Object.getOwnPropertyDescriptor(window, 'location');
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { ...originalLocation, href: '' },
+    });
 
     render(
       <ErrorBoundary>
@@ -76,7 +79,9 @@ describe('ErrorBoundary', () => {
     expect(window.location.href).toBe('/');
 
     // Restore
-    window.location = originalLocation;
+    if (hrefDescriptor) {
+      Object.defineProperty(window, 'location', hrefDescriptor);
+    }
     locationSpy.mockRestore();
   });
 

@@ -7,7 +7,7 @@ describe('CreateUserModal', () => {
   const defaultProps = {
     open: true,
     onClose: vi.fn(),
-    onSubmit: vi.fn<[CreateUserParams], Promise<void>>().mockResolvedValue(undefined),
+    onSubmit: vi.fn<(params: CreateUserParams) => Promise<void>>().mockResolvedValue(undefined),
     submitting: false,
   };
 
@@ -133,7 +133,7 @@ describe('CreateUserModal', () => {
   });
 
   it('submit calls onSubmit with form data', async () => {
-    const onSubmit = vi.fn<[CreateUserParams], Promise<void>>().mockResolvedValue(undefined);
+    const onSubmit = vi.fn<(params: CreateUserParams) => Promise<void>>().mockResolvedValue(undefined);
     const { user } = renderModal({ onSubmit });
 
     await user.type(screen.getByPlaceholderText('user@example.com'), 'test@example.com');
@@ -154,7 +154,7 @@ describe('CreateUserModal', () => {
   });
 
   it('form resets after successful submit', async () => {
-    const onSubmit = vi.fn<[CreateUserParams], Promise<void>>().mockResolvedValue(undefined);
+    const onSubmit = vi.fn<(params: CreateUserParams) => Promise<void>>().mockResolvedValue(undefined);
     const { user } = renderModal({ onSubmit });
 
     await user.type(screen.getByPlaceholderText('user@example.com'), 'test@example.com');
@@ -188,7 +188,7 @@ describe('CreateUserModal', () => {
   });
 
   it('form preserves state on submit failure', async () => {
-    const onSubmit = vi.fn<[CreateUserParams], Promise<void>>().mockRejectedValue(new Error('fail'));
+    const onSubmit = vi.fn<(params: CreateUserParams) => Promise<void>>().mockRejectedValue(new Error('fail'));
     const { user } = renderModal({ onSubmit });
 
     await user.type(screen.getByPlaceholderText('user@example.com'), 'test@example.com');
