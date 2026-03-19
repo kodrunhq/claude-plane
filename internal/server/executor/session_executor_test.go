@@ -25,6 +25,12 @@ type mockStore struct {
 	getErr           error
 	updateStatusErr  error
 	updateRunStepErr error
+
+	// Track calls to UpdateRunStepErrorMessage for test assertions.
+	lastErrorMsgRunStepID string
+	lastErrorMsg          string
+	errorMsgCallCount     int
+	errorMsgErr           error
 }
 
 func newMockStore() *mockStore {
@@ -84,6 +90,15 @@ func (m *mockStore) UpdateRunStepStatus(_ context.Context, _, _, _ string, _ int
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.updateRunStepErr
+}
+
+func (m *mockStore) UpdateRunStepErrorMessage(_ context.Context, runStepID, message string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lastErrorMsgRunStepID = runStepID
+	m.lastErrorMsg = message
+	m.errorMsgCallCount++
+	return m.errorMsgErr
 }
 
 // hasSession returns true if at least one session exists in the store.
@@ -522,7 +537,7 @@ func TestCompleteStep_UnknownSession(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 
 	// Should not panic for unknown session.
-	exec.completeStep("nonexistent-session", 0)
+	exec.completeStep(context.Background(), "nonexistent-session", 0)
 }
 
 func TestNewSessionStepExecutor_NilLogger(t *testing.T) {
@@ -531,6 +546,97 @@ func TestNewSessionStepExecutor_NilLogger(t *testing.T) {
 	exec := NewSessionStepExecutor(cm, ms, nil)
 	if exec.logger == nil {
 		t.Error("expected non-nil logger when nil passed")
+	}
+}
+
+func TestCompleteStep_ErrorMessagePersistence(t *testing.T) {
+	cm := newTestConnMgr()
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	// Register a tracked session so completeStep can find it.
+	completedStepID := ""
+	completedExitCode := -1
+	exec.mu.Lock()
+	exec.sessionToStep["sess-err-1"] = &stepTracking{
+		runID:      "run-1",
+		runStepID:  "rstep-1",
+		stepID:     "step-1",
+		onComplete: func(stepID string, exitCode int) {
+			completedStepID = stepID
+			completedExitCode = exitCode
+		},
+		cancel: func() {},
+	}
+	exec.mu.Unlock()
+
+	// completeStep with non-zero exit should persist error message.
+	exec.completeStep(context.Background(), "sess-err-1", 1)
+
+	ms.mu.Lock()
+	if ms.errorMsgCallCount != 1 {
+		t.Errorf("expected 1 call to UpdateRunStepErrorMessage, got %d", ms.errorMsgCallCount)
+	}
+	if ms.lastErrorMsgRunStepID != "rstep-1" {
+		t.Errorf("expected runStepID 'rstep-1', got %q", ms.lastErrorMsgRunStepID)
+	}
+	if ms.lastErrorMsg != "Process exited with code 1" {
+		t.Errorf("expected error message 'Process exited with code 1', got %q", ms.lastErrorMsg)
+	}
+	ms.mu.Unlock()
+
+	if completedStepID != "step-1" || completedExitCode != 1 {
+		t.Errorf("onComplete not called correctly: stepID=%q exitCode=%d", completedStepID, completedExitCode)
+	}
+}
+
+func TestCompleteStep_NoErrorMessageOnSuccess(t *testing.T) {
+	cm := newTestConnMgr()
+	ms := newMockStore()
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	exec.mu.Lock()
+	exec.sessionToStep["sess-ok-1"] = &stepTracking{
+		runID:      "run-1",
+		runStepID:  "rstep-1",
+		stepID:     "step-1",
+		onComplete: func(_ string, _ int) {},
+		cancel:     func() {},
+	}
+	exec.mu.Unlock()
+
+	// completeStep with exit code 0 should NOT persist error message.
+	exec.completeStep(context.Background(), "sess-ok-1", 0)
+
+	ms.mu.Lock()
+	if ms.errorMsgCallCount != 0 {
+		t.Errorf("expected 0 calls to UpdateRunStepErrorMessage, got %d", ms.errorMsgCallCount)
+	}
+	ms.mu.Unlock()
+}
+
+func TestCompleteStep_ErrorMessageStoreFailure(t *testing.T) {
+	cm := newTestConnMgr()
+	ms := newMockStore()
+	ms.errorMsgErr = fmt.Errorf("db write failed")
+	exec := NewSessionStepExecutor(cm, ms, nil)
+
+	completedStepID := ""
+	exec.mu.Lock()
+	exec.sessionToStep["sess-err-2"] = &stepTracking{
+		runID:      "run-1",
+		runStepID:  "rstep-1",
+		stepID:     "step-1",
+		onComplete: func(stepID string, _ int) { completedStepID = stepID },
+		cancel:     func() {},
+	}
+	exec.mu.Unlock()
+
+	// Even if error message persistence fails, the step should still complete.
+	exec.completeStep(context.Background(), "sess-err-2", 1)
+
+	if completedStepID != "step-1" {
+		t.Errorf("expected onComplete to be called even on store error, got stepID=%q", completedStepID)
 	}
 }
 

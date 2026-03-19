@@ -33,4 +33,4 @@ export interface CreateSessionRequest {
   skip_permissions?: boolean;
 }
 
-export type TerminalStatus = 'connecting' | 'replaying' | 'live' | 'ended' | 'disconnected';
+export type TerminalStatus = 'connecting' | 'replaying' | 'live' | 'ended' | 'disconnected' | 'agent_offline';

@@ -81,8 +81,13 @@ export interface RunTask {
   status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled';
   started_at?: string;
   completed_at?: string;
-  error?: string;
+  error_message?: string;
   task_type_snapshot?: string;
+  command_snapshot?: string;
+  args_snapshot?: string;
+  working_dir_snapshot?: string;
+  model_snapshot?: string;
+  exit_code?: number;
   attempt?: number;
 }
 

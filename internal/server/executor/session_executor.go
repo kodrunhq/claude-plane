@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -53,6 +54,7 @@ type sessionStore interface {
 // runStepStore is the subset of store.Store methods needed for run step updates.
 type runStepStore interface {
 	UpdateRunStepStatus(ctx context.Context, runStepID, status, sessionID string, exitCode int) error
+	UpdateRunStepErrorMessage(ctx context.Context, runStepID, message string) error
 }
 
 // storeIface combines both store interfaces needed by the executor.
@@ -520,7 +522,9 @@ func (e *SessionStepExecutor) monitorSessionExit(
 				"machine_id", machineID,
 			)
 			e.sendKill(machineID, sessionID)
-			e.completeStep(sessionID, failureExitCode)
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			e.completeStep(cleanupCtx, sessionID, failureExitCode)
+			cleanupCancel()
 			return
 
 		case <-ticker.C:
@@ -531,7 +535,7 @@ func (e *SessionStepExecutor) monitorSessionExit(
 					"timeout", timeout,
 				)
 				e.sendKill(machineID, sessionID)
-				e.completeStep(sessionID, timeoutExitCode)
+				e.completeStep(ctx, sessionID, timeoutExitCode)
 				return
 			}
 
@@ -548,7 +552,7 @@ func (e *SessionStepExecutor) monitorSessionExit(
 						e.logger.Error("session persistently not found, failing step",
 							"session_id", sessionID,
 						)
-						e.completeStep(sessionID, failureExitCode)
+						e.completeStep(ctx, sessionID, failureExitCode)
 						return
 					}
 				} else {
@@ -565,7 +569,7 @@ func (e *SessionStepExecutor) monitorSessionExit(
 			switch sess.Status {
 			case store.StatusCompleted:
 				e.logger.Info("session completed", "session_id", sessionID)
-				e.completeStep(sessionID, 0)
+				e.completeStep(ctx, sessionID, 0)
 				return
 
 			case store.StatusFailed, store.StatusTerminated:
@@ -573,7 +577,7 @@ func (e *SessionStepExecutor) monitorSessionExit(
 					"session_id", sessionID,
 					"status", sess.Status,
 				)
-				e.completeStep(sessionID, failureExitCode)
+				e.completeStep(ctx, sessionID, failureExitCode)
 				return
 			}
 			// Non-terminal status (created, starting, running): continue polling.
@@ -582,8 +586,9 @@ func (e *SessionStepExecutor) monitorSessionExit(
 }
 
 // completeStep looks up tracking info for the session, calls the onComplete
-// callback, and removes the tracking entry.
-func (e *SessionStepExecutor) completeStep(sessionID string, exitCode int) {
+// callback, and removes the tracking entry. For non-zero exit codes, it
+// persists an error message on the run step.
+func (e *SessionStepExecutor) completeStep(ctx context.Context, sessionID string, exitCode int) {
 	e.mu.Lock()
 	tracking, ok := e.sessionToStep[sessionID]
 	if ok {
@@ -594,6 +599,14 @@ func (e *SessionStepExecutor) completeStep(sessionID string, exitCode int) {
 	if !ok {
 		e.logger.Warn("completeStep called for unknown session", "session_id", sessionID)
 		return
+	}
+
+	// Persist a human-readable error message for failed steps.
+	if exitCode != 0 {
+		msg := fmt.Sprintf("Process exited with code %d", exitCode)
+		if err := e.store.UpdateRunStepErrorMessage(ctx, tracking.runStepID, msg); err != nil {
+			e.logger.Error("failed to persist error message", "run_step_id", tracking.runStepID, "error", err)
+		}
 	}
 
 	tracking.cancel()
@@ -798,7 +811,7 @@ func (e *SessionStepExecutor) executeSharedSubsequentStep(
 			"run_step_id", runStep.RunStepID,
 			"error", err,
 		)
-		e.completeSharedStep(sessionID, failureExitCode)
+		e.completeSharedStep(ctx, sessionID, failureExitCode)
 		return
 	}
 
@@ -814,7 +827,7 @@ func (e *SessionStepExecutor) executeSharedSubsequentStep(
 // completeSharedStep signals step completion without killing the shared session.
 // Unlike completeStep, this does NOT call tracking.cancel() because the session
 // monitor must stay alive for subsequent steps.
-func (e *SessionStepExecutor) completeSharedStep(sessionID string, exitCode int) {
+func (e *SessionStepExecutor) completeSharedStep(ctx context.Context, sessionID string, exitCode int) {
 	e.mu.Lock()
 	tracking, ok := e.sessionToStep[sessionID]
 	if ok {
@@ -827,6 +840,14 @@ func (e *SessionStepExecutor) completeSharedStep(sessionID string, exitCode int)
 		return
 	}
 
+	// Persist error message for failed shared steps, same as completeStep.
+	if exitCode != 0 {
+		msg := fmt.Sprintf("Process exited with code %d", exitCode)
+		if err := e.store.UpdateRunStepErrorMessage(ctx, tracking.runStepID, msg); err != nil {
+			e.logger.Error("failed to persist error message", "run_step_id", tracking.runStepID, "error", err)
+		}
+	}
+
 	// Do NOT call tracking.cancel() — the session stays alive for the next step.
 	tracking.onComplete(tracking.stepID, exitCode)
 }
@@ -836,7 +857,9 @@ func (e *SessionStepExecutor) completeSharedStep(sessionID string, exitCode int)
 // gRPC server when it receives a StepIdleEvent.
 func (e *SessionStepExecutor) OnStepIdle(sessionID string) {
 	e.logger.Info("step idle event received", "session_id", sessionID)
-	e.completeSharedStep(sessionID, 0)
+	// OnStepIdle is called from the gRPC handler with no parent context.
+	// exitCode is always 0 here (idle = success) so no DB write occurs.
+	e.completeSharedStep(context.Background(), sessionID, 0)
 }
 
 // CleanupRunSessions kills all shared sessions belonging to a run.

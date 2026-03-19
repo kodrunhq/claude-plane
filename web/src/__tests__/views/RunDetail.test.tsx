@@ -371,4 +371,136 @@ describe('RunDetail', () => {
       expect(screen.getByText('Attempt 3')).toBeInTheDocument();
     });
   });
+
+  it('shows command and working directory in step header', async () => {
+    const tasksWithCommand = [
+      buildRunTask({
+        run_step_id: 'rs-cmd',
+        run_id: 'run-200',
+        step_id: 'step-200',
+        status: 'completed',
+        session_id: 'sess-300',
+        command_snapshot: 'claude',
+        args_snapshot: '--model opus',
+        working_dir_snapshot: '/home/user/project',
+      }),
+    ];
+    setupHandlers(completedRun, tasksWithCommand);
+    const { user } = renderRunDetail('run-200');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dag-task-step-200')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('dag-task-step-200'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/claude --model opus/)).toBeInTheDocument();
+      expect(screen.getByText(/\/home\/user\/project/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error_message for failed tasks', async () => {
+    const tasksWithError = [
+      buildRunTask({
+        run_step_id: 'rs-err',
+        run_id: 'run-202',
+        step_id: 'step-201',
+        status: 'failed',
+        session_id: 'sess-301',
+        error_message: 'Process exited with code 1',
+      }),
+    ];
+    setupHandlers(failedRun, tasksWithError);
+    const { user } = renderRunDetail('run-202');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dag-task-step-201')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('dag-task-step-201'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Process exited with code 1')).toBeInTheDocument();
+    });
+  });
+
+  it('shows exit code badge for non-zero exit codes', async () => {
+    const tasksWithExitCode = [
+      buildRunTask({
+        run_step_id: 'rs-exit',
+        run_id: 'run-202',
+        step_id: 'step-201',
+        status: 'failed',
+        session_id: 'sess-301',
+        exit_code: 137,
+      }),
+    ];
+    setupHandlers(failedRun, tasksWithExitCode);
+    const { user } = renderRunDetail('run-202');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dag-task-step-201')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('dag-task-step-201'));
+
+    await waitFor(() => {
+      expect(screen.getByText('exit 137')).toBeInTheDocument();
+    });
+  });
+
+  it('does not show exit code badge for exit code 0', async () => {
+    const tasksWithZeroExit = [
+      buildRunTask({
+        run_step_id: 'rs-ok',
+        run_id: 'run-200',
+        step_id: 'step-200',
+        status: 'completed',
+        session_id: 'sess-300',
+        exit_code: 0,
+      }),
+    ];
+    setupHandlers(completedRun, tasksWithZeroExit);
+    const { user } = renderRunDetail('run-200');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dag-task-step-200')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('dag-task-step-200'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('terminal-view')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/exit 0/)).not.toBeInTheDocument();
+  });
+
+  it('shows task type badge in step header', async () => {
+    const shellTasks = [
+      buildRunTask({
+        run_step_id: 'rs-shell',
+        run_id: 'run-200',
+        step_id: 'step-200',
+        status: 'completed',
+        session_id: 'sess-300',
+        task_type_snapshot: 'shell',
+        command_snapshot: '/usr/bin/make',
+      }),
+    ];
+    setupHandlers(completedRun, shellTasks);
+    const { user } = renderRunDetail('run-200');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dag-task-step-200')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('dag-task-step-200'));
+
+    await waitFor(() => {
+      expect(screen.getByText('shell')).toBeInTheDocument();
+      expect(screen.getByText(/\/usr\/bin\/make/)).toBeInTheDocument();
+    });
+  });
 });
