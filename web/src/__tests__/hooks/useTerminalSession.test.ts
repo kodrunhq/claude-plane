@@ -103,6 +103,7 @@ beforeAll(() => {
 
 afterAll(() => {
   globalThis.WebSocket = savedWebSocket;
+  vi.unstubAllGlobals();
 });
 
 // ---------------------------------------------------------------------------
@@ -139,6 +140,11 @@ function fireWsError() {
 describe('useTerminalSession', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllTimers();
   });
 
   describe('initial state', () => {
@@ -321,7 +327,8 @@ describe('useTerminalSession', () => {
       act(() => sendControlMessage('session_ended'));
 
       // Get the onData callback that was registered with the terminal
-      const onDataCallback = mockTermOnData.mock.calls[0]?.[0] as ((data: string) => void) | undefined;
+      const calls = mockTermOnData.mock.calls as unknown as Array<[(data: string) => void]>;
+      const onDataCallback = calls[0]?.[0];
       expect(onDataCallback).toBeDefined();
 
       // Simulate a keystroke — it should NOT be sent via ws
