@@ -29,7 +29,7 @@ The `--service` flag joins the server **and** installs a system service in one s
 
 This will:
 1. Redeem the provisioning code and download TLS certificates
-2. Write config to `~/.claude-plane/agent.toml`
+2. Write config to `~/.claude-plane/agent.toml` (override with `--config-dir`)
 3. Install and start a systemd service (prompts for sudo)
 
 For servers running plain HTTP (development only), add `--insecure`:
@@ -59,11 +59,13 @@ Running `join` again on a machine that already has an agent is safe and requires
 - **Restarts the service** if `--service` is used
 
 ```bash
-# Re-register with a new provisioning code
+# Re-register with a new provisioning code and restart the service
 ./claude-plane-agent join NEW_CODE --server https://your-server:4200 --service
 ```
 
 No need to manually stop the service or remove old files first.
+
+> **Important:** If you omit `--service`, the agent service is stopped but **not restarted** with the new config. You must either pass `--service` again or manually restart: `sudo systemctl restart claude-plane-agent`.
 
 ## 3. Uninstalling
 

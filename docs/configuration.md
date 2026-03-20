@@ -145,7 +145,7 @@ claude-plane-server seed-admin --db claude-plane.db --email admin@example.com [-
 
 ```
 claude-plane-agent run --config agent.toml
-claude-plane-agent join CODE --server https://server:4200 [--insecure] [--service]
+claude-plane-agent join CODE --server https://server:4200 [--insecure] [--service] [--config-dir path]
 claude-plane-agent install-service --config agent.toml [--user username]
 claude-plane-agent uninstall-service [--purge] [--config-dir path]
 ```
