@@ -43,6 +43,12 @@ cd web && npm install && npm run build && cd ..
 ./claude-plane-server ca issue-server --ca-dir ./ca --out-dir ./server-cert
 ./claude-plane-server ca issue-agent --ca-dir ./ca --machine-id "worker-1"
 ./claude-plane-server seed-admin --email admin@example.com --name Admin
+
+# Agent subcommands
+./claude-plane-agent run --config agent.toml
+./claude-plane-agent join CODE --server https://server:4200 [--insecure] [--service]
+./claude-plane-agent install-service --config agent.toml [--user username]
+./claude-plane-agent uninstall-service [--purge]
 ```
 
 ## Important: Frontend Embedding
@@ -56,9 +62,13 @@ go build -o claude-plane-server ./cmd/server  # embeds the new dist/
 
 When debugging frontend issues in production mode, verify the bundle hash in the browser Network tab matches the file in `dist/assets/`. For development, use `cd web && npm run dev` (Vite dev server on port 3000 with proxy).
 
-## Terminal Resize Gotcha
+## Gotchas
 
-xterm.js `fitAddon.fit()` fires on `requestAnimationFrame` (before the WebSocket opens). The `term.onResize` callback checks `ws.readyState === WebSocket.OPEN` and silently drops the resize. Always send an **explicit** resize message on `ws.onopen` — never rely on `fit()` triggering `onResize` during connection setup.
+**Terminal resize:** xterm.js `fitAddon.fit()` fires on `requestAnimationFrame` (before the WebSocket opens). The `term.onResize` callback checks `ws.readyState === WebSocket.OPEN` and silently drops the resize. Always send an **explicit** resize message on `ws.onopen` — never rely on `fit()` triggering `onResize` during connection setup.
+
+**Shell task Command field:** The backend (`ValidateJobSteps` in `orchestrator/dag_runner.go`) requires shell tasks to have a non-empty `Command` field. The `session_executor.go` also aborts if `CommandSnapshot` is empty. The frontend TaskEditor must preserve and submit the `command` field for shell tasks — don't clear it.
+
+**WebSocket attach failure:** When `runSession` in `session/ws.go` fails to attach to the agent, it must publish end markers (`scrollback_end` + `session_ended`) AND close the WebSocket. Do not fall through to the relay loops — the reader loop would repeatedly call `sendToAgent()` against a missing agent.
 
 ## Testing
 
@@ -91,7 +101,11 @@ cd web && npm run lint
 ## CI Checks (must pass before merge)
 
 Backend: `go vet ./...` → `go test -race ./...` → build both binaries → validate goreleaser config.
-Frontend: `tsc --noEmit` → `eslint` → `vitest --run` → `vite build`.
+Frontend: `tsc --noEmit` → `eslint` → `vitest --run` → `npm run build` (`tsc -b && vite build`).
+
+**Important:** The CI build step runs `tsc -b` (project references mode), which type-checks **all three** tsconfig projects: `tsconfig.app.json` (source), `tsconfig.node.json` (Vite config), and `tsconfig.test.json` (tests). This is stricter than `tsc --noEmit` alone. Always run `cd web && npm run build` locally before pushing to catch build-only type errors in test files.
+
+**Event types sync check:** CI runs `go generate ./internal/server/event/...` and checks that `event_types.json` is up to date. If you add/modify event types, regenerate before committing.
 
 ## Frontend Development
 
@@ -162,6 +176,16 @@ Connectors implement a common interface. Each polls an external service, maps ev
 - `idle_detector.go` — Session idle tracking
 - `scrollback.go` — Scrollback buffer persistence
 - `config/` — Agent TOML config loading
+- `lifecycle/` — Agent lifecycle utilities: PID file, process scanning, orphan reaping, service detection
+
+## Frontend TypeScript Configuration
+
+The frontend uses **project references** (`web/tsconfig.json` → `tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.test.json`):
+- `tsconfig.app.json` — Source code (`src/`), excludes `src/__tests__` and `src/test`. Uses `types: ["vite/client"]`.
+- `tsconfig.test.json` — Test files (`src/__tests__`, `src/test`). Uses `types: ["vitest/globals", "vite/client", "node"]`.
+- `tsconfig.node.json` — Vite config files.
+
+When using `vi.fn()` in tests, use the Vitest 3.x single-type-parameter form: `vi.fn<(arg: Type) => ReturnType>()` — not the legacy `vi.fn<[Args], Return>()`.
 
 ## Frontend Architecture (`web/src/`)
 
