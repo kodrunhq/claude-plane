@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/kodrunhq/claude-plane/internal/agent"
 	"github.com/kodrunhq/claude-plane/internal/agent/config"
+	"github.com/kodrunhq/claude-plane/internal/agent/lifecycle"
 	"github.com/kodrunhq/claude-plane/internal/shared/buildinfo"
 )
 
@@ -28,6 +31,7 @@ func main() {
 		newRunCmd(),
 		newJoinCmd(),
 		newInstallServiceCmd(),
+		newUninstallServiceCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -61,6 +65,26 @@ func newRunCmd() *cobra.Command {
 			if err := os.MkdirAll(cfg.Agent.DataDir, 0o750); err != nil {
 				return fmt.Errorf("create data dir: %w", err)
 			}
+
+			// --- PID lock ---
+			pid, alive, err := lifecycle.CheckPIDFile(cfg.Agent.DataDir)
+			if err != nil {
+				slog.Warn("failed to check PID file", "error", err)
+			} else if alive {
+				return fmt.Errorf("agent already running (PID %d). Stop it first or use 'join' to re-register", pid)
+			} else if pid != 0 {
+				slog.Warn("removed stale PID file", "pid", pid)
+				lifecycle.RemovePIDFile(cfg.Agent.DataDir)
+			}
+
+			pidCleanup, err := lifecycle.WritePIDFile(cfg.Agent.DataDir)
+			if err != nil {
+				return fmt.Errorf("write PID file: %w", err)
+			}
+			defer pidCleanup()
+
+			// Reap orphaned claude processes from a previous crash.
+			lifecycle.ReapOrphanedProcesses(slog.Default())
 
 			// Build idle detector options from config.
 			var idleOpts []agent.IdleDetectorOption
@@ -110,13 +134,20 @@ func newJoinCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "join CODE",
 		Short: "Join a server using a 6-character provisioning code",
-		Long:  "Redeems a short provisioning code to configure this agent with TLS certificates and server connection details.",
+		Long: `Redeems a short provisioning code to configure this agent with TLS certificates
+and server connection details. Any existing agent (service or process) is automatically
+stopped before reconfiguring. Use --service to install as a system service in one step.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			code := args[0]
 			serverFlag, _ := cmd.Flags().GetString("server")
 			configDir, _ := cmd.Flags().GetString("config-dir")
 			insecure, _ := cmd.Flags().GetBool("insecure")
+			installService, _ := cmd.Flags().GetBool("service")
+
+			if os.Getuid() == 0 && installService {
+				return fmt.Errorf("do not run 'join' as root. Run as your normal user — only the service installation needs sudo")
+			}
 
 			serverURL, err := agent.ResolveServerURL(serverFlag)
 			if err != nil {
@@ -127,6 +158,13 @@ func newJoinCmd() *cobra.Command {
 				return err
 			}
 
+			// Stop any existing agent before re-configuring.
+			dataDir := filepath.Join(configDir, "data")
+			if err := os.MkdirAll(dataDir, 0o750); err != nil {
+				slog.Warn("failed to create data dir", "error", err)
+			}
+			lifecycle.StopExisting(dataDir, slog.Default())
+
 			if err := agent.ExecuteJoin(serverURL, code, configDir); err != nil {
 				return err
 			}
@@ -135,10 +173,41 @@ func newJoinCmd() *cobra.Command {
 			fmt.Printf("\nAgent configured for machine joining\n")
 			fmt.Printf("Certificates written to %s/certs/\n", configDir)
 			fmt.Printf("Config written to %s\n\n", configPath)
-			fmt.Printf("Start the agent:\n")
-			fmt.Printf("  claude-plane-agent run --config %s\n\n", configPath)
-			fmt.Printf("Install as a background service (recommended):\n")
-			fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
+
+			if installService {
+				binPath, err := os.Executable()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not determine binary path: %v\n", err)
+					fmt.Printf("Install the service manually:\n")
+					fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
+					return nil
+				}
+				if resolved, err := filepath.EvalSymlinks(binPath); err != nil {
+					slog.Warn("could not resolve symlinks for binary, using raw path", "error", err)
+				} else {
+					binPath = resolved
+				}
+				absConfig, err := filepath.Abs(configPath)
+				if err != nil {
+					return fmt.Errorf("resolve config path: %w", err)
+				}
+
+				fmt.Printf("Installing system service (requires sudo)...\n\n")
+				sudoCmd := exec.Command("sudo", binPath, "install-service", "--config", absConfig)
+				sudoCmd.Stdin = os.Stdin
+				sudoCmd.Stdout = os.Stdout
+				sudoCmd.Stderr = os.Stderr
+				if err := sudoCmd.Run(); err != nil {
+					fmt.Fprintf(os.Stderr, "\nWarning: service installation failed: %v\n", err)
+					fmt.Printf("You can install the service manually:\n")
+					fmt.Printf("  sudo %s install-service --config %s\n\n", binPath, absConfig)
+				}
+			} else {
+				fmt.Printf("Start the agent:\n")
+				fmt.Printf("  claude-plane-agent run --config %s\n\n", configPath)
+				fmt.Printf("Install as a background service (recommended):\n")
+				fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
+			}
 			return nil
 		},
 	}
@@ -152,6 +221,7 @@ func newJoinCmd() *cobra.Command {
 	cmd.Flags().String("server", "", "Server HTTP URL (falls back to CLAUDE_PLANE_SERVER env var)")
 	cmd.Flags().String("config-dir", defaultConfigDir, "Directory for config and certificates")
 	cmd.Flags().Bool("insecure", false, "Allow plain HTTP server URL (prints warning)")
+	cmd.Flags().Bool("service", false, "Install and start the agent as a system service after joining (requires sudo)")
 	return cmd
 }
 
@@ -160,7 +230,8 @@ func newInstallServiceCmd() *cobra.Command {
 		Use:   "install-service",
 		Short: "Install agent as a system service (systemd on Linux, launchd on macOS)",
 		Long: `Installs the claude-plane-agent as a background system service that starts
-on boot and restarts automatically if it crashes.
+on boot and restarts automatically if it crashes. Safe to run multiple times —
+any existing service is stopped and replaced.
 
 Requires root/sudo on Linux (systemd) or macOS (launchd).
 The agent binary must already be in a system-accessible location.`,
@@ -194,5 +265,38 @@ The agent binary must already be in a system-accessible location.`,
 	}
 	cmd.Flags().String("config", os.Getenv("HOME")+"/.claude-plane/agent.toml", "Path to agent TOML config file")
 	cmd.Flags().String("user", "", "User to run the service as (default: current user)")
+	return cmd
+}
+
+func newUninstallServiceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "uninstall-service",
+		Short: "Remove the agent system service",
+		Long: `Stops and removes the claude-plane-agent system service.
+With --purge, also removes all configuration, certificates, and data.
+
+Requires root/sudo.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			purge, _ := cmd.Flags().GetBool("purge")
+			configDir, _ := cmd.Flags().GetString("config-dir")
+
+			if purge && configDir == "" {
+				sudoUser := os.Getenv("SUDO_USER")
+				if sudoUser != "" {
+					u, err := user.Lookup(sudoUser)
+					if err == nil {
+						configDir = filepath.Join(u.HomeDir, ".claude-plane")
+					}
+				}
+				if configDir == "" {
+					configDir = "/etc/claude-plane"
+				}
+			}
+
+			return uninstallService(purge, configDir)
+		},
+	}
+	cmd.Flags().Bool("purge", false, "Also remove all config, certificates, and data")
+	cmd.Flags().String("config-dir", "", "Config directory to purge (auto-detected from SUDO_USER)")
 	return cmd
 }

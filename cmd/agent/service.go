@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/kodrunhq/claude-plane/internal/agent/lifecycle"
 )
 
 func installService(binPath, configPath, runAsUser string) error {
@@ -24,6 +27,14 @@ func installService(binPath, configPath, runAsUser string) error {
 func installSystemd(binPath, configPath, runAsUser string) error {
 	if os.Getuid() != 0 {
 		return fmt.Errorf("install-service requires root. Run with:\n  sudo %s install-service --config %s", binPath, configPath)
+	}
+
+	// Stop existing service if running (makes install-service idempotent).
+	stopCmd := exec.Command("systemctl", "is-active", "--quiet", "claude-plane-agent")
+	if stopCmd.Run() == nil {
+		fmt.Printf("Stopping existing claude-plane-agent service...\n")
+		_ = exec.Command("systemctl", "stop", "claude-plane-agent").Run()
+		_ = exec.Command("systemctl", "disable", "claude-plane-agent").Run()
 	}
 
 	// Determine user/group for the service.
@@ -48,7 +59,9 @@ func installSystemd(binPath, configPath, runAsUser string) error {
 	}
 	// Chown to the service user.
 	if uid, gid, ok := lookupIDs(u); ok {
-		os.Chown(dataDir, uid, gid)
+		if err := os.Chown(dataDir, uid, gid); err != nil {
+			slog.Warn("failed to chown data dir", "dir", dataDir, "user", runAsUser, "error", err)
+		}
 	}
 
 	unit := fmt.Sprintf(`[Unit]
@@ -106,6 +119,13 @@ func installLaunchd(binPath, configPath string) error {
 		return fmt.Errorf("install-service requires root. Run with:\n  sudo %s install-service --config %s", binPath, configPath)
 	}
 
+	// Stop existing service if running.
+	listCmd := exec.Command("launchctl", "list")
+	if out, err := listCmd.Output(); err == nil && strings.Contains(string(out), "com.claude-plane.agent") {
+		fmt.Printf("Stopping existing claude-plane-agent service...\n")
+		_ = exec.Command("launchctl", "bootout", "system/com.claude-plane.agent").Run()
+	}
+
 	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -135,11 +155,11 @@ func installLaunchd(binPath, configPath string) error {
 		return fmt.Errorf("write plist: %w", err)
 	}
 
-	cmd := exec.Command("launchctl", "load", plistPath)
+	cmd := exec.Command("launchctl", "bootstrap", "system", plistPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("launchctl load: %w", err)
+		return fmt.Errorf("launchctl bootstrap: %w", err)
 	}
 
 	fmt.Printf("\n==> claude-plane-agent installed as launchd service\n")
@@ -161,4 +181,99 @@ func lookupIDs(u *user.User) (uid, gid int, ok bool) {
 		return 0, 0, false
 	}
 	return uidN, gidN, true
+}
+
+func uninstallService(purge bool, configDir string) error {
+	switch runtime.GOOS {
+	case "linux":
+		return uninstallSystemd(purge, configDir)
+	case "darwin":
+		return uninstallLaunchd(purge, configDir)
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+}
+
+func uninstallSystemd(purge bool, configDir string) error {
+	if os.Getuid() != 0 {
+		return fmt.Errorf("uninstall-service requires root. Run with:\n  sudo claude-plane-agent uninstall-service")
+	}
+
+	servicePath := "/etc/systemd/system/claude-plane-agent.service"
+	if _, err := os.Stat(servicePath); os.IsNotExist(err) {
+		fmt.Println("No claude-plane-agent service found.")
+		if !purge {
+			return nil
+		}
+	} else {
+		_ = exec.Command("systemctl", "stop", "claude-plane-agent").Run()
+		_ = exec.Command("systemctl", "disable", "claude-plane-agent").Run()
+		if err := os.Remove(servicePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove service file: %w", err)
+		}
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+		fmt.Printf("\n==> Service stopped and removed\n")
+		fmt.Printf("    Removed: %s\n", servicePath)
+	}
+
+	if purge {
+		return purgeConfigDir(configDir)
+	}
+	fmt.Println()
+	return nil
+}
+
+func uninstallLaunchd(purge bool, configDir string) error {
+	if os.Getuid() != 0 {
+		return fmt.Errorf("uninstall-service requires root. Run with:\n  sudo claude-plane-agent uninstall-service")
+	}
+
+	plistPath := "/Library/LaunchDaemons/com.claude-plane.agent.plist"
+	if _, err := os.Stat(plistPath); os.IsNotExist(err) {
+		fmt.Println("No claude-plane-agent service found.")
+		if !purge {
+			return nil
+		}
+	} else {
+		_ = exec.Command("launchctl", "bootout", "system/com.claude-plane.agent").Run()
+		if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove plist: %w", err)
+		}
+		fmt.Printf("\n==> Service stopped and removed\n")
+		fmt.Printf("    Removed: %s\n", plistPath)
+	}
+
+	if purge {
+		return purgeConfigDir(configDir)
+	}
+	fmt.Println()
+	return nil
+}
+
+func purgeConfigDir(configDir string) error {
+	if configDir == "" {
+		return fmt.Errorf("cannot determine config directory for purge. Use --config-dir to specify")
+	}
+
+	cleaned := filepath.Clean(configDir)
+	// Require path to end with ".claude-plane" as a safety guard.
+	if filepath.Base(cleaned) != ".claude-plane" && cleaned != "/etc/claude-plane" {
+		return fmt.Errorf("refusing to purge %q — path must end with '.claude-plane' or be '/etc/claude-plane'", configDir)
+	}
+
+	// Additional safety: don't delete root or home directory.
+	if cleaned == "/" {
+		return fmt.Errorf("refusing to purge root directory")
+	}
+
+	// Kill remaining agent processes before purging.
+	dataDir := filepath.Join(cleaned, "data")
+	lifecycle.StopExisting(dataDir, slog.Default())
+
+	if err := os.RemoveAll(cleaned); err != nil {
+		return fmt.Errorf("remove config directory: %w", err)
+	}
+
+	fmt.Printf("    Config:  %s (purged)\n\n", configDir)
+	return nil
 }

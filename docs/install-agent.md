@@ -5,14 +5,103 @@ Deploy `claude-plane-agent` on worker machines where Claude CLI sessions will ru
 ## Prerequisites
 
 - Linux machine (Ubuntu 22.04+, Debian 12+, or similar)
-- Go 1.25+ (for building from source) or a pre-built binary
 - **Claude CLI** — installed and authenticated. The agent spawns Claude CLI processes in PTYs.
-- Agent certificate, key, and CA certificate from the server (see [Server Installation](install-server.md#3-set-up-tls))
 - Outbound TCP access to the server's gRPC port (default: 4201)
 
-## 1. Build the Binary
+## 1. Quick Start: Join with Provisioning Code
 
-On your build machine:
+The fastest way to set up an agent. The server admin generates a short provisioning code on the Provisioning page (or via the API), then shares it with you.
+
+### Download the binary
+
+```bash
+curl -o claude-plane-agent https://your-server:4200/dl/agent/linux-amd64
+chmod +x claude-plane-agent
+```
+
+### One-command setup (recommended)
+
+The `--service` flag joins the server **and** installs a system service in one step:
+
+```bash
+./claude-plane-agent join CODE --server https://your-server:4200 --service
+```
+
+This will:
+1. Redeem the provisioning code and download TLS certificates
+2. Write config to `~/.claude-plane/agent.toml` (override with `--config-dir`)
+3. Install and start a systemd service (prompts for sudo)
+
+For servers running plain HTTP (development only), add `--insecure`:
+
+```bash
+./claude-plane-agent join CODE --server http://your-server:4200 --insecure --service
+```
+
+### Multi-step variant
+
+If you prefer to join and install the service separately:
+
+```bash
+# Step 1: Join — downloads certs and writes config
+./claude-plane-agent join CODE --server https://your-server:4200
+
+# Step 2: Install as a service (requires sudo)
+sudo ./claude-plane-agent install-service --config ~/.claude-plane/agent.toml
+```
+
+## 2. Re-registering an Agent
+
+Running `join` again on a machine that already has an agent is safe and requires no manual cleanup. The command automatically:
+
+- **Stops any existing agent** — whether running as a systemd service or a standalone process
+- **Overwrites certificates and config** with the new provisioning response
+- **Restarts the service** if `--service` is used
+
+```bash
+# Re-register with a new provisioning code and restart the service
+./claude-plane-agent join NEW_CODE --server https://your-server:4200 --service
+```
+
+No need to manually stop the service or remove old files first.
+
+> **Important:** If you omit `--service`, the agent service is stopped but **not restarted** with the new config. You must either pass `--service` again or manually restart: `sudo systemctl restart claude-plane-agent`.
+
+## 3. Uninstalling
+
+### Remove the service only
+
+Stops the systemd service and removes the unit file, but leaves config, certificates, and data in place:
+
+```bash
+sudo ./claude-plane-agent uninstall-service
+```
+
+### Full removal
+
+Stops the service **and** removes all configuration, certificates, and data:
+
+```bash
+sudo ./claude-plane-agent uninstall-service --purge
+```
+
+After `--purge`, the machine can be re-provisioned from scratch with a new `join` command.
+
+## 4. Verifying Connectivity
+
+Check the agent logs:
+
+```bash
+journalctl -u claude-plane-agent -f
+```
+
+You should see the agent register with the server. In the web dashboard, the machine should appear on the Machines page with an "online" status.
+
+## 5. Advanced: Manual Certificate Setup
+
+If you cannot use provisioning codes (e.g., air-gapped networks), you can configure the agent manually.
+
+### Build the binary
 
 ```bash
 go build -o claude-plane-agent ./cmd/agent
@@ -24,7 +113,7 @@ Copy to the worker:
 scp claude-plane-agent user@worker:/usr/local/bin/
 ```
 
-## 2. Transfer Certificates
+### Transfer certificates
 
 The server admin generates agent certificates using the server's CA tool. You need three files on the worker:
 
@@ -36,7 +125,7 @@ The server admin generates agent certificates using the server's CA tool. You ne
 
 The machine ID embedded in the certificate CN must match the `agent.machine_id` in the config file.
 
-## 3. Create Configuration
+### Create configuration
 
 Create `/etc/claude-plane/agent.toml`:
 
@@ -58,7 +147,7 @@ max_sessions = 5
 
 See [Configuration Reference](configuration.md) for all options.
 
-## 4. Create System User and Directories
+### Create system user and directories
 
 ```bash
 sudo useradd --system --create-home --shell /bin/bash claude-plane
@@ -69,7 +158,7 @@ sudo chown claude-plane:claude-plane /etc/claude-plane/agent.toml
 
 Note: The agent user needs a real home directory and shell because it spawns Claude CLI processes. The Claude CLI may need access to its own config in the user's home directory.
 
-## 5. Ensure Claude CLI Access
+### Ensure Claude CLI access
 
 The Claude CLI must be accessible to the agent's system user:
 
@@ -82,25 +171,7 @@ sudo -u claude-plane claude --version
 # 2. Set claude_cli_path in agent.toml to the full path
 ```
 
-## Alternative: Quick Join
-
-If the server admin has generated a provisioning short code, you can skip the manual certificate setup:
-
-```bash
-# Download from the server
-curl -o claude-plane-agent http://server:4200/dl/agent/linux-amd64
-chmod +x claude-plane-agent
-
-# Join with the short code
-./claude-plane-agent join CODE --server http://server:4200 --insecure
-
-# Install as a service
-sudo ./claude-plane-agent install-service --config ~/.claude-plane/agent.toml
-```
-
-## 6. Install as System Service
-
-The recommended way to run the agent is as a system service:
+### Install as system service
 
 ```bash
 sudo claude-plane-agent install-service --config /etc/claude-plane/agent.toml
@@ -148,17 +219,7 @@ sudo systemctl start claude-plane-agent
 sudo systemctl status claude-plane-agent
 ```
 
-## Verifying Connectivity
-
-Check the agent logs:
-
-```bash
-journalctl -u claude-plane-agent -f
-```
-
-You should see the agent register with the server. In the web dashboard, the machine should appear on the Machines page with an "online" status.
-
-## Multi-Agent Setup
+### Multi-agent setup
 
 To run multiple agents:
 
@@ -186,6 +247,12 @@ To run multiple agents:
 **Permission denied on PTY:**
 - The agent user needs permission to allocate PTYs
 - Ensure `NoNewPrivileges=false` in the systemd unit (agent spawns child processes)
+
+**Agent already running:**
+- The agent uses a PID lock file (`data/agent.pid`) to prevent duplicate instances. If a previous run exited uncleanly and left a stale PID file, the new process detects this automatically and removes it. If the PID file references a process that is still alive, the new agent will refuse to start. To resolve: stop the existing agent (`sudo systemctl stop claude-plane-agent` or kill the process), then start again.
+
+**Orphaned processes after crash:**
+- On startup, the agent automatically reaps orphaned child processes (e.g., leftover Claude CLI sessions) from a previous crash. No manual cleanup is needed. Check the agent logs for `reaping orphaned process` messages if you want to confirm this happened.
 
 ## Next Steps
 
