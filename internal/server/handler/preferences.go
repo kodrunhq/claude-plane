@@ -180,8 +180,8 @@ func validatePreferences(raw json.RawMessage) error {
 
 	// Validate machine_overrides.
 	for machineID, override := range p.MachineOverrides {
-		if override.Model != "" && override.Model != "opus" && override.Model != "sonnet" && override.Model != "haiku" {
-			return fmt.Errorf("machine_overrides[%s].model must be one of: opus, sonnet, haiku", machineID)
+		if override.Model != "" && override.Model != "opus" && override.Model != "sonnet" && override.Model != "haiku" && override.Model != "opusplan" {
+			return fmt.Errorf("machine_overrides[%s].model must be one of: opus, sonnet, haiku, opusplan", machineID)
 		}
 		if override.MaxConcurrentSessions < 0 {
 			return fmt.Errorf("machine_overrides[%s].max_concurrent_sessions must be >= 0", machineID)

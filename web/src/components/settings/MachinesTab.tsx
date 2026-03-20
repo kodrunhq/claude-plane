@@ -18,6 +18,7 @@ const MODEL_OPTIONS = [
   { value: 'opus', label: 'Opus' },
   { value: 'sonnet', label: 'Sonnet' },
   { value: 'haiku', label: 'Haiku' },
+  { value: 'opusplan', label: 'Opus Plan' },
 ] as const;
 
 function emptyOverride(): MachineOverride {

@@ -529,8 +529,8 @@ func (h *JobHandler) AddStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate model.
-	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" {
-		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku")
+	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" && req.Model != "opusplan" {
+		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku, opusplan")
 		return
 	}
 
@@ -665,8 +665,8 @@ func (h *JobHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate model.
-	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" {
-		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku")
+	if req.Model != "" && req.Model != "opus" && req.Model != "sonnet" && req.Model != "haiku" && req.Model != "opusplan" {
+		writeError(w, http.StatusBadRequest, "model must be one of: opus, sonnet, haiku, opusplan")
 		return
 	}
 

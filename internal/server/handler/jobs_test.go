@@ -363,6 +363,60 @@ func TestJobHandler_AddStep(t *testing.T) {
 	}
 }
 
+func TestJobHandler_AddStep_WithOpusPlanModel(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"name": "Model Test"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	stepBody, _ := json.Marshal(map[string]interface{}{
+		"name":   "Step 1",
+		"prompt": "Do something",
+		"model":  "opusplan",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/steps", "application/json", bytes.NewReader(stepBody))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 for opusplan model, got %d", resp.StatusCode)
+	}
+}
+
+func TestJobHandler_AddStep_InvalidModel(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"name": "Model Test"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	stepBody, _ := json.Marshal(map[string]interface{}{
+		"name":   "Step 1",
+		"prompt": "Do something",
+		"model":  "invalid_model",
+	})
+	resp, err := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/steps", "application/json", bytes.NewReader(stepBody))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid model, got %d", resp.StatusCode)
+	}
+}
+
 func TestJobHandler_UpdateStep(t *testing.T) {
 	s := newTestStore(t)
 	srv, _ := newJobRouter(t, s)
