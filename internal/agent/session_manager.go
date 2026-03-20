@@ -225,10 +225,17 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 		var onIdle func()
 		if isStandalone {
 			onIdle = func() {
-				sm.logger.Info("idle prompt detected, reporting waiting_for_input (standalone)", "session_id", sessionID)
+				// Short-circuit if already waiting_for_input to avoid event spam
+				// (keep-alive mode means Feed can fire onIdle on repeated markers).
 				sm.lastStatusMu.Lock()
+				if sm.lastStatus[sessionID] == status.WaitingForInput {
+					sm.lastStatusMu.Unlock()
+					return
+				}
 				sm.lastStatus[sessionID] = status.WaitingForInput
 				sm.lastStatusMu.Unlock()
+
+				sm.logger.Info("idle prompt detected, reporting waiting_for_input (standalone)", "session_id", sessionID)
 				sm.sendEvent(&pb.AgentEvent{
 					Event: &pb.AgentEvent_SessionStatus{
 						SessionStatus: &pb.SessionStatusEvent{
@@ -314,19 +321,21 @@ func (sm *SessionManager) handleInput(cmd *pb.InputDataCmd) {
 	sm.standaloneMu.RUnlock()
 
 	if isStandalone {
+		// Check and update status without nesting locks.
 		sm.lastStatusMu.Lock()
-		lastStatus := sm.lastStatus[sessionID]
-		if lastStatus == status.WaitingForInput {
-			// Disarm detector first — prevents re-fire before the
-			// status transition is visible to other goroutines.
+		shouldTransition := sm.lastStatus[sessionID] == status.WaitingForInput
+		if shouldTransition {
+			sm.lastStatus[sessionID] = status.Running
+		}
+		sm.lastStatusMu.Unlock()
+
+		if shouldTransition {
+			// Disarm detector so it watches for the next completion prompt.
 			sm.detectorMu.RLock()
 			if d, ok := sm.detectors[sessionID]; ok {
 				d.ResetToPhase1()
 			}
 			sm.detectorMu.RUnlock()
-
-			sm.lastStatus[sessionID] = status.Running
-			sm.lastStatusMu.Unlock()
 
 			sm.sendEvent(&pb.AgentEvent{
 				Event: &pb.AgentEvent_SessionStatus{
@@ -336,8 +345,6 @@ func (sm *SessionManager) handleInput(cmd *pb.InputDataCmd) {
 					},
 				},
 			})
-		} else {
-			sm.lastStatusMu.Unlock()
 		}
 	}
 
