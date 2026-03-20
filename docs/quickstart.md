@@ -130,11 +130,16 @@ In a separate terminal:
 ./claude-plane-agent run --config agent.toml
 ```
 
-For production use, install as a system service instead:
+Or install as a system service (recommended for production):
 
 ```bash
 sudo ./claude-plane-agent install-service --config agent.toml
 ```
+
+> **Tip:** When using provisioning codes on remote machines, you can do everything in one command:
+> ```bash
+> ./claude-plane-agent join CODE --server https://server:4200 --service
+> ```
 
 ## Open the Dashboard
 
