@@ -267,9 +267,9 @@ func findOrphanedClaudeProcessesDarwin() ([]int, error) {
 			continue
 		}
 
-		// args may contain spaces, so join all remaining fields.
-		fullCmd := strings.Join(fields[3:], " ")
-		if strings.Contains(fullCmd, "claude") {
+		// Parse argv[0] from the args column and apply same strict match as Linux.
+		cmdArgs := fields[3:]
+		if matchesClaudeCommand(cmdArgs) {
 			pids = append(pids, pid)
 		}
 	}
@@ -309,12 +309,17 @@ func matchesAgentRunCommand(args []string) bool {
 	return false
 }
 
-// matchesClaudeCommand checks if the command name contains "claude".
+// matchesClaudeCommand checks if the command is the Claude CLI binary.
+// Explicitly excludes claude-plane-* binaries to avoid killing the agent itself.
 func matchesClaudeCommand(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
-	return strings.Contains(filepath.Base(args[0]), "claude")
+	base := filepath.Base(args[0])
+	if strings.HasPrefix(base, "claude-plane-") {
+		return false
+	}
+	return base == "claude"
 }
 
 // parsePIDList parses newline-separated PID output, excluding the given PID.

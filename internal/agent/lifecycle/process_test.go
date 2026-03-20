@@ -110,7 +110,9 @@ func TestMatchesClaudeCommand(t *testing.T) {
 		want bool
 	}{
 		{"claude binary", []string{"/usr/bin/claude", "--help"}, true},
-		{"claude-plane-agent", []string{"claude-plane-agent", "run"}, true},
+		{"claude binary bare", []string{"claude"}, true},
+		{"claude-plane-agent excluded", []string{"claude-plane-agent", "run"}, false},
+		{"claude-plane-server excluded", []string{"claude-plane-server", "serve"}, false},
 		{"unrelated", []string{"/usr/bin/bash"}, false},
 		{"empty", nil, false},
 	}

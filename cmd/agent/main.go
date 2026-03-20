@@ -182,16 +182,17 @@ stopped before reconfiguring. Use --service to install as a system service in on
 					fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
 					return nil
 				}
-				binPath, err = filepath.EvalSymlinks(binPath)
-				if err != nil {
-					slog.Warn("could not resolve symlinks for binary", "error", err)
+				if resolved, err := filepath.EvalSymlinks(binPath); err != nil {
+					slog.Warn("could not resolve symlinks for binary, using raw path", "error", err)
+				} else {
+					binPath = resolved
 				}
 				absConfig, err := filepath.Abs(configPath)
 				if err != nil {
 					return fmt.Errorf("resolve config path: %w", err)
 				}
 
-				fmt.Printf("Installing systemd service (requires sudo)...\n\n")
+				fmt.Printf("Installing system service (requires sudo)...\n\n")
 				sudoCmd := exec.Command("sudo", binPath, "install-service", "--config", absConfig)
 				sudoCmd.Stdin = os.Stdin
 				sudoCmd.Stdout = os.Stdout

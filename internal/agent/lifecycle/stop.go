@@ -24,9 +24,31 @@ func StopExisting(dataDir string, logger *slog.Logger) {
 	if err != nil {
 		logger.Warn("failed to check pid file", "error", err)
 	} else if alive {
-		logger.Info("found live agent from pid file", "pid", pid)
-		SignalAndWait(pid, 5*time.Second, logger)
-		RemovePIDFile(dataDir)
+		// Verify the PID is actually an agent process before signaling.
+		// If the OS reused the PID for an unrelated process, treat as stale.
+		agentPIDs, findErr := FindAgentProcesses()
+		isAgent := false
+		if findErr == nil {
+			for _, apid := range agentPIDs {
+				if apid == pid {
+					isAgent = true
+					break
+				}
+			}
+		}
+		if isAgent {
+			logger.Info("found live agent from pid file", "pid", pid)
+			SignalAndWait(pid, 5*time.Second, logger)
+			// Re-check liveness before removing — don't clear lock if still alive.
+			if _, stillAlive, _ := CheckPIDFile(dataDir); !stillAlive {
+				RemovePIDFile(dataDir)
+			} else {
+				logger.Warn("agent process still alive after signaling; retaining pid file", "pid", pid)
+			}
+		} else {
+			logger.Info("pid file refers to non-agent process; removing stale pid file", "pid", pid)
+			RemovePIDFile(dataDir)
+		}
 	} else if pid != 0 {
 		logger.Info("removing stale pid file", "pid", pid)
 		RemovePIDFile(dataDir)

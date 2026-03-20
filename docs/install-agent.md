@@ -74,7 +74,7 @@ No need to manually stop the service or remove old files first.
 Stops the systemd service and removes the unit file, but leaves config, certificates, and data in place:
 
 ```bash
-sudo claude-plane-agent uninstall-service
+sudo ./claude-plane-agent uninstall-service
 ```
 
 ### Full removal
@@ -82,7 +82,7 @@ sudo claude-plane-agent uninstall-service
 Stops the service **and** removes all configuration, certificates, and data:
 
 ```bash
-sudo claude-plane-agent uninstall-service --purge
+sudo ./claude-plane-agent uninstall-service --purge
 ```
 
 After `--purge`, the machine can be re-provisioned from scratch with a new `join` command.
