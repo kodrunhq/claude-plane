@@ -317,6 +317,14 @@ func (sm *SessionManager) handleInput(cmd *pb.InputDataCmd) {
 		sm.lastStatusMu.Lock()
 		lastStatus := sm.lastStatus[sessionID]
 		if lastStatus == status.WaitingForInput {
+			// Disarm detector first — prevents re-fire before the
+			// status transition is visible to other goroutines.
+			sm.detectorMu.RLock()
+			if d, ok := sm.detectors[sessionID]; ok {
+				d.ResetToPhase1()
+			}
+			sm.detectorMu.RUnlock()
+
 			sm.lastStatus[sessionID] = status.Running
 			sm.lastStatusMu.Unlock()
 
@@ -328,11 +336,6 @@ func (sm *SessionManager) handleInput(cmd *pb.InputDataCmd) {
 					},
 				},
 			})
-			sm.detectorMu.RLock()
-			if d, ok := sm.detectors[sessionID]; ok {
-				d.ResetToPhase1()
-			}
-			sm.detectorMu.RUnlock()
 		} else {
 			sm.lastStatusMu.Unlock()
 		}
@@ -408,7 +411,7 @@ func (sm *SessionManager) handleAttach(cmd *pb.AttachSessionCmd) {
 		Event: &pb.AgentEvent_SessionStatus{
 			SessionStatus: &pb.SessionStatusEvent{
 				SessionId: sessionID,
-				Status:    "terminated",
+				Status:    status.Terminated,
 			},
 		},
 	})
