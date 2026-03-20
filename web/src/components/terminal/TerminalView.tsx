@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react';
+import { ArrowDown } from 'lucide-react';
 import { useTerminalSession } from '../../hooks/useTerminalSession.ts';
 import type { TerminalStatus } from '../../types/session.ts';
 
@@ -30,7 +31,7 @@ const statusColors: Record<TerminalStatus, string> = {
 
 export function TerminalView({ sessionId, onStatusChange, className = '', useWebGL, fontSize }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { status, focusTerminal } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
+  const { status, showScrollButton, focusTerminal, scrollToBottom } = useTerminalSession(sessionId, containerRef, { useWebGL, fontSize });
 
   useEffect(() => {
     onStatusChange?.(status);
@@ -75,11 +76,25 @@ export function TerminalView({ sessionId, onStatusChange, className = '', useWeb
 
       {/* Terminal container */}
       <div
-        ref={containerRef}
-        className="flex-1 min-h-0"
+        className="flex-1 min-h-0 relative"
         style={{ backgroundColor: '#1a1b26' }}
-        onClick={focusTerminal}
-      />
+      >
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          onClick={focusTerminal}
+        />
+        {showScrollButton && (
+          <button
+            onClick={(e) => { e.stopPropagation(); scrollToBottom(); }}
+            className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md bg-bg-secondary/90 border border-border-primary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors backdrop-blur-sm"
+            title="Scroll to bottom"
+          >
+            <ArrowDown size={14} />
+            <span>Bottom</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
