@@ -18,9 +18,7 @@ func TestStopExisting_RemovesStalePIDFile(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	if err := StopExisting(dir, logger); err != nil {
-		t.Fatalf("StopExisting returned error: %v", err)
-	}
+	StopExisting(dir, logger)
 
 	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
 		t.Errorf("expected stale pid file to be removed, but it still exists")
@@ -30,9 +28,6 @@ func TestStopExisting_RemovesStalePIDFile(t *testing.T) {
 func TestStopExisting_NoDataDir(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	// Use a directory that does not exist.
-	err := StopExisting("/tmp/claude-plane-test-nonexistent-dir-"+t.Name(), logger)
-	if err != nil {
-		t.Fatalf("StopExisting with non-existent dir returned error: %v", err)
-	}
+	// Use a directory that does not exist — should not panic.
+	StopExisting("/tmp/claude-plane-test-nonexistent-dir-"+t.Name(), logger)
 }

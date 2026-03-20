@@ -23,17 +23,20 @@ func CheckPIDFile(dataDir string) (int, bool, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, false, nil
 		}
-		return 0, false, fmt.Errorf("reading pid file: %w", err)
+		return 0, false, fmt.Errorf("read pid file: %w", err)
 	}
 
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		return 0, false, fmt.Errorf("parsing pid file: %w", err)
+		return 0, false, fmt.Errorf("parse pid file: %w", err)
 	}
 
 	// Signal 0 checks existence without actually sending a signal.
 	if err := syscall.Kill(pid, 0); err != nil {
-		return pid, false, nil
+		if errors.Is(err, syscall.EPERM) {
+			return pid, true, nil // process exists, we just can't signal it
+		}
+		return pid, false, nil // ESRCH — process doesn't exist
 	}
 
 	return pid, true, nil
@@ -46,8 +49,8 @@ func WritePIDFile(dataDir string) (func(), error) {
 	pidPath := filepath.Join(dataDir, pidFileName)
 	content := []byte(strconv.Itoa(os.Getpid()))
 
-	if err := os.WriteFile(pidPath, content, 0o644); err != nil {
-		return nil, fmt.Errorf("writing pid file: %w", err)
+	if err := os.WriteFile(pidPath, content, 0o600); err != nil {
+		return nil, fmt.Errorf("write pid file: %w", err)
 	}
 
 	var once sync.Once

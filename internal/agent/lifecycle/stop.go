@@ -11,9 +11,9 @@ import (
 //  2. Read the PID file — signal a live process or remove a stale file.
 //  3. Scan for remaining agent processes and terminate them.
 //
-// All three layers are attempted regardless of earlier outcomes. This function
-// always returns nil so callers can proceed unconditionally.
-func StopExisting(dataDir string, logger *slog.Logger) error {
+// All three layers are attempted regardless of earlier outcomes. Errors are
+// logged as warnings so callers can proceed unconditionally.
+func StopExisting(dataDir string, logger *slog.Logger) {
 	// Layer 1: service manager.
 	if stopped := StopServiceIfActive(logger); stopped {
 		logger.Info("stopped existing agent via service manager")
@@ -42,6 +42,4 @@ func StopExisting(dataDir string, logger *slog.Logger) error {
 			SignalAndWait(p, 3*time.Second, logger)
 		}
 	}
-
-	return nil
 }

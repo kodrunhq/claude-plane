@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -47,7 +48,10 @@ func FindOrphanedClaudeProcesses() ([]int, error) {
 func SignalAndWait(pid int, timeout time.Duration, logger *slog.Logger) {
 	// Check if process exists.
 	if err := syscall.Kill(pid, 0); err != nil {
-		return
+		if !errors.Is(err, syscall.EPERM) {
+			return // ESRCH — process doesn't exist
+		}
+		// EPERM = process exists, different user
 	}
 
 	logger.Info("sending SIGTERM to process", "pid", pid)
@@ -61,36 +65,33 @@ func SignalAndWait(pid int, timeout time.Duration, logger *slog.Logger) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if err := syscall.Kill(pid, 0); err != nil {
-			logger.Info("process exited after SIGTERM", "pid", pid)
+		if time.Now().After(deadline) {
+			logger.Warn("process did not exit after SIGTERM, sending SIGKILL", "pid", pid)
+			_ = syscall.Kill(pid, syscall.SIGKILL)
 			return
 		}
-		if time.Now().After(deadline) {
-			break
+		if err := syscall.Kill(pid, 0); err != nil {
+			if !errors.Is(err, syscall.EPERM) {
+				return // process exited
+			}
+			// EPERM = still alive, different user
 		}
-	}
-
-	logger.Warn("process did not exit after SIGTERM, sending SIGKILL", "pid", pid)
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
-		logger.Warn("failed to send SIGKILL", "pid", pid, "error", err)
 	}
 }
 
 // ReapOrphanedProcesses finds orphaned claude processes and terminates them.
-// This is best-effort: errors are logged as warnings and nil is always returned.
-func ReapOrphanedProcesses(logger *slog.Logger) error {
+// This is best-effort: errors are logged as warnings.
+func ReapOrphanedProcesses(logger *slog.Logger) {
 	pids, err := FindOrphanedClaudeProcesses()
 	if err != nil {
 		logger.Warn("failed to find orphaned claude processes", "error", err)
-		return nil
+		return
 	}
 
 	for _, pid := range pids {
 		logger.Info("reaping orphaned claude process", "pid", pid)
 		SignalAndWait(pid, 3*time.Second, logger)
 	}
-
-	return nil
 }
 
 // hasPPID1 parses /proc/PID/status content and returns true if PPid is 1.
@@ -161,7 +162,7 @@ func findAgentProcessesLinux() ([]int, error) {
 func findAgentProcessesDarwin() ([]int, error) {
 	currentPID := os.Getpid()
 
-	out, err := exec.Command("pgrep", "-f", "claude-plane-agent run").Output()
+	out, err := exec.Command("pgrep", "-u", strconv.Itoa(os.Getuid()), "-f", "claude-plane-agent run").Output()
 	if err != nil {
 		// pgrep exits 1 when no match — that's fine.
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
@@ -236,7 +237,7 @@ func findOrphanedClaudeProcessesDarwin() ([]int, error) {
 	currentPID := os.Getpid()
 	currentUID := os.Getuid()
 
-	out, err := exec.Command("ps", "-eo", "pid,ppid,uid,comm").Output()
+	out, err := exec.Command("ps", "-eo", "pid,ppid,uid,args").Output()
 	if err != nil {
 		return nil, fmt.Errorf("ps: %w", err)
 	}
@@ -266,8 +267,9 @@ func findOrphanedClaudeProcessesDarwin() ([]int, error) {
 			continue
 		}
 
-		comm := fields[3]
-		if strings.Contains(filepath.Base(comm), "claude") {
+		// args may contain spaces, so join all remaining fields.
+		fullCmd := strings.Join(fields[3:], " ")
+		if strings.Contains(fullCmd, "claude") {
 			pids = append(pids, pid)
 		}
 	}

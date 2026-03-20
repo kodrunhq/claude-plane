@@ -160,7 +160,9 @@ stopped before reconfiguring. Use --service to install as a system service in on
 
 			// Stop any existing agent before re-configuring.
 			dataDir := filepath.Join(configDir, "data")
-			os.MkdirAll(dataDir, 0o750)
+			if err := os.MkdirAll(dataDir, 0o750); err != nil {
+				slog.Warn("failed to create data dir", "error", err)
+			}
 			lifecycle.StopExisting(dataDir, slog.Default())
 
 			if err := agent.ExecuteJoin(serverURL, code, configDir); err != nil {
@@ -180,8 +182,14 @@ stopped before reconfiguring. Use --service to install as a system service in on
 					fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
 					return nil
 				}
-				binPath, _ = filepath.EvalSymlinks(binPath)
-				absConfig, _ := filepath.Abs(configPath)
+				binPath, err = filepath.EvalSymlinks(binPath)
+				if err != nil {
+					slog.Warn("could not resolve symlinks for binary", "error", err)
+				}
+				absConfig, err := filepath.Abs(configPath)
+				if err != nil {
+					return fmt.Errorf("resolve config path: %w", err)
+				}
 
 				fmt.Printf("Installing systemd service (requires sudo)...\n\n")
 				sudoCmd := exec.Command("sudo", binPath, "install-service", "--config", absConfig)

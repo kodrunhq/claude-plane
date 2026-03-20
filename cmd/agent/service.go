@@ -59,7 +59,9 @@ func installSystemd(binPath, configPath, runAsUser string) error {
 	}
 	// Chown to the service user.
 	if uid, gid, ok := lookupIDs(u); ok {
-		os.Chown(dataDir, uid, gid)
+		if err := os.Chown(dataDir, uid, gid); err != nil {
+			slog.Warn("failed to chown data dir", "dir", dataDir, "user", runAsUser, "error", err)
+		}
 	}
 
 	unit := fmt.Sprintf(`[Unit]
@@ -157,7 +159,7 @@ func installLaunchd(binPath, configPath string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("launchctl load: %w", err)
+		return fmt.Errorf("launchctl bootstrap: %w", err)
 	}
 
 	fmt.Printf("\n==> claude-plane-agent installed as launchd service\n")
@@ -253,16 +255,22 @@ func purgeConfigDir(configDir string) error {
 		return fmt.Errorf("cannot determine config directory for purge. Use --config-dir to specify")
 	}
 
-	// Safety: don't delete root or home directory.
-	if configDir == "/" || configDir == os.Getenv("HOME") {
-		return fmt.Errorf("refusing to purge %q — does not look like a claude-plane config directory", configDir)
+	cleaned := filepath.Clean(configDir)
+	// Require path to end with ".claude-plane" as a safety guard.
+	if filepath.Base(cleaned) != ".claude-plane" && cleaned != "/etc/claude-plane" {
+		return fmt.Errorf("refusing to purge %q — path must end with '.claude-plane' or be '/etc/claude-plane'", configDir)
+	}
+
+	// Additional safety: don't delete root or home directory.
+	if cleaned == "/" {
+		return fmt.Errorf("refusing to purge root directory")
 	}
 
 	// Kill remaining agent processes before purging.
-	dataDir := filepath.Join(configDir, "data")
+	dataDir := filepath.Join(cleaned, "data")
 	lifecycle.StopExisting(dataDir, slog.Default())
 
-	if err := os.RemoveAll(configDir); err != nil {
+	if err := os.RemoveAll(cleaned); err != nil {
 		return fmt.Errorf("remove config directory: %w", err)
 	}
 

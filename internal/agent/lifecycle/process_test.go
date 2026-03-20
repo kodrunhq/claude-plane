@@ -138,10 +138,8 @@ func TestParsePIDList(t *testing.T) {
 	}
 }
 
-func TestReapOrphanedProcesses_NoError(t *testing.T) {
+func TestReapOrphanedProcesses_NoPanic(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	err := ReapOrphanedProcesses(logger)
-	if err != nil {
-		t.Errorf("ReapOrphanedProcesses() = %v; want nil", err)
-	}
+	// Should not panic.
+	ReapOrphanedProcesses(logger)
 }
