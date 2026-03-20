@@ -35,6 +35,7 @@ import {
   TRIGGER_WEBHOOK,
   TRIGGER_JOB_COMPLETED,
   SESSION_WAITING_FOR_INPUT,
+  SESSION_RESUMED,
 } from '../constants/eventTypes.ts';
 
 /** Wire format from WSFanout (internal/server/event/ws_fanout.go). */
@@ -106,6 +107,7 @@ export function useEventStream() {
             case SESSION_EXITED:
             case SESSION_TERMINATED:
             case SESSION_WAITING_FOR_INPUT:
+            case SESSION_RESUMED:
               queryClient.invalidateQueries({ queryKey: ['sessions'] });
               break;
             case MACHINE_CONNECTED:

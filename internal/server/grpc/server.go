@@ -420,7 +420,19 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			// Handle session lifecycle events to update DB status.
 			if ss := res.event.GetSessionStatus(); ss != nil {
 				newStatus := ss.GetStatus()
-				if s.sessionStore != nil {
+
+				// Allowlist: only accept known status values from agents.
+				allowedStatuses := map[string]bool{
+					status.Running:         true,
+					status.WaitingForInput: true,
+					status.Completed:       true,
+					status.Failed:          true,
+					status.Terminated:      true,
+				}
+				if !allowedStatuses[newStatus] {
+					s.logger.Warn("agent sent unknown status, ignoring",
+						"machine_id", machineID, "session_id", ss.GetSessionId(), "status", newStatus)
+				} else if s.sessionStore != nil {
 					if err := s.sessionStore.UpdateSessionStatus(ss.GetSessionId(), newStatus); err != nil {
 						s.logger.Warn("failed to update session status from agent event",
 							"session_id", ss.GetSessionId(), "status", newStatus, "error", err)
@@ -451,7 +463,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					case status.WaitingForInput:
 						evType = event.TypeSessionWaitingForInput
 					case status.Running:
-						evType = event.TypeSessionStarted
+						evType = event.TypeSessionResumed
 					}
 					if evType != "" {
 						if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {

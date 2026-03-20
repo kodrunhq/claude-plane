@@ -200,8 +200,8 @@ func validatePreferences(raw json.RawMessage) error {
 	}
 
 	// Validate session_stale_timeout.
-	if p.SessionStaleTimeout != nil && *p.SessionStaleTimeout < 0 {
-		return fmt.Errorf("session_stale_timeout must be >= 0")
+	if p.SessionStaleTimeout != nil && (*p.SessionStaleTimeout < 0 || *p.SessionStaleTimeout > 525960) {
+		return fmt.Errorf("session_stale_timeout must be between 0 and 525960 (minutes)")
 	}
 
 	// Validate default_step_delay.
