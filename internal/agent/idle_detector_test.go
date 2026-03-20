@@ -152,9 +152,8 @@ func TestIdleDetector_ResetToPhase1(t *testing.T) {
 
 	// Phase 0 → 1: startup marker.
 	d.Feed(DefaultIdlePromptMarker())
-	// Phase 1: first idle fires.
+	// Phase 1: first idle fires (Feed calls onIdle synchronously).
 	d.Feed(DefaultIdlePromptMarker())
-	time.Sleep(10 * time.Millisecond)
 	if got := idleCount.Load(); got != 1 {
 		t.Fatalf("expected 1 idle firing before reset, got %d", got)
 	}
@@ -162,7 +161,6 @@ func TestIdleDetector_ResetToPhase1(t *testing.T) {
 	// Reset and verify next marker fires idle again.
 	d.ResetToPhase1()
 	d.Feed(DefaultIdlePromptMarker())
-	time.Sleep(10 * time.Millisecond)
 	if got := idleCount.Load(); got != 2 {
 		t.Fatalf("expected 2 idle firings after reset, got %d", got)
 	}
@@ -179,16 +177,14 @@ func TestIdleDetector_ResetToPhase1_ClearsTriggered(t *testing.T) {
 
 	// Phase 0 → 1: startup marker.
 	d.Feed(DefaultIdlePromptMarker())
-	// Phase 1: idle fires and sets triggered=true.
+	// Phase 1: idle fires and sets triggered=true (synchronous).
 	d.Feed(DefaultIdlePromptMarker())
-	time.Sleep(10 * time.Millisecond)
 	if got := idleCount.Load(); got != 1 {
 		t.Fatalf("expected 1 idle firing, got %d", got)
 	}
 
 	// Further markers should NOT fire (triggered=true).
 	d.Feed(DefaultIdlePromptMarker())
-	time.Sleep(10 * time.Millisecond)
 	if got := idleCount.Load(); got != 1 {
 		t.Fatalf("expected still 1 idle firing (triggered=true blocks), got %d", got)
 	}
@@ -196,7 +192,6 @@ func TestIdleDetector_ResetToPhase1_ClearsTriggered(t *testing.T) {
 	// Reset clears triggered, so next marker should fire again.
 	d.ResetToPhase1()
 	d.Feed(DefaultIdlePromptMarker())
-	time.Sleep(10 * time.Millisecond)
 	if got := idleCount.Load(); got != 2 {
 		t.Fatalf("expected 2 idle firings after reset, got %d", got)
 	}

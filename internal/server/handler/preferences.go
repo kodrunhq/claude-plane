@@ -144,11 +144,11 @@ type preferencesPayload struct {
 	DefaultSessionTimeout *int                       `json:"default_session_timeout"`
 	DefaultStepTimeout    *int                       `json:"default_step_timeout"`
 	DefaultStepDelay      *int                       `json:"default_step_delay"`
-	SessionStaleTimeout   *int                        `json:"session_stale_timeout"`
-	DefaultEnvVars        map[string]string           `json:"default_env_vars"`
-	Notifications         *notificationPrefs          `json:"notifications"`
-	UI                    *uiPrefs                    `json:"ui"`
-	MachineOverrides      map[string]machineOverride  `json:"machine_overrides"`
+	SessionStaleTimeout   *int                       `json:"session_stale_timeout"`
+	DefaultEnvVars        map[string]string          `json:"default_env_vars"`
+	Notifications         *notificationPrefs         `json:"notifications"`
+	UI                    *uiPrefs                   `json:"ui"`
+	MachineOverrides      map[string]machineOverride `json:"machine_overrides"`
 }
 
 // notificationPrefs holds notification preferences.

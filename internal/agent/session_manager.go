@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
+	"github.com/kodrunhq/claude-plane/internal/shared/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
