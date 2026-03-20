@@ -417,6 +417,68 @@ func TestJobHandler_AddStep_InvalidModel(t *testing.T) {
 	}
 }
 
+func TestJobHandler_UpdateStep_WithOpusPlanModel(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"name": "Update Model Test"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	stepBody, _ := json.Marshal(map[string]interface{}{"name": "Original", "prompt": "do thing"})
+	stepResp, _ := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/steps", "application/json", bytes.NewReader(stepBody))
+	var step store.Step
+	json.NewDecoder(stepResp.Body).Decode(&step)
+	stepResp.Body.Close()
+
+	updateBody, _ := json.Marshal(map[string]interface{}{"name": "Updated", "prompt": "do thing", "model": "opusplan"})
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/jobs/"+created.JobID+"/steps/"+step.StepID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for opusplan model update, got %d", resp.StatusCode)
+	}
+}
+
+func TestJobHandler_UpdateStep_InvalidModel(t *testing.T) {
+	s := newTestStore(t)
+	srv, _ := newJobRouter(t, s)
+	defer srv.Close()
+
+	body, _ := json.Marshal(map[string]string{"name": "Update Model Test"})
+	createResp, _ := http.Post(srv.URL+"/api/v1/jobs", "application/json", bytes.NewReader(body))
+	var created store.Job
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	stepBody, _ := json.Marshal(map[string]interface{}{"name": "Original", "prompt": "do thing"})
+	stepResp, _ := http.Post(srv.URL+"/api/v1/jobs/"+created.JobID+"/steps", "application/json", bytes.NewReader(stepBody))
+	var step store.Step
+	json.NewDecoder(stepResp.Body).Decode(&step)
+	stepResp.Body.Close()
+
+	updateBody, _ := json.Marshal(map[string]interface{}{"name": "Updated", "prompt": "do thing", "model": "bad_model"})
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/v1/jobs/"+created.JobID+"/steps/"+step.StepID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid model update, got %d", resp.StatusCode)
+	}
+}
+
 func TestJobHandler_UpdateStep(t *testing.T) {
 	s := newTestStore(t)
 	srv, _ := newJobRouter(t, s)

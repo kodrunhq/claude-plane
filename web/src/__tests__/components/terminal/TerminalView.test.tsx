@@ -5,6 +5,7 @@ import { TerminalView } from '../../../components/terminal/TerminalView.tsx';
 // Mock useTerminalSession to control status
 const mockFocusTerminal = vi.fn();
 let mockStatus = 'connecting';
+let mockShowScrollButton = false;
 
 vi.mock('../../../hooks/useTerminalSession.ts', () => ({
   useTerminalSession: () => ({
@@ -13,6 +14,8 @@ vi.mock('../../../hooks/useTerminalSession.ts', () => ({
     ws: { current: null },
     fitTerminal: vi.fn(),
     focusTerminal: mockFocusTerminal,
+    showScrollButton: mockShowScrollButton,
+    scrollToBottom: vi.fn(),
   }),
 }));
 
@@ -77,5 +80,13 @@ describe('TerminalView', () => {
     mockStatus = 'live';
     renderTerminalView('abcdef12-1234-1234-1234-123456789abc');
     expect(screen.getByText('abcdef12')).toBeInTheDocument();
+  });
+
+  it('renders scroll-to-bottom button when showScrollButton is true', () => {
+    mockStatus = 'live';
+    mockShowScrollButton = true;
+    renderTerminalView();
+    expect(screen.getByText('Bottom')).toBeInTheDocument();
+    mockShowScrollButton = false;
   });
 });

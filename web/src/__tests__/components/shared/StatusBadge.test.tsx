@@ -18,6 +18,7 @@ describe('StatusBadge', () => {
       'online',
       'offline',
       'success',
+      'waiting_for_input',
     ];
 
     for (const status of statuses) {
