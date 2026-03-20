@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -30,6 +31,7 @@ func main() {
 		newRunCmd(),
 		newJoinCmd(),
 		newInstallServiceCmd(),
+		newUninstallServiceCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -254,5 +256,38 @@ The agent binary must already be in a system-accessible location.`,
 	}
 	cmd.Flags().String("config", os.Getenv("HOME")+"/.claude-plane/agent.toml", "Path to agent TOML config file")
 	cmd.Flags().String("user", "", "User to run the service as (default: current user)")
+	return cmd
+}
+
+func newUninstallServiceCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "uninstall-service",
+		Short: "Remove the agent system service",
+		Long: `Stops and removes the claude-plane-agent system service.
+With --purge, also removes all configuration, certificates, and data.
+
+Requires root/sudo.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			purge, _ := cmd.Flags().GetBool("purge")
+			configDir, _ := cmd.Flags().GetString("config-dir")
+
+			if purge && configDir == "" {
+				sudoUser := os.Getenv("SUDO_USER")
+				if sudoUser != "" {
+					u, err := user.Lookup(sudoUser)
+					if err == nil {
+						configDir = filepath.Join(u.HomeDir, ".claude-plane")
+					}
+				}
+				if configDir == "" {
+					configDir = "/etc/claude-plane"
+				}
+			}
+
+			return uninstallService(purge, configDir)
+		},
+	}
+	cmd.Flags().Bool("purge", false, "Also remove all config, certificates, and data")
+	cmd.Flags().String("config-dir", "", "Config directory to purge (auto-detected from SUDO_USER)")
 	return cmd
 }

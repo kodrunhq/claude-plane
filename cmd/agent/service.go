@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/kodrunhq/claude-plane/internal/agent/lifecycle"
 )
 
 func installService(binPath, configPath, runAsUser string) error {
@@ -176,4 +179,93 @@ func lookupIDs(u *user.User) (uid, gid int, ok bool) {
 		return 0, 0, false
 	}
 	return uidN, gidN, true
+}
+
+func uninstallService(purge bool, configDir string) error {
+	switch runtime.GOOS {
+	case "linux":
+		return uninstallSystemd(purge, configDir)
+	case "darwin":
+		return uninstallLaunchd(purge, configDir)
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+}
+
+func uninstallSystemd(purge bool, configDir string) error {
+	if os.Getuid() != 0 {
+		return fmt.Errorf("uninstall-service requires root. Run with:\n  sudo claude-plane-agent uninstall-service")
+	}
+
+	servicePath := "/etc/systemd/system/claude-plane-agent.service"
+	if _, err := os.Stat(servicePath); os.IsNotExist(err) {
+		fmt.Println("No claude-plane-agent service found.")
+		if !purge {
+			return nil
+		}
+	} else {
+		_ = exec.Command("systemctl", "stop", "claude-plane-agent").Run()
+		_ = exec.Command("systemctl", "disable", "claude-plane-agent").Run()
+		if err := os.Remove(servicePath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove service file: %w", err)
+		}
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+		fmt.Printf("\n==> Service stopped and removed\n")
+		fmt.Printf("    Removed: %s\n", servicePath)
+	}
+
+	if purge {
+		return purgeConfigDir(configDir)
+	}
+	fmt.Println()
+	return nil
+}
+
+func uninstallLaunchd(purge bool, configDir string) error {
+	if os.Getuid() != 0 {
+		return fmt.Errorf("uninstall-service requires root. Run with:\n  sudo claude-plane-agent uninstall-service")
+	}
+
+	plistPath := "/Library/LaunchDaemons/com.claude-plane.agent.plist"
+	if _, err := os.Stat(plistPath); os.IsNotExist(err) {
+		fmt.Println("No claude-plane-agent service found.")
+		if !purge {
+			return nil
+		}
+	} else {
+		_ = exec.Command("launchctl", "bootout", "system/com.claude-plane.agent").Run()
+		if err := os.Remove(plistPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove plist: %w", err)
+		}
+		fmt.Printf("\n==> Service stopped and removed\n")
+		fmt.Printf("    Removed: %s\n", plistPath)
+	}
+
+	if purge {
+		return purgeConfigDir(configDir)
+	}
+	fmt.Println()
+	return nil
+}
+
+func purgeConfigDir(configDir string) error {
+	if configDir == "" {
+		return fmt.Errorf("cannot determine config directory for purge. Use --config-dir to specify")
+	}
+
+	// Safety: don't delete root or home directory.
+	if configDir == "/" || configDir == os.Getenv("HOME") {
+		return fmt.Errorf("refusing to purge %q — does not look like a claude-plane config directory", configDir)
+	}
+
+	// Kill remaining agent processes before purging.
+	dataDir := filepath.Join(configDir, "data")
+	lifecycle.StopExisting(dataDir, slog.Default())
+
+	if err := os.RemoveAll(configDir); err != nil {
+		return fmt.Errorf("remove config directory: %w", err)
+	}
+
+	fmt.Printf("    Config:  %s (purged)\n\n", configDir)
+	return nil
 }
