@@ -3,7 +3,7 @@ project_name: claude-plane
 
 before:
   hooks:
-    - bash -c "cd web && npm ci && npm run build"
+    - bash -c "cd web && npm ci && npm run build && touch ../internal/server/frontend/dist/.gitkeep"
     - bash -c "VERSION={{ .Version }} COMMIT={{ .ShortCommit }} DATE={{ .Date }} bash scripts/build-agent-binaries.sh"
 
 builds:

@@ -75,6 +75,7 @@ jobs:
         run: |
           npm ci
           npm run build
+          touch ../internal/server/frontend/dist/.gitkeep
 
       - name: Verify frontend build output
         run: |
