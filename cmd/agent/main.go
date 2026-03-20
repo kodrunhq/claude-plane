@@ -14,6 +14,7 @@ import (
 
 	"github.com/kodrunhq/claude-plane/internal/agent"
 	"github.com/kodrunhq/claude-plane/internal/agent/config"
+	"github.com/kodrunhq/claude-plane/internal/agent/lifecycle"
 	"github.com/kodrunhq/claude-plane/internal/shared/buildinfo"
 )
 
@@ -61,6 +62,26 @@ func newRunCmd() *cobra.Command {
 			if err := os.MkdirAll(cfg.Agent.DataDir, 0o750); err != nil {
 				return fmt.Errorf("create data dir: %w", err)
 			}
+
+			// --- PID lock ---
+			pid, alive, err := lifecycle.CheckPIDFile(cfg.Agent.DataDir)
+			if err != nil {
+				slog.Warn("failed to check PID file", "error", err)
+			} else if alive {
+				return fmt.Errorf("agent already running (PID %d). Stop it first or use 'join' to re-register", pid)
+			} else if pid != 0 {
+				slog.Warn("removed stale PID file", "pid", pid)
+				lifecycle.RemovePIDFile(cfg.Agent.DataDir)
+			}
+
+			pidCleanup, err := lifecycle.WritePIDFile(cfg.Agent.DataDir)
+			if err != nil {
+				return fmt.Errorf("write PID file: %w", err)
+			}
+			defer pidCleanup()
+
+			// Reap orphaned claude processes from a previous crash.
+			lifecycle.ReapOrphanedProcesses(slog.Default())
 
 			// Build idle detector options from config.
 			var idleOpts []agent.IdleDetectorOption
