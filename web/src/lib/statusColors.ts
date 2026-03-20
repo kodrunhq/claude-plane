@@ -28,6 +28,8 @@ const STATUS_META: Record<string, StatusMeta> = {
 
   running: { variant: 'running', iconType: 'spinner', pulse: true },
 
+  waiting_for_input: { variant: 'warning', iconType: 'clock', pulse: false },
+
   pending: { variant: 'warning', iconType: 'spinner', pulse: false },
 
   created: { variant: 'pending', iconType: 'clock', pulse: false },

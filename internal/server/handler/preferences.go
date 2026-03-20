@@ -144,6 +144,7 @@ type preferencesPayload struct {
 	DefaultSessionTimeout *int                       `json:"default_session_timeout"`
 	DefaultStepTimeout    *int                       `json:"default_step_timeout"`
 	DefaultStepDelay      *int                       `json:"default_step_delay"`
+	SessionStaleTimeout   *int                        `json:"session_stale_timeout"`
 	DefaultEnvVars        map[string]string           `json:"default_env_vars"`
 	Notifications         *notificationPrefs          `json:"notifications"`
 	UI                    *uiPrefs                    `json:"ui"`
@@ -196,6 +197,11 @@ func validatePreferences(raw json.RawMessage) error {
 	// Validate default_step_timeout.
 	if p.DefaultStepTimeout != nil && *p.DefaultStepTimeout < 0 {
 		return fmt.Errorf("default_step_timeout must be >= 0")
+	}
+
+	// Validate session_stale_timeout.
+	if p.SessionStaleTimeout != nil && *p.SessionStaleTimeout < 0 {
+		return fmt.Errorf("session_stale_timeout must be >= 0")
 	}
 
 	// Validate default_step_delay.

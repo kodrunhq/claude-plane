@@ -9,7 +9,7 @@ export interface Session {
   user_id: string;
   command: string;
   working_dir: string;
-  status: 'created' | 'running' | 'completed' | 'failed' | 'terminated';
+  status: 'created' | 'running' | 'waiting_for_input' | 'completed' | 'failed' | 'terminated';
   created_at: string;
   updated_at: string;
   template_id?: string;

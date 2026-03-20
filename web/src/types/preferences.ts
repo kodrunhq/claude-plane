@@ -22,6 +22,7 @@ export interface UserPreferences {
   default_step_timeout?: number;
   default_step_delay?: number;
   default_env_vars?: Record<string, string>;
+  session_stale_timeout?: number;
   notifications?: NotificationPrefs;
   ui?: UIPrefs;
   machine_overrides?: Record<string, MachineOverride>;

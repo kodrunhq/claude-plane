@@ -14,6 +14,7 @@ export const SESSION_STARTED = 'session.started';
 export const SESSION_EXITED = 'session.exited';
 export const SESSION_TERMINATED = 'session.terminated';
 export const SESSION_DISPATCH_FAILED = 'session.dispatch_failed';
+export const SESSION_WAITING_FOR_INPUT = 'session.waiting_for_input';
 
 // Machine connectivity events.
 export const MACHINE_CONNECTED = 'machine.connected';
@@ -72,6 +73,7 @@ export const ALL_EVENT_TYPES = [
   SESSION_EXITED,
   SESSION_TERMINATED,
   SESSION_DISPATCH_FAILED,
+  SESSION_WAITING_FOR_INPUT,
   MACHINE_CONNECTED,
   MACHINE_DISCONNECTED,
   MACHINE_STALE,
@@ -114,7 +116,7 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   },
   {
     label: 'Sessions',
-    events: [SESSION_STARTED, SESSION_EXITED, SESSION_TERMINATED, SESSION_DISPATCH_FAILED],
+    events: [SESSION_STARTED, SESSION_EXITED, SESSION_TERMINATED, SESSION_DISPATCH_FAILED, SESSION_WAITING_FOR_INPUT],
   },
   {
     label: 'Machines',
