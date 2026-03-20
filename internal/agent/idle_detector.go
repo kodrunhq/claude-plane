@@ -7,16 +7,26 @@ import (
 	"time"
 )
 
-// defaultIdlePromptMarker is the UTF-8 encoding of "❯ " which Claude CLI
-// outputs when it returns to its input prompt after completing a response.
-// The raw bytes are: E2 9D AF 20 (❯ = U+276F, then a space).
-var defaultIdlePromptMarker = []byte{0xE2, 0x9D, 0xAF, 0x20}
+// promptMarkerNBSP is the UTF-8 encoding of "❯\u00A0" — the prompt marker
+// followed by a non-breaking space (U+00A0). This is what Claude CLI outputs
+// in the vast majority of cases.
+// Raw bytes: E2 9D AF C2 A0.
+var promptMarkerNBSP = []byte{0xE2, 0x9D, 0xAF, 0xC2, 0xA0}
 
-// DefaultIdlePromptMarker returns a copy of the default prompt marker bytes.
-func DefaultIdlePromptMarker() []byte {
-	out := make([]byte, len(defaultIdlePromptMarker))
-	copy(out, defaultIdlePromptMarker)
-	return out
+// promptMarkerSpace is the UTF-8 encoding of "❯ " — the prompt marker
+// followed by a regular space (U+0020). Claude CLI occasionally uses this
+// variant instead of NBSP.
+// Raw bytes: E2 9D AF 20.
+var promptMarkerSpace = []byte{0xE2, 0x9D, 0xAF, 0x20}
+
+// DefaultIdlePromptMarkers returns the two prompt marker variants that Claude
+// CLI may output: one with NBSP (primary) and one with regular space (fallback).
+func DefaultIdlePromptMarkers() [][]byte {
+	a := make([]byte, len(promptMarkerNBSP))
+	copy(a, promptMarkerNBSP)
+	b := make([]byte, len(promptMarkerSpace))
+	copy(b, promptMarkerSpace)
+	return [][]byte{a, b}
 }
 
 // DefaultStartupTimeout is how long to wait for the startup prompt before
@@ -42,19 +52,19 @@ type IdleDetector struct {
 	keepAlive       bool   // when true, onIdle fires repeatedly without setting triggered
 	onReady         func() // called when startup prompt detected (phase 0 → 1)
 	onIdle          func() // called when completion prompt detected (phase 1)
-	buf             []byte // rolling buffer for cross-chunk detection
-	marker          []byte // prompt marker bytes to detect
+	buf             []byte   // rolling buffer for cross-chunk detection
+	markers         [][]byte // prompt marker byte sequences to detect (any match triggers)
 	startupTimeout  time.Duration
 }
 
 // IdleDetectorOption configures optional IdleDetector settings.
 type IdleDetectorOption func(*IdleDetector)
 
-// WithPromptMarker overrides the default prompt marker bytes.
+// WithPromptMarker overrides the default prompt markers with a single marker.
 func WithPromptMarker(marker []byte) IdleDetectorOption {
 	return func(d *IdleDetector) {
 		if len(marker) > 0 {
-			d.marker = marker
+			d.markers = [][]byte{marker}
 		}
 	}
 }
@@ -85,14 +95,36 @@ func NewIdleDetector(onReady, onIdle func(), opts ...IdleDetectorOption) *IdleDe
 	d := &IdleDetector{
 		onReady:        onReady,
 		onIdle:         onIdle,
-		marker:         DefaultIdlePromptMarker(),
+		markers:        DefaultIdlePromptMarkers(),
 		startupTimeout: DefaultStartupTimeout,
 	}
 	for _, opt := range opts {
 		opt(d)
 	}
-	d.buf = make([]byte, 0, len(d.marker))
+	d.buf = make([]byte, 0, d.maxMarkerLen())
 	return d
+}
+
+// containsAnyMarker returns true if the rolling buffer contains any of the
+// configured prompt markers.
+func (d *IdleDetector) containsAnyMarker() bool {
+	for _, m := range d.markers {
+		if bytes.Contains(d.buf, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// maxMarkerLen returns the length of the longest marker.
+func (d *IdleDetector) maxMarkerLen() int {
+	max := 0
+	for _, m := range d.markers {
+		if len(m) > max {
+			max = len(m)
+		}
+	}
+	return max
 }
 
 // Start begins the startup timeout timer. If the startup prompt is not detected
@@ -136,13 +168,13 @@ func (d *IdleDetector) Feed(data []byte) {
 	// Append data to rolling buffer for cross-chunk boundary detection.
 	d.buf = append(d.buf, data...)
 
-	// Keep only the last (markerLen - 1 + dataLen) bytes to handle splits.
-	maxKeep := len(d.marker) - 1 + len(data)
+	// Keep only the last (maxMarkerLen - 1 + dataLen) bytes to handle splits.
+	maxKeep := d.maxMarkerLen() - 1 + len(data)
 	if len(d.buf) > maxKeep {
 		d.buf = d.buf[len(d.buf)-maxKeep:]
 	}
 
-	if !bytes.Contains(d.buf, d.marker) {
+	if !d.containsAnyMarker() {
 		d.mu.Unlock()
 		return
 	}

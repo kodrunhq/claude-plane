@@ -4,14 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version_bump:
-        description: "Version bump type (use 'current' to release the latest existing tag)"
+        description: "Version bump type"
         required: true
         type: choice
         options:
           - patch
           - minor
           - major
-          - current
 
 permissions:
   contents: write
@@ -54,7 +53,6 @@ jobs:
             major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
             minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
             patch) PATCH=$((PATCH + 1)) ;;
-            current) ;;
           esac
 
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
@@ -63,7 +61,6 @@ jobs:
           echo "### Version: v${NEW_VERSION} (${VERSION_BUMP} from ${LATEST_TAG})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check tag does not exist
-        if: inputs.version_bump != 'current'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -72,8 +69,25 @@ jobs:
             exit 1
           fi
 
-      - name: Stub frontend dist for embed
-        run: mkdir -p internal/server/frontend/dist && touch internal/server/frontend/dist/.gitkeep
+      # Build frontend FIRST — all subsequent Go compilations embed the real bundle.
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verify frontend build output
+        run: |
+          if [ ! -f internal/server/frontend/dist/index.html ]; then
+            echo "::error::Frontend build did not produce index.html"
+            exit 1
+          fi
+          ASSET_COUNT=$(find internal/server/frontend/dist/assets -name '*.js' 2>/dev/null | wc -l)
+          if [ "$ASSET_COUNT" -eq 0 ]; then
+            echo "::error::Frontend build produced no JS assets"
+            exit 1
+          fi
+          echo "Frontend build OK: index.html + $ASSET_COUNT JS assets"
 
       - name: Vet
         run: go vet ./...
@@ -84,12 +98,11 @@ jobs:
       - name: Test frontend
         working-directory: web
         run: |
-          npm ci
           npx tsc --noEmit
           npm run lint
           npm run test -- --run
 
-      - name: Smoke test (build all binaries + verify agent embed)
+      - name: Smoke test (build all binaries + verify embeds)
         run: |
           bash scripts/build-agent-binaries.sh
           for f in internal/server/agentdl/binaries/claude-plane-agent-*; do
@@ -107,7 +120,6 @@ jobs:
           /tmp/claude-plane-server version 2>/dev/null || true
 
       - name: Create and push tag
-        if: inputs.version_bump != 'current'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
@@ -122,11 +134,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify goreleaser output
+      - name: Verify release artifacts
         run: |
           echo "==> Checking goreleaser dist/ output..."
           ls -la dist/server_linux_amd64_v1/ 2>/dev/null || ls -la dist/server_linux_amd64*/ 2>/dev/null
           ls -la dist/agent_linux_amd64_v1/ 2>/dev/null || ls -la dist/agent_linux_amd64*/ 2>/dev/null
+
+          # Verify agent binary exists and has install-service.
           AGENT_BIN=$(find dist/ -name 'claude-plane-agent' -path '*linux_amd64*' | head -1)
           if [ -z "$AGENT_BIN" ]; then
             echo "::error::Agent binary not found in goreleaser dist/"
@@ -134,6 +148,22 @@ jobs:
           fi
           "$AGENT_BIN" install-service --help > /dev/null 2>&1
           echo "OK goreleaser agent has install-service"
+
+          # Verify server binary has frontend embedded (not just .gitkeep).
+          SERVER_BIN=$(find dist/ -name 'claude-plane-server' -path '*linux_amd64*' | head -1)
+          if [ -z "$SERVER_BIN" ]; then
+            echo "::error::Server binary not found in goreleaser dist/"
+            exit 1
+          fi
+          SERVER_SIZE=$(stat -c%s "$SERVER_BIN")
+          # A server with only .gitkeep embedded is ~25MB; with frontend it's ~27MB+.
+          # Use 26MB as a sanity threshold.
+          MIN_SIZE=$((26 * 1024 * 1024))
+          if [ "$SERVER_SIZE" -lt "$MIN_SIZE" ]; then
+            echo "::error::Server binary suspiciously small (${SERVER_SIZE} bytes) — frontend may not be embedded"
+            exit 1
+          fi
+          echo "OK server binary: ${SERVER_SIZE} bytes (frontend embedded)"
           echo "==> All release artifacts verified"
 
       # --- Docker: server image only ---
