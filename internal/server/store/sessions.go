@@ -8,22 +8,22 @@ import (
 
 // Session represents a terminal session persisted in SQLite.
 type Session struct {
-	SessionID      string    `json:"session_id"`
-	MachineID      string    `json:"machine_id"`
-	UserID         string    `json:"user_id"`
-	TemplateID     string    `json:"template_id,omitempty"`
-	Command        string    `json:"command"`
-	WorkingDir     string    `json:"working_dir"`
-	Status         string    `json:"status"`
-	Model          string    `json:"model,omitempty"`
-	SkipPerms      string    `json:"skip_permissions,omitempty"`
-	EnvVars        string    `json:"env_vars,omitempty"`
-	Args           string    `json:"args,omitempty"`
-	InitialPrompt  string    `json:"initial_prompt,omitempty"`
+	SessionID     string `json:"session_id"`
+	MachineID     string `json:"machine_id"`
+	UserID        string `json:"user_id"`
+	TemplateID    string `json:"template_id,omitempty"`
+	Command       string `json:"command"`
+	WorkingDir    string `json:"working_dir"`
+	Status        string `json:"status"`
+	Model         string `json:"model,omitempty"`
+	SkipPerms     string `json:"skip_permissions,omitempty"`
+	EnvVars       string `json:"env_vars,omitempty"`
+	Args          string `json:"args,omitempty"`
+	InitialPrompt string `json:"initial_prompt,omitempty"`
 	// CreatedAt corresponds to the database column `started_at`.
-	CreatedAt      time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"created_at"`
 	// UpdatedAt corresponds to the database column `ended_at` (or CreatedAt if not ended).
-	UpdatedAt      time.Time `json:"updated_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // CreateSession inserts a new session into the sessions table.
@@ -114,6 +114,23 @@ func (s *Store) ListSessionsByMachine(machineID string) ([]Session, error) {
 		FROM sessions WHERE machine_id = ? ORDER BY started_at DESC`, machineID)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions by machine: %w", err)
+	}
+	defer rows.Close()
+
+	return scanSessions(rows)
+}
+
+// ListSessionsByStatus returns sessions with the given status.
+func (s *Store) ListSessionsByStatus(status string) ([]Session, error) {
+	rows, err := s.reader.Query(`
+		SELECT session_id, machine_id, user_id, COALESCE(template_id, ''),
+		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
+		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
+		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
+		       started_at, ended_at
+		FROM sessions WHERE status = ? ORDER BY started_at DESC`, status)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions by status: %w", err)
 	}
 	defer rows.Close()
 

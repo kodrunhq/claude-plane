@@ -24,16 +24,17 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/config"
 	"github.com/kodrunhq/claude-plane/internal/server/connmgr"
 	"github.com/kodrunhq/claude-plane/internal/server/event"
+	"github.com/kodrunhq/claude-plane/internal/server/executor"
 	"github.com/kodrunhq/claude-plane/internal/server/frontend"
 	grpcserver "github.com/kodrunhq/claude-plane/internal/server/grpc"
 	"github.com/kodrunhq/claude-plane/internal/server/handler"
 	"github.com/kodrunhq/claude-plane/internal/server/ingest"
 	"github.com/kodrunhq/claude-plane/internal/server/logging"
 	"github.com/kodrunhq/claude-plane/internal/server/notify"
-	"github.com/kodrunhq/claude-plane/internal/server/retention"
-	"github.com/kodrunhq/claude-plane/internal/server/executor"
 	"github.com/kodrunhq/claude-plane/internal/server/orchestrator"
 	"github.com/kodrunhq/claude-plane/internal/server/provision"
+	"github.com/kodrunhq/claude-plane/internal/server/reaper"
+	"github.com/kodrunhq/claude-plane/internal/server/retention"
 	"github.com/kodrunhq/claude-plane/internal/server/scheduler"
 	"github.com/kodrunhq/claude-plane/internal/server/session"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
@@ -338,6 +339,10 @@ func newServeCmd() *cobra.Command {
 				return fmt.Errorf("start scheduler: %w", err)
 			}
 
+			// ---- Session stale reaper ----
+			sessionReaper := reaper.New(s, connMgr, eventBus, slog.Default())
+			sessionReaper.Start(ctx)
+
 			// Handlers
 			sessionHandler := session.NewSessionHandler(s, connMgr, registry, sessionClaimsGetter, slog.Default())
 			sessionHandler.SetPublisher(eventBus)
@@ -422,7 +427,7 @@ func newServeCmd() *cobra.Command {
 			apiKeyAuth := &api.APIKeyAuth{
 				Store:      s,
 				UserStore:  s,
-				SigningKey:  apiKeySigningKey,
+				SigningKey: apiKeySigningKey,
 			}
 
 			// Bridge handler — uses encryption key for connector secrets
@@ -432,25 +437,25 @@ func newServeCmd() *cobra.Command {
 			handlers := api.NewHandlers(s, authSvc, connMgr, grpcSrv.Broker(), cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
 			var shutdownHooks []func()
 			router := api.NewRouter(api.RouterDeps{
-				Handlers:           handlers,
-				SessionHandler:     sessionHandler,
-				WSHandler:          wsHandler,
-				EventsWSHandler:    eventsWSHandler,
-				LogsWSHandler:      logsWSHandler,
-				JobHandler:         jobHandler,
-				RunHandler:         runHandler,
-				EventHandler:       eventHandler,
-				WebhookHandler:     webhookHandler,
-				TriggerHandler:     triggerHandler,
-				IngestHandler:      ingestHandler,
-				ScheduleHandler:    scheduleHandler,
-				UserHandler:        userHandler,
-				CredentialHandler:  credentialHandler,
+				Handlers:            handlers,
+				SessionHandler:      sessionHandler,
+				WSHandler:           wsHandler,
+				EventsWSHandler:     eventsWSHandler,
+				LogsWSHandler:       logsWSHandler,
+				JobHandler:          jobHandler,
+				RunHandler:          runHandler,
+				EventHandler:        eventHandler,
+				WebhookHandler:      webhookHandler,
+				TriggerHandler:      triggerHandler,
+				IngestHandler:       ingestHandler,
+				ScheduleHandler:     scheduleHandler,
+				UserHandler:         userHandler,
+				CredentialHandler:   credentialHandler,
 				PreferencesHandler:  preferencesHandler,
 				NotificationHandler: notificationHandler,
 				LogsHandler:         logsHandler,
-				APIKeyAuth:         apiKeyAuth,
-				OnShutdown: func(f func()) { shutdownHooks = append(shutdownHooks, f) },
+				APIKeyAuth:          apiKeyAuth,
+				OnShutdown:          func(f func()) { shutdownHooks = append(shutdownHooks, f) },
 			})
 
 			// Agent binary download endpoint (public, no JWT required).
