@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
@@ -131,13 +132,20 @@ func newJoinCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "join CODE",
 		Short: "Join a server using a 6-character provisioning code",
-		Long:  "Redeems a short provisioning code to configure this agent with TLS certificates and server connection details.",
+		Long: `Redeems a short provisioning code to configure this agent with TLS certificates
+and server connection details. Any existing agent (service or process) is automatically
+stopped before reconfiguring. Use --service to install as a system service in one step.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			code := args[0]
 			serverFlag, _ := cmd.Flags().GetString("server")
 			configDir, _ := cmd.Flags().GetString("config-dir")
 			insecure, _ := cmd.Flags().GetBool("insecure")
+			installService, _ := cmd.Flags().GetBool("service")
+
+			if os.Getuid() == 0 && installService {
+				return fmt.Errorf("do not run 'join' as root. Run as your normal user — only the service installation needs sudo")
+			}
 
 			serverURL, err := agent.ResolveServerURL(serverFlag)
 			if err != nil {
@@ -148,6 +156,11 @@ func newJoinCmd() *cobra.Command {
 				return err
 			}
 
+			// Stop any existing agent before re-configuring.
+			dataDir := filepath.Join(configDir, "data")
+			os.MkdirAll(dataDir, 0o750)
+			lifecycle.StopExisting(dataDir, slog.Default())
+
 			if err := agent.ExecuteJoin(serverURL, code, configDir); err != nil {
 				return err
 			}
@@ -156,10 +169,34 @@ func newJoinCmd() *cobra.Command {
 			fmt.Printf("\nAgent configured for machine joining\n")
 			fmt.Printf("Certificates written to %s/certs/\n", configDir)
 			fmt.Printf("Config written to %s\n\n", configPath)
-			fmt.Printf("Start the agent:\n")
-			fmt.Printf("  claude-plane-agent run --config %s\n\n", configPath)
-			fmt.Printf("Install as a background service (recommended):\n")
-			fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
+
+			if installService {
+				binPath, err := os.Executable()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not determine binary path: %v\n", err)
+					fmt.Printf("Install the service manually:\n")
+					fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
+					return nil
+				}
+				binPath, _ = filepath.EvalSymlinks(binPath)
+				absConfig, _ := filepath.Abs(configPath)
+
+				fmt.Printf("Installing systemd service (requires sudo)...\n\n")
+				sudoCmd := exec.Command("sudo", binPath, "install-service", "--config", absConfig)
+				sudoCmd.Stdin = os.Stdin
+				sudoCmd.Stdout = os.Stdout
+				sudoCmd.Stderr = os.Stderr
+				if err := sudoCmd.Run(); err != nil {
+					fmt.Fprintf(os.Stderr, "\nWarning: service installation failed: %v\n", err)
+					fmt.Printf("You can install the service manually:\n")
+					fmt.Printf("  sudo %s install-service --config %s\n\n", binPath, absConfig)
+				}
+			} else {
+				fmt.Printf("Start the agent:\n")
+				fmt.Printf("  claude-plane-agent run --config %s\n\n", configPath)
+				fmt.Printf("Install as a background service (recommended):\n")
+				fmt.Printf("  sudo claude-plane-agent install-service --config %s\n\n", configPath)
+			}
 			return nil
 		},
 	}
@@ -173,6 +210,7 @@ func newJoinCmd() *cobra.Command {
 	cmd.Flags().String("server", "", "Server HTTP URL (falls back to CLAUDE_PLANE_SERVER env var)")
 	cmd.Flags().String("config-dir", defaultConfigDir, "Directory for config and certificates")
 	cmd.Flags().Bool("insecure", false, "Allow plain HTTP server URL (prints warning)")
+	cmd.Flags().Bool("service", false, "Install and start the agent as a system service after joining (requires sudo)")
 	return cmd
 }
 
