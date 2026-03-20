@@ -273,6 +273,7 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
                   <option value="opus">Opus</option>
                   <option value="sonnet">Sonnet</option>
                   <option value="haiku">Haiku</option>
+                  <option value="opusplan">Opus Plan</option>
                 </select>
               </div>
 

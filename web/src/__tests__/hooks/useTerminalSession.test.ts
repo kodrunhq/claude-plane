@@ -60,9 +60,12 @@ vi.mock('@xterm/xterm', () => {
     focus = mockTermFocus;
     onData = mockTermOnData;
     onResize = mockTermOnResize;
+    onScroll = vi.fn(() => ({ dispose: vi.fn() }));
     loadAddon = vi.fn();
+    scrollToBottom = vi.fn();
     cols = 80;
     rows = 24;
+    buffer = { active: { viewportY: 0, baseY: 0 } };
   }
   return { Terminal: MockTerminal };
 });

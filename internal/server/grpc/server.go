@@ -420,38 +420,58 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 			// Handle session lifecycle events to update DB status.
 			if ss := res.event.GetSessionStatus(); ss != nil {
 				newStatus := ss.GetStatus()
-				if s.sessionStore != nil {
+
+				// Allowlist: only accept known status values from agents.
+				allowedStatuses := map[string]bool{
+					status.Running:         true,
+					status.WaitingForInput: true,
+					status.Completed:       true,
+					status.Failed:          true,
+					status.Terminated:      true,
+				}
+				if !allowedStatuses[newStatus] {
+					s.logger.Warn("agent sent unknown status, ignoring",
+						"machine_id", machineID, "session_id", ss.GetSessionId(), "status", newStatus)
+				} else if s.sessionStore != nil {
 					if err := s.sessionStore.UpdateSessionStatus(ss.GetSessionId(), newStatus); err != nil {
 						s.logger.Warn("failed to update session status from agent event",
 							"session_id", ss.GetSessionId(), "status", newStatus, "error", err)
 					}
-				}
-				// Notify any connected browser WebSocket that the session status changed.
-				// This lets the frontend show "Session ended" instead of a dead terminal.
-				if s.registry != nil && (newStatus == status.Terminated || newStatus == status.Failed || newStatus == status.Completed) {
-					type sessionEndedMsg struct {
-						Type   string `json:"type"`
-						Status string `json:"status"`
+
+					// Notify any connected browser WebSocket that the session status changed.
+					// This lets the frontend show "Session ended" instead of a dead terminal.
+					if s.registry != nil && (newStatus == status.Terminated || newStatus == status.Failed || newStatus == status.Completed) {
+						type sessionEndedMsg struct {
+							Type   string `json:"type"`
+							Status string `json:"status"`
+						}
+						controlMsg, err := json.Marshal(sessionEndedMsg{Type: "session_ended", Status: newStatus})
+						if err != nil {
+							s.logger.Warn("failed to marshal session_ended control message", "error", err)
+						} else {
+							s.registry.PublishControl(ss.GetSessionId(), controlMsg)
+						}
 					}
-					controlMsg, err := json.Marshal(sessionEndedMsg{Type: "session_ended", Status: newStatus})
-					if err != nil {
-						s.logger.Warn("failed to marshal session_ended control message", "error", err)
-					} else {
-						s.registry.PublishControl(ss.GetSessionId(), controlMsg)
-					}
-				}
-				// Publish to event bus so /ws/events subscribers (sessions list) get invalidated.
-				if s.eventPublisher != nil {
-					var evType string
-					switch newStatus {
-					case status.Terminated:
-						evType = event.TypeSessionTerminated
-					case status.Failed, status.Completed:
-						evType = event.TypeSessionExited
-					}
-					if evType != "" {
-						if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {
-							s.logger.Warn("failed to publish session event", "type", evType, "error", err)
+					// Publish to event bus so /ws/events subscribers (sessions list) get invalidated.
+					if s.eventPublisher != nil {
+						var evType string
+						switch newStatus {
+						case status.Terminated:
+							evType = event.TypeSessionTerminated
+						case status.Failed, status.Completed:
+							evType = event.TypeSessionExited
+						case status.WaitingForInput:
+							evType = event.TypeSessionWaitingForInput
+						case status.Running:
+							// No event published here. The initial created→running transition
+							// is already covered by session.started in the session creation handler.
+							// The running status update still persists to the DB (above), so the
+							// frontend picks it up on the next query invalidation.
+						}
+						if evType != "" {
+							if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {
+								s.logger.Warn("failed to publish session event", "type", evType, "error", err)
+							}
 						}
 					}
 				}
@@ -555,9 +575,9 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 							comp = comp[:100]
 						}
 						ts, err := time.Parse(time.RFC3339Nano, e.GetTimestamp())
-					if err != nil {
-						ts = time.Now().UTC()
-					}
+						if err != nil {
+							ts = time.Now().UTC()
+						}
 						var metadata string
 						if attrs := e.GetAttrs(); len(attrs) > 0 {
 							if data, jsonErr := json.Marshal(attrs); jsonErr == nil {
@@ -592,7 +612,7 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 }
 
 const (
-	defaultScannerBufSize = 64 * 1024  // 64 KiB
+	defaultScannerBufSize = 64 * 1024   // 64 KiB
 	maxScannerBufSize     = 1024 * 1024 // 1 MiB
 )
 

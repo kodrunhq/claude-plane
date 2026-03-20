@@ -19,10 +19,12 @@ const (
 	TypeRunCancelled = "run.cancelled"
 
 	// Session lifecycle events.
-	TypeSessionStarted    = "session.started"
-	TypeSessionExited     = "session.exited"
-	TypeSessionTerminated     = "session.terminated"
-	TypeSessionDispatchFailed = "session.dispatch_failed"
+	TypeSessionStarted         = "session.started"
+	TypeSessionExited          = "session.exited"
+	TypeSessionTerminated      = "session.terminated"
+	TypeSessionDispatchFailed  = "session.dispatch_failed"
+	TypeSessionWaitingForInput = "session.waiting_for_input"
+	TypeSessionResumed         = "session.resumed"
 
 	// Machine connectivity events.
 	TypeMachineConnected    = "machine.connected"

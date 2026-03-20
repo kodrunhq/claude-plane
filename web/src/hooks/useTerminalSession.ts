@@ -20,6 +20,7 @@ export function useTerminalSession(
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [status, setStatus] = useState<TerminalStatus>('connecting');
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
 
   // Keep a stable reference to the actual container element so the effect
@@ -62,9 +63,35 @@ export function useTerminalSession(
 
     term.open(containerEl);
 
+    // --- Scroll pinning logic ---
+    const isScrollPinned = { current: true };
+    let scrollDebounceTimer: number | undefined;
+    let scrollRafId: number | undefined;
+
+    const onScrollDisposable = term.onScroll(() => {
+      const buf = term.buffer.active;
+      const pinned = buf.viewportY >= buf.baseY;
+      isScrollPinned.current = pinned;
+
+      clearTimeout(scrollDebounceTimer);
+      scrollDebounceTimer = window.setTimeout(() => {
+        setShowScrollButton(!pinned);
+      }, 100);
+    });
+
+    const scrollIfPinned = () => {
+      if (!isScrollPinned.current) return;
+      if (scrollRafId != null) return; // already scheduled
+      scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = undefined;
+        term.scrollToBottom();
+      });
+    };
+
     // Initial fit deferred to next frame so the container has layout dimensions.
     const initialFitFrame = requestAnimationFrame(() => {
       fitAddon.fit();
+      scrollIfPinned();
     });
 
     termRef.current = term;
@@ -97,6 +124,7 @@ export function useTerminalSession(
       // fit() is a no-op because xterm already has the correct size — but the
       // server/agent never received it. Send it explicitly here.
       fitAddon.fit();
+      scrollIfPinned();
       ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
 
       // Safety timeout: if scrollback_end never arrives, transition to live
@@ -108,6 +136,7 @@ export function useTerminalSession(
     ws.onmessage = (event: MessageEvent) => {
       if (event.data instanceof ArrayBuffer) {
         term.write(new Uint8Array(event.data));
+        scrollIfPinned();
       } else {
         try {
           const msg = JSON.parse(event.data as string) as { type: string; status?: string };
@@ -171,6 +200,7 @@ export function useTerminalSession(
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         fitAddon.fit();
+        scrollIfPinned();
       }, 50);
     });
     observer.observe(containerEl);
@@ -179,6 +209,9 @@ export function useTerminalSession(
       if (resizeTimer) clearTimeout(resizeTimer);
       cancelAnimationFrame(initialFitFrame);
       clearTimeout(scrollbackTimeout);
+      clearTimeout(scrollDebounceTimer);
+      if (scrollRafId != null) cancelAnimationFrame(scrollRafId);
+      onScrollDisposable.dispose();
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
       observer.disconnect();
@@ -202,5 +235,9 @@ export function useTerminalSession(
     termRef.current?.focus();
   }, []);
 
-  return { status, term: termRef, ws: wsRef, fitTerminal, focusTerminal };
+  const scrollToBottom = useCallback(() => {
+    termRef.current?.scrollToBottom();
+  }, []);
+
+  return { status, showScrollButton, term: termRef, ws: wsRef, fitTerminal, focusTerminal, scrollToBottom };
 }

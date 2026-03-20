@@ -144,10 +144,11 @@ type preferencesPayload struct {
 	DefaultSessionTimeout *int                       `json:"default_session_timeout"`
 	DefaultStepTimeout    *int                       `json:"default_step_timeout"`
 	DefaultStepDelay      *int                       `json:"default_step_delay"`
-	DefaultEnvVars        map[string]string           `json:"default_env_vars"`
-	Notifications         *notificationPrefs          `json:"notifications"`
-	UI                    *uiPrefs                    `json:"ui"`
-	MachineOverrides      map[string]machineOverride  `json:"machine_overrides"`
+	SessionStaleTimeout   *int                       `json:"session_stale_timeout"`
+	DefaultEnvVars        map[string]string          `json:"default_env_vars"`
+	Notifications         *notificationPrefs         `json:"notifications"`
+	UI                    *uiPrefs                   `json:"ui"`
+	MachineOverrides      map[string]machineOverride `json:"machine_overrides"`
 }
 
 // notificationPrefs holds notification preferences.
@@ -180,8 +181,8 @@ func validatePreferences(raw json.RawMessage) error {
 
 	// Validate machine_overrides.
 	for machineID, override := range p.MachineOverrides {
-		if override.Model != "" && override.Model != "opus" && override.Model != "sonnet" && override.Model != "haiku" {
-			return fmt.Errorf("machine_overrides[%s].model must be one of: opus, sonnet, haiku", machineID)
+		if override.Model != "" && override.Model != "opus" && override.Model != "sonnet" && override.Model != "haiku" && override.Model != "opusplan" {
+			return fmt.Errorf("machine_overrides[%s].model must be one of: opus, sonnet, haiku, opusplan", machineID)
 		}
 		if override.MaxConcurrentSessions < 0 {
 			return fmt.Errorf("machine_overrides[%s].max_concurrent_sessions must be >= 0", machineID)
@@ -196,6 +197,11 @@ func validatePreferences(raw json.RawMessage) error {
 	// Validate default_step_timeout.
 	if p.DefaultStepTimeout != nil && *p.DefaultStepTimeout < 0 {
 		return fmt.Errorf("default_step_timeout must be >= 0")
+	}
+
+	// Validate session_stale_timeout.
+	if p.SessionStaleTimeout != nil && (*p.SessionStaleTimeout < 0 || *p.SessionStaleTimeout > 525960) {
+		return fmt.Errorf("session_stale_timeout must be between 0 and 525960 (minutes)")
 	}
 
 	// Validate default_step_delay.

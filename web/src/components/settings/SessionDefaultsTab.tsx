@@ -14,6 +14,7 @@ interface SessionDefaultsTabProps {
 export function SessionDefaultsTab({ preferences, onSave, saving }: SessionDefaultsTabProps) {
   const [skipPermissions, setSkipPermissions] = useState(preferences.skip_permissions ?? true);
   const [sessionTimeout, setSessionTimeout] = useState(String(preferences.default_session_timeout ?? ''));
+  const [staleTimeout, setStaleTimeout] = useState(String(preferences.session_stale_timeout ?? ''));
   const [envEntries, setEnvEntries] = useState(envToEntries(preferences.default_env_vars));
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -23,13 +24,14 @@ export function SessionDefaultsTab({ preferences, onSave, saving }: SessionDefau
         ...preferences,
         skip_permissions: skipPermissions,
         default_session_timeout: sessionTimeout ? Number(sessionTimeout) : undefined,
+        session_stale_timeout: staleTimeout ? Number(staleTimeout) : undefined,
         default_env_vars: Object.keys(entriesToEnv(envEntries)).length > 0 ? entriesToEnv(envEntries) : undefined,
       });
       toast.success('Session defaults saved');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
-  }, [preferences, skipPermissions, sessionTimeout, envEntries, onSave]);
+  }, [preferences, skipPermissions, sessionTimeout, staleTimeout, envEntries, onSave]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -61,6 +63,23 @@ export function SessionDefaultsTab({ preferences, onSave, saving }: SessionDefau
           className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         <p className="text-xs text-text-secondary mt-1">Leave empty for no timeout</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-text-primary mb-1.5">
+          Session Idle Timeout (minutes)
+        </label>
+        <input
+          type="number"
+          value={staleTimeout}
+          onChange={(e) => setStaleTimeout(e.target.value)}
+          min={0}
+          placeholder="4320 (3 days)"
+          className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
+        />
+        <p className="text-xs text-text-secondary mt-1">
+          Auto-terminate idle standalone sessions after this many minutes. Default: 3 days (4320 min). Leave empty for no auto-terminate.
+        </p>
       </div>
 
       <div>

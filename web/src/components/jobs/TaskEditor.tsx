@@ -589,6 +589,7 @@ export function TaskEditor({ task, machines, onSave, onDelete, onDirtyChange }: 
             <option value="opus">Opus</option>
             <option value="sonnet">Sonnet</option>
             <option value="haiku">Haiku</option>
+            <option value="opusplan">Opus Plan</option>
           </select>
         </div>
       )}
