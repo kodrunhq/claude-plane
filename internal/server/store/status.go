@@ -13,5 +13,6 @@ const (
 	StatusFailed     = status.Failed
 	StatusSkipped    = status.Skipped
 	StatusCancelled  = status.Cancelled
-	StatusTerminated = status.Terminated
+	StatusTerminated      = status.Terminated
+	StatusWaitingForInput = status.WaitingForInput
 )

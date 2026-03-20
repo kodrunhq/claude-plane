@@ -50,6 +50,18 @@ type SessionManager struct {
 
 	// Idle detector options passed to each session's IdleDetector.
 	idleDetectorOpts []IdleDetectorOption
+
+	// Standalone session tracking.
+	standaloneMu sync.RWMutex
+	standalone   map[string]bool
+
+	// Per-session idle detectors for re-arming on input.
+	detectorMu sync.RWMutex
+	detectors  map[string]*IdleDetector
+
+	// Last emitted status per session to avoid event spam.
+	lastStatusMu sync.RWMutex
+	lastStatus   map[string]string
 }
 
 // NewSessionManager creates a new session manager.
@@ -68,6 +80,9 @@ func NewSessionManager(cliPath, dataDir string, logger *slog.Logger, idleOpts ..
 		cliPath:          cliPath,
 		dataDir:          dataDir,
 		idleDetectorOpts: idleOpts,
+		standalone:       make(map[string]bool),
+		detectors:        make(map[string]*IdleDetector),
+		lastStatus:       make(map[string]string),
 	}
 }
 
@@ -178,41 +193,57 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command, "task_type", taskType)
 
-	// For Claude sessions with an initial prompt, set up an IdleDetector that
-	// watches for Claude CLI's startup prompt (❯) to submit the prompt at
-	// exactly the right time, then watches for the completion prompt to either
-	// send /exit (normal) or emit a StepIdleEvent (keep-alive shared sessions).
-	// Shell tasks skip this entirely.
-	if prompt := cmd.GetInitialPrompt(); taskType != "shell" && prompt != "" {
+	// For Claude sessions, set up an IdleDetector that watches for Claude CLI's
+	// startup prompt (❯) to submit the prompt at exactly the right time, then
+	// watches for the completion prompt to either send /exit (normal job),
+	// emit a StepIdleEvent (keep-alive shared sessions), or report
+	// waiting_for_input (standalone sessions). Shell tasks skip this entirely.
+	if taskType != "shell" {
 		sessionID := cmd.GetSessionId()
 		keepAlive := cmd.GetKeepAlive()
+		prompt := cmd.GetInitialPrompt()
 
-		// onReady: CLI startup prompt detected — submit the initial prompt.
+		isStandalone := !keepAlive && prompt == ""
+		if isStandalone {
+			sm.standaloneMu.Lock()
+			sm.standalone[sessionID] = true
+			sm.standaloneMu.Unlock()
+		}
+
 		onReady := func() {
+			if prompt == "" {
+				return // Standalone without initial prompt — no-op.
+			}
 			input := []byte(prompt + "\r")
 			if err := sess.WriteInput(input); err != nil {
-				sm.logger.Error("failed to write initial prompt",
-					"session_id", sessionID,
-					"error", err,
-				)
+				sm.logger.Error("failed to write initial prompt", "session_id", sessionID, "error", err)
 			} else {
-				sm.logger.Info("initial prompt submitted",
-					"session_id", sessionID,
-					"prompt_len", len(prompt),
-				)
+				sm.logger.Info("initial prompt submitted", "session_id", sessionID, "prompt_len", len(prompt))
 			}
 		}
 
 		var onIdle func()
-		if keepAlive {
-			// Keep-alive (shared session): extract task values from the output
-			// accumulated since the last extraction, then signal step completion
-			// to the server. The session stays alive for subsequent prompts.
+		if isStandalone {
+			onIdle = func() {
+				sm.logger.Info("idle prompt detected, reporting waiting_for_input (standalone)", "session_id", sessionID)
+				sm.lastStatusMu.Lock()
+				sm.lastStatus[sessionID] = status.WaitingForInput
+				sm.lastStatusMu.Unlock()
+				sm.sendEvent(&pb.AgentEvent{
+					Event: &pb.AgentEvent_SessionStatus{
+						SessionStatus: &pb.SessionStatusEvent{
+							SessionId: sessionID,
+							Status:    status.WaitingForInput,
+						},
+					},
+				})
+			}
+		} else if keepAlive {
+			// Keep-alive (shared session): existing behavior unchanged.
 			onIdle = func() {
 				sm.logger.Info("idle prompt detected, extracting task values and sending StepIdleEvent (keep-alive)",
 					"session_id", sessionID,
 				)
-				// Extract and send task values for this step before signalling idle.
 				sm.extractAndSendStepTaskValues(sessionID)
 				sm.sendEvent(&pb.AgentEvent{
 					Event: &pb.AgentEvent_StepIdle{
@@ -223,7 +254,7 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 				})
 			}
 		} else {
-			// Normal mode: send /exit to gracefully terminate the session.
+			// Normal mode: send /exit. Existing behavior unchanged.
 			onIdle = func() {
 				sm.logger.Info("idle prompt detected, sending /exit",
 					"session_id", sessionID,
@@ -239,13 +270,17 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 		opts := make([]IdleDetectorOption, len(sm.idleDetectorOpts))
 		copy(opts, sm.idleDetectorOpts)
-		if keepAlive {
+		if keepAlive || isStandalone {
 			opts = append(opts, WithKeepAlive(true))
 		}
 
 		detector := NewIdleDetector(onReady, onIdle, opts...)
 		detector.Start()
 		sess.SetOutputObserver(detector.Feed)
+
+		sm.detectorMu.Lock()
+		sm.detectors[sessionID] = detector
+		sm.detectorMu.Unlock()
 	}
 
 	// Send status event.
@@ -267,13 +302,44 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 }
 
 func (sm *SessionManager) handleInput(cmd *pb.InputDataCmd) {
-	sess := sm.getSession(cmd.GetSessionId())
+	sessionID := cmd.GetSessionId()
+	sess := sm.getSession(sessionID)
 	if sess == nil {
-		sm.logger.Warn("input for unknown session", "session_id", cmd.GetSessionId())
+		sm.logger.Warn("input for unknown session", "session_id", sessionID)
 		return
 	}
+
+	sm.standaloneMu.RLock()
+	isStandalone := sm.standalone[sessionID]
+	sm.standaloneMu.RUnlock()
+
+	if isStandalone {
+		sm.lastStatusMu.Lock()
+		lastStatus := sm.lastStatus[sessionID]
+		if lastStatus == status.WaitingForInput {
+			sm.lastStatus[sessionID] = status.Running
+			sm.lastStatusMu.Unlock()
+
+			sm.sendEvent(&pb.AgentEvent{
+				Event: &pb.AgentEvent_SessionStatus{
+					SessionStatus: &pb.SessionStatusEvent{
+						SessionId: sessionID,
+						Status:    status.Running,
+					},
+				},
+			})
+			sm.detectorMu.RLock()
+			if d, ok := sm.detectors[sessionID]; ok {
+				d.ResetToPhase1()
+			}
+			sm.detectorMu.RUnlock()
+		} else {
+			sm.lastStatusMu.Unlock()
+		}
+	}
+
 	if err := sess.WriteInput(cmd.GetData()); err != nil {
-		sm.logger.Error("write input failed", "session_id", cmd.GetSessionId(), "error", err)
+		sm.logger.Error("write input failed", "session_id", sessionID, "error", err)
 	}
 }
 
@@ -485,7 +551,8 @@ func (sm *SessionManager) getSession(id string) *Session {
 	return sm.sessions[id]
 }
 
-// removeSession deletes a session from the sessions, attached, taskTypes, and outputBufs maps.
+// removeSession deletes a session from the sessions, attached, taskTypes, outputBufs,
+// standalone, detectors, and lastStatus maps.
 func (sm *SessionManager) removeSession(sessionID string) {
 	sm.mu.Lock()
 	delete(sm.sessions, sessionID)
@@ -502,6 +569,18 @@ func (sm *SessionManager) removeSession(sessionID string) {
 	sm.outputBufMu.Lock()
 	delete(sm.outputBufs, sessionID)
 	sm.outputBufMu.Unlock()
+
+	sm.standaloneMu.Lock()
+	delete(sm.standalone, sessionID)
+	sm.standaloneMu.Unlock()
+
+	sm.detectorMu.Lock()
+	delete(sm.detectors, sessionID)
+	sm.detectorMu.Unlock()
+
+	sm.lastStatusMu.Lock()
+	delete(sm.lastStatus, sessionID)
+	sm.lastStatusMu.Unlock()
 }
 
 // StartRelay begins sending session output events to sendCh.

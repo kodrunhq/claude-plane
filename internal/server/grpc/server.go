@@ -448,6 +448,10 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						evType = event.TypeSessionTerminated
 					case status.Failed, status.Completed:
 						evType = event.TypeSessionExited
+					case status.WaitingForInput:
+						evType = event.TypeSessionWaitingForInput
+					case status.Running:
+						evType = event.TypeSessionStarted
 					}
 					if evType != "" {
 						if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {

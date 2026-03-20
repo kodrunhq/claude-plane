@@ -22,7 +22,8 @@ const (
 	TypeSessionStarted    = "session.started"
 	TypeSessionExited     = "session.exited"
 	TypeSessionTerminated     = "session.terminated"
-	TypeSessionDispatchFailed = "session.dispatch_failed"
+	TypeSessionDispatchFailed    = "session.dispatch_failed"
+	TypeSessionWaitingForInput   = "session.waiting_for_input"
 
 	// Machine connectivity events.
 	TypeMachineConnected    = "machine.connected"

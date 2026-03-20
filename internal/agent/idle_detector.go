@@ -115,6 +115,16 @@ func (d *IdleDetector) Start() {
 	})
 }
 
+// ResetToPhase1 re-arms the detector for another idle detection cycle.
+func (d *IdleDetector) ResetToPhase1() {
+	d.mu.Lock()
+	d.phase = 1
+	d.triggered = false
+	d.startupTimedOut = false
+	d.buf = d.buf[:0]
+	d.mu.Unlock()
+}
+
 // Feed processes a chunk of PTY output, looking for the idle prompt marker.
 func (d *IdleDetector) Feed(data []byte) {
 	d.mu.Lock()

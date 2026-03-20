@@ -10,5 +10,6 @@ const (
 	Failed     = "failed"
 	Skipped    = "skipped"
 	Cancelled  = "cancelled"
-	Terminated = "terminated"
+	Terminated      = "terminated"
+	WaitingForInput = "waiting_for_input"
 )

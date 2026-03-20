@@ -141,6 +141,67 @@ func TestIdleDetector_KeepAlive_BufferResetOnDetection(t *testing.T) {
 	}
 }
 
+func TestIdleDetector_ResetToPhase1(t *testing.T) {
+	var idleCount atomic.Int32
+	d := NewIdleDetector(
+		func() {},
+		func() { idleCount.Add(1) },
+		WithKeepAlive(true),
+	)
+	d.Start()
+
+	// Phase 0 → 1: startup marker.
+	d.Feed(DefaultIdlePromptMarker())
+	// Phase 1: first idle fires.
+	d.Feed(DefaultIdlePromptMarker())
+	time.Sleep(10 * time.Millisecond)
+	if got := idleCount.Load(); got != 1 {
+		t.Fatalf("expected 1 idle firing before reset, got %d", got)
+	}
+
+	// Reset and verify next marker fires idle again.
+	d.ResetToPhase1()
+	d.Feed(DefaultIdlePromptMarker())
+	time.Sleep(10 * time.Millisecond)
+	if got := idleCount.Load(); got != 2 {
+		t.Fatalf("expected 2 idle firings after reset, got %d", got)
+	}
+}
+
+func TestIdleDetector_ResetToPhase1_ClearsTriggered(t *testing.T) {
+	var idleCount atomic.Int32
+	d := NewIdleDetector(
+		func() {},
+		func() { idleCount.Add(1) },
+		// Normal mode (not keep-alive): triggered flag prevents re-fire.
+	)
+	d.Start()
+
+	// Phase 0 → 1: startup marker.
+	d.Feed(DefaultIdlePromptMarker())
+	// Phase 1: idle fires and sets triggered=true.
+	d.Feed(DefaultIdlePromptMarker())
+	time.Sleep(10 * time.Millisecond)
+	if got := idleCount.Load(); got != 1 {
+		t.Fatalf("expected 1 idle firing, got %d", got)
+	}
+
+	// Further markers should NOT fire (triggered=true).
+	d.Feed(DefaultIdlePromptMarker())
+	time.Sleep(10 * time.Millisecond)
+	if got := idleCount.Load(); got != 1 {
+		t.Fatalf("expected still 1 idle firing (triggered=true blocks), got %d", got)
+	}
+
+	// Reset clears triggered, so next marker should fire again.
+	d.ResetToPhase1()
+	d.Feed(DefaultIdlePromptMarker())
+	time.Sleep(10 * time.Millisecond)
+	if got := idleCount.Load(); got != 2 {
+		t.Fatalf("expected 2 idle firings after reset, got %d", got)
+	}
+}
+
 func TestIdleDetector_KeepAlive_ConcurrentFeeds(t *testing.T) {
 	var idleCount atomic.Int32
 	d := NewIdleDetector(

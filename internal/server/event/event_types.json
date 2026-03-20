@@ -36,6 +36,10 @@
     "value": "session.dispatch_failed"
   },
   {
+    "name": "TypeSessionWaitingForInput",
+    "value": "session.waiting_for_input"
+  },
+  {
     "name": "TypeMachineConnected",
     "value": "machine.connected"
   },
