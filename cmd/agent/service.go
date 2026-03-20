@@ -26,6 +26,14 @@ func installSystemd(binPath, configPath, runAsUser string) error {
 		return fmt.Errorf("install-service requires root. Run with:\n  sudo %s install-service --config %s", binPath, configPath)
 	}
 
+	// Stop existing service if running (makes install-service idempotent).
+	stopCmd := exec.Command("systemctl", "is-active", "--quiet", "claude-plane-agent")
+	if stopCmd.Run() == nil {
+		fmt.Printf("Stopping existing claude-plane-agent service...\n")
+		_ = exec.Command("systemctl", "stop", "claude-plane-agent").Run()
+		_ = exec.Command("systemctl", "disable", "claude-plane-agent").Run()
+	}
+
 	// Determine user/group for the service.
 	if runAsUser == "" {
 		// Default to the user who ran sudo.
@@ -106,6 +114,13 @@ func installLaunchd(binPath, configPath string) error {
 		return fmt.Errorf("install-service requires root. Run with:\n  sudo %s install-service --config %s", binPath, configPath)
 	}
 
+	// Stop existing service if running.
+	listCmd := exec.Command("launchctl", "list")
+	if out, err := listCmd.Output(); err == nil && strings.Contains(string(out), "com.claude-plane.agent") {
+		fmt.Printf("Stopping existing claude-plane-agent service...\n")
+		_ = exec.Command("launchctl", "bootout", "system/com.claude-plane.agent").Run()
+	}
+
 	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -135,7 +150,7 @@ func installLaunchd(binPath, configPath string) error {
 		return fmt.Errorf("write plist: %w", err)
 	}
 
-	cmd := exec.Command("launchctl", "load", plistPath)
+	cmd := exec.Command("launchctl", "bootstrap", "system", plistPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

@@ -219,7 +219,8 @@ func newInstallServiceCmd() *cobra.Command {
 		Use:   "install-service",
 		Short: "Install agent as a system service (systemd on Linux, launchd on macOS)",
 		Long: `Installs the claude-plane-agent as a background system service that starts
-on boot and restarts automatically if it crashes.
+on boot and restarts automatically if it crashes. Safe to run multiple times —
+any existing service is stopped and replaced.
 
 Requires root/sudo on Linux (systemd) or macOS (launchd).
 The agent binary must already be in a system-accessible location.`,
