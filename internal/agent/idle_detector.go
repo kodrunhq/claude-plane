@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -95,6 +96,7 @@ type IdleDetector struct {
 	silenceTimeout   time.Duration
 	minActivityBytes int
 	startupTimeout   time.Duration
+	logger           *slog.Logger
 
 	onIdle   func()
 	onActive func() // may be nil
@@ -105,6 +107,7 @@ type IdleDetector struct {
 	isIdle       bool
 	outputSeen   bool
 	stopped      bool
+	noiseLogged  bool // rate-limit noise detection logging to once per idle cycle
 }
 
 // IdleDetectorOption configures optional IdleDetector settings.
@@ -137,6 +140,16 @@ func WithStartupTimeout(d time.Duration) IdleDetectorOption {
 	}
 }
 
+// WithLogger sets the logger for state transition logging.
+// If not set, slog.Default() is used.
+func WithLogger(l *slog.Logger) IdleDetectorOption {
+	return func(det *IdleDetector) {
+		if l != nil {
+			det.logger = l
+		}
+	}
+}
+
 // NewIdleDetector creates a detector that watches for silence in PTY output.
 // onIdle fires when silence exceeds the threshold (active → idle).
 // onActive fires when output resumes after an idle period (idle → active).
@@ -146,6 +159,7 @@ func NewIdleDetector(onIdle func(), onActive func(), opts ...IdleDetectorOption)
 		silenceTimeout:   DefaultSilenceTimeout,
 		minActivityBytes: DefaultMinActivityBytes,
 		startupTimeout:   DefaultStartupTimeout,
+		logger:           slog.Default(),
 		onIdle:           onIdle,
 		onActive:         onActive,
 	}
@@ -163,6 +177,13 @@ func (d *IdleDetector) Start() {
 	d.stopped = false
 	d.isIdle = false
 	d.outputSeen = false
+	d.noiseLogged = false
+
+	d.logger.Debug("idle detector started",
+		"silence_timeout", d.silenceTimeout,
+		"startup_timeout", d.startupTimeout,
+		"min_activity_bytes", d.minActivityBytes,
+	)
 
 	d.startupTimer = time.AfterFunc(d.startupTimeout, func() {
 		d.mu.Lock()
@@ -172,6 +193,9 @@ func (d *IdleDetector) Start() {
 		}
 		d.mu.Unlock()
 		if !skip {
+			d.logger.Warn("startup timeout reached with no output",
+				"startup_timeout", d.startupTimeout,
+			)
 			d.onIdle()
 		}
 	})
@@ -189,6 +213,7 @@ func (d *IdleDetector) Stop() {
 	if d.startupTimer != nil {
 		d.startupTimer.Stop()
 	}
+	d.logger.Debug("idle detector stopped")
 }
 
 // Feed processes a chunk of PTY output. Chunks smaller than minActivityBytes
@@ -197,7 +222,21 @@ func (d *IdleDetector) Stop() {
 // (real Claude responses) resets the silence timer.
 func (d *IdleDetector) Feed(data []byte) {
 	d.mu.Lock()
-	if d.stopped || len(data) < d.minActivityBytes || isRepositioningNoise(data) {
+	if d.stopped {
+		d.mu.Unlock()
+		return
+	}
+	if len(data) < d.minActivityBytes {
+		d.mu.Unlock()
+		return
+	}
+	if isRepositioningNoise(data) {
+		if !d.noiseLogged {
+			d.noiseLogged = true
+			d.logger.Debug("repositioning noise filtered (first occurrence this cycle)",
+				"data_len", len(data),
+			)
+		}
 		d.mu.Unlock()
 		return
 	}
@@ -219,9 +258,13 @@ func (d *IdleDetector) Feed(data []byte) {
 		skip := d.stopped
 		if !skip {
 			d.isIdle = true
+			d.noiseLogged = false // reset noise logging for next idle cycle
 		}
 		d.mu.Unlock()
 		if !skip {
+			d.logger.Info("silence timeout reached, transitioning to idle",
+				"silence_timeout", d.silenceTimeout,
+			)
 			d.onIdle()
 		}
 	})
@@ -230,10 +273,12 @@ func (d *IdleDetector) Feed(data []byte) {
 	wasIdle := d.isIdle
 	if wasIdle {
 		d.isIdle = false
+		d.noiseLogged = false // reset noise logging for new active cycle
 	}
 	d.mu.Unlock()
 
 	if wasIdle && d.onActive != nil {
+		d.logger.Info("output resumed, transitioning to active")
 		d.onActive()
 	}
 }

@@ -404,6 +404,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 
 			// Handle health events — store in the connected agent's in-memory state.
 			if health := res.event.GetHealth(); health != nil {
+				s.logger.Debug("health event received",
+					"machine_id", machineID,
+					"active_sessions", health.GetActiveSessions(),
+					"cpu_cores", health.GetCpuCores(),
+				)
 				if s.agentConnMgr != nil {
 					if agent := s.agentConnMgr.GetAgent(machineID); agent != nil {
 						agent.UpdateHealth(&connmgr.HealthInfo{
@@ -436,6 +441,12 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 					if err := s.sessionStore.UpdateSessionStatus(ss.GetSessionId(), newStatus); err != nil {
 						s.logger.Warn("failed to update session status from agent event",
 							"session_id", ss.GetSessionId(), "status", newStatus, "error", err)
+					} else {
+						s.logger.Info("session status updated",
+							"machine_id", machineID,
+							"session_id", ss.GetSessionId(),
+							"status", newStatus,
+						)
 					}
 
 					// Notify any connected browser WebSocket that the session status changed.
@@ -463,10 +474,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						case status.WaitingForInput:
 							evType = event.TypeSessionWaitingForInput
 						case status.Running:
-							// No event published here. The initial created→running transition
-							// is already covered by session.started in the session creation handler.
-							// The running status update still persists to the DB (above), so the
-							// frontend picks it up on the next query invalidation.
+							// Publish session.resumed when transitioning back from waiting_for_input.
+							// The initial created→running is covered by session.started in the
+							// session creation handler, but idle→active needs its own event so the
+							// frontend updates the sessions list immediately.
+							evType = event.TypeSessionResumed
 						}
 						if evType != "" {
 							if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {

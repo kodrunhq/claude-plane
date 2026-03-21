@@ -36,7 +36,7 @@ export function CommandCenter() {
   const [terminateId, setTerminateId] = useState<string | null>(null);
 
   const activeSessions = useMemo(
-    () => (sessions ?? []).filter((s) => s.status === 'running' || s.status === 'created'),
+    () => (sessions ?? []).filter((s) => s.status === 'running' || s.status === 'created' || s.status === 'waiting_for_input'),
     [sessions],
   );
   const onlineMachines = useMemo(

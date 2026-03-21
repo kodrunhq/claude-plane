@@ -9,9 +9,10 @@ export interface Session {
   user_id: string;
   command: string;
   working_dir: string;
-  status: 'created' | 'running' | 'waiting_for_input' | 'completed' | 'failed' | 'terminated';
+  status: 'pending' | 'created' | 'starting' | 'running' | 'waiting_for_input' | 'completed' | 'failed' | 'skipped' | 'cancelled' | 'terminated';
   created_at: string;
   updated_at: string;
+  ended_at?: string;
   template_id?: string;
   model?: string;
   skip_permissions?: string;

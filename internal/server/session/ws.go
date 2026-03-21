@@ -78,6 +78,9 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 				return
 			}
 
+			logger.Info("websocket upgrade success", "session_id", sessionID, "remote_addr", r.RemoteAddr)
+			logger.Info("websocket auth success", "session_id", sessionID, "user_id", claims.UserID, "auth_method", "cookie")
+
 			runSession(conn, r.Context(), sessionID, sess.MachineID, cm, reg, logger)
 			return
 		}
@@ -88,6 +91,8 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 			logger.Error("websocket upgrade failed", "error", err)
 			return
 		}
+
+		logger.Info("websocket upgrade success", "session_id", sessionID, "remote_addr", r.RemoteAddr)
 
 		authCtx, authCancel := context.WithTimeout(r.Context(), authTimeout)
 		defer authCancel()
@@ -126,6 +131,8 @@ func HandleTerminalWS(st *store.Store, cm *connmgr.ConnectionManager, reg *Regis
 			return
 		}
 
+		logger.Info("websocket auth success", "session_id", sessionID, "user_id", claims.UserID, "auth_method", "bearer")
+
 		runSession(conn, r.Context(), sessionID, sess.MachineID, cm, reg, logger)
 	}
 }
@@ -151,6 +158,7 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 	defer reg.Unsubscribe(sessionID, ch)
 
 	// Attach session on the agent: replays scrollback and enables live relay.
+	logger.Info("session attach initiated", "session_id", sessionID, "machine_id", machineID)
 	if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 		Command: &pb.ServerCommand_AttachSession{
 			AttachSession: &pb.AttachSessionCmd{
@@ -180,6 +188,8 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 		return
 	}
 
+	logger.Info("session relay started", "session_id", sessionID)
+
 	// Writer goroutine: reads from subscriber channel and writes to WebSocket.
 	go func() {
 		defer cancel()
@@ -207,6 +217,7 @@ func runSession(conn *websocket.Conn, reqCtx context.Context, sessionID, machine
 	for {
 		msgType, data, err := conn.Read(ctx)
 		if err != nil {
+			logger.Info("websocket close/detach", "session_id", sessionID, "reason", err.Error())
 			// WebSocket closed or error — send DetachSessionCmd (not kill)
 			if err := sendToAgent(cm, machineID, &pb.ServerCommand{
 				Command: &pb.ServerCommand_DetachSession{

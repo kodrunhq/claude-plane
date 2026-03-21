@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -96,7 +97,7 @@ func NewRouter(deps RouterDeps) chi.Router {
 	r.Use(middleware.RequestID)
 	r.Use(maxBytesMiddleware(1 << 20)) // 1MB global limit
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
+	r.Use(RequestLogger(slog.Default()))
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeadersMiddleware)
 

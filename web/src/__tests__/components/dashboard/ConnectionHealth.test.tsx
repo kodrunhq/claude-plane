@@ -19,9 +19,7 @@ const connectedMachineWithHealth: Machine = {
   status: 'connected',
   max_sessions: 5,
   home_dir: '/home/worker',
-  last_health: '2026-01-15T10:00:00Z',
   last_seen_at: '2026-01-15T10:00:00Z',
-  cert_expires: '2027-01-15T10:00:00Z',
   created_at: '2026-01-15T10:00:00Z',
   health: healthData,
 };
@@ -32,9 +30,7 @@ const connectedMachineNoHealth: Machine = {
   status: 'connected',
   max_sessions: 3,
   home_dir: '/home/worker',
-  last_health: '2026-01-15T10:00:00Z',
   last_seen_at: '2026-01-15T10:00:00Z',
-  cert_expires: '2027-01-15T10:00:00Z',
   created_at: '2026-01-15T10:00:00Z',
 };
 
@@ -44,9 +40,7 @@ const disconnectedMachine: Machine = {
   status: 'disconnected',
   max_sessions: 5,
   home_dir: '/home/worker',
-  last_health: '2026-01-14T10:00:00Z',
   last_seen_at: '2026-01-14T10:00:00Z',
-  cert_expires: '2027-01-15T10:00:00Z',
   created_at: '2026-01-14T10:00:00Z',
 };
 

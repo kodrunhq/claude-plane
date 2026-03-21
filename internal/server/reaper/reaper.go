@@ -65,8 +65,16 @@ func (r *Reaper) Start(ctx context.Context) {
 	r.logger.Info("session reaper started", "interval", r.interval)
 }
 
-// sweep checks for stale waiting_for_input sessions and terminates them.
+// sweep checks for stale sessions and terminates them. It handles two cases:
+// 1. waiting_for_input sessions that exceed the user's idle timeout.
+// 2. created sessions that never transitioned to running (stuck dispatch).
 func (r *Reaper) sweep(ctx context.Context) {
+	r.sweepIdleSessions(ctx)
+	r.sweepStaleSessions(ctx)
+}
+
+// sweepIdleSessions terminates waiting_for_input sessions that exceed their timeout.
+func (r *Reaper) sweepIdleSessions(ctx context.Context) {
 	sessions, err := r.store.ListSessionsByStatus(store.StatusWaitingForInput)
 	if err != nil {
 		r.logger.Warn("reaper: failed to list idle sessions", "error", err)
@@ -94,6 +102,32 @@ func (r *Reaper) sweep(ctx context.Context) {
 
 		idleDuration := now.Sub(sess.UpdatedAt)
 		if idleDuration > time.Duration(timeout)*time.Minute {
+			r.terminateSession(ctx, sess)
+		}
+	}
+}
+
+// staleCreatedTimeout is how long a session can stay in "created" status
+// before the reaper considers it stuck and terminates it.
+const staleCreatedTimeout = 5 * time.Minute
+
+// sweepStaleSessions terminates sessions stuck in "created" status.
+// This happens when the CreateSession command was sent to the agent but the
+// agent never reported back (crash, network issue, or the command was lost).
+func (r *Reaper) sweepStaleSessions(ctx context.Context) {
+	sessions, err := r.store.ListSessionsByStatus(store.StatusCreated)
+	if err != nil {
+		r.logger.Warn("reaper: failed to list created sessions", "error", err)
+		return
+	}
+
+	now := time.Now()
+	for _, sess := range sessions {
+		if now.Sub(sess.UpdatedAt) > staleCreatedTimeout {
+			r.logger.Warn("reaper: terminating stuck created session",
+				"session_id", sess.SessionID,
+				"age", now.Sub(sess.UpdatedAt),
+			)
 			r.terminateSession(ctx, sess)
 		}
 	}
