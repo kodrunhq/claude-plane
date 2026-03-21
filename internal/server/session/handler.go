@@ -213,6 +213,8 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.logger.Info("session creation started", "session_id", sessionID, "machine_id", req.MachineID, "user_id", userID, "command", req.Command)
+
 	// Persist to store
 	sess := &store.Session{
 		SessionID:     sessionID,
@@ -267,6 +269,7 @@ func (h *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.logger.Info("session creation complete", "session_id", sessionID)
 	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionStarted, sessionID, req.MachineID, "", req.Command))
 	httputil.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"session_id": sessionID,
@@ -282,6 +285,14 @@ func (h *SessionHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	statusFilter := q.Get("status")
 	machineFilter := q.Get("machine_id")
+
+	listUserID := ""
+	if h.getClaims != nil {
+		if claims := h.getClaims(r); claims != nil {
+			listUserID = claims.UserID
+		}
+	}
+	h.logger.Info("session list requested", "user_id", listUserID, "status_filter", statusFilter, "machine_filter", machineFilter)
 
 	var sessions []store.Session
 	var err error
@@ -369,6 +380,14 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	terminateUserID := ""
+	if h.getClaims != nil {
+		if claims := h.getClaims(r); claims != nil {
+			terminateUserID = claims.UserID
+		}
+	}
+	h.logger.Info("session termination started", "session_id", sessionID, "user_id", terminateUserID)
+
 	agent := h.connMgr.GetAgent(sess.MachineID)
 	if agent != nil && agent.SendCommand != nil {
 		cmd := &pb.ServerCommand{
@@ -387,6 +406,7 @@ func (h *SessionHandler) TerminateSession(w http.ResponseWriter, r *http.Request
 	if err := h.store.UpdateSessionStatus(sessionID, store.StatusTerminated); err != nil {
 		h.logger.Error("failed to update session status", "error", err)
 	}
+	h.logger.Info("session termination complete", "session_id", sessionID)
 	h.publishEvent(r.Context(), event.NewSessionEvent(event.TypeSessionTerminated, sessionID, sess.MachineID, "", ""))
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": store.StatusTerminated})
