@@ -7,303 +7,229 @@ import (
 	"time"
 )
 
-// nbspMarker returns the NBSP prompt marker (primary variant).
-func nbspMarker() []byte {
-	return append([]byte{}, promptMarkerNBSP...)
-}
-
-// spaceMarker returns the regular-space prompt marker (fallback variant).
-func spaceMarker() []byte {
-	return append([]byte{}, promptMarkerSpace...)
-}
-
-func TestIdleDetector_OnReadyThenOnIdle(t *testing.T) {
-	var readyCalled, idleCalled atomic.Bool
+func TestIdleDetector_SilenceFiresOnIdle(t *testing.T) {
+	var idleCalled atomic.Bool
 	d := NewIdleDetector(
-		func() { readyCalled.Store(true) },
 		func() { idleCalled.Store(true) },
+		nil,
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
+	defer d.Stop()
 
-	// Phase 0: feed startup marker.
-	d.Feed(nbspMarker())
-	if !readyCalled.Load() {
-		t.Fatal("expected onReady to fire after startup marker")
+	d.Feed(make([]byte, 20))
+	time.Sleep(100 * time.Millisecond)
+
+	if !idleCalled.Load() {
+		t.Fatal("expected onIdle to fire after silence timeout")
 	}
+}
+
+func TestIdleDetector_ActivityResetsTimer(t *testing.T) {
+	var idleCalled atomic.Bool
+	d := NewIdleDetector(
+		func() { idleCalled.Store(true) },
+		nil,
+		WithSilenceTimeout(80*time.Millisecond),
+	)
+	d.Start()
+	defer d.Stop()
+
+	for i := 0; i < 5; i++ {
+		d.Feed(make([]byte, 20))
+		time.Sleep(30 * time.Millisecond)
+	}
+
 	if idleCalled.Load() {
-		t.Fatal("onIdle should not fire after startup marker")
+		t.Fatal("onIdle should not fire while activity continues")
 	}
 
-	// Phase 1: feed completion marker.
-	d.Feed(nbspMarker())
+	time.Sleep(120 * time.Millisecond)
 	if !idleCalled.Load() {
-		t.Fatal("expected onIdle to fire after completion marker")
+		t.Fatal("expected onIdle after activity stopped")
 	}
 }
 
-func TestIdleDetector_OnReadyThenOnIdle_RegularSpace(t *testing.T) {
-	var readyCalled, idleCalled atomic.Bool
-	d := NewIdleDetector(
-		func() { readyCalled.Store(true) },
-		func() { idleCalled.Store(true) },
-	)
-	d.Start()
-
-	// Verify the regular-space variant also triggers detection.
-	d.Feed(spaceMarker())
-	if !readyCalled.Load() {
-		t.Fatal("expected onReady to fire after regular-space marker")
-	}
-
-	d.Feed(spaceMarker())
-	if !idleCalled.Load() {
-		t.Fatal("expected onIdle to fire after regular-space marker")
-	}
-}
-
-func TestIdleDetector_MixedMarkerVariants(t *testing.T) {
-	var readyCalled atomic.Bool
+func TestIdleDetector_MinActivityBytesFilter(t *testing.T) {
 	var idleCount atomic.Int32
 	d := NewIdleDetector(
-		func() { readyCalled.Store(true) },
 		func() { idleCount.Add(1) },
-		WithKeepAlive(true),
+		nil,
+		WithSilenceTimeout(50*time.Millisecond),
+		WithMinActivityBytes(15),
 	)
 	d.Start()
+	defer d.Stop()
 
-	// Startup with NBSP variant.
-	d.Feed(nbspMarker())
-	if !readyCalled.Load() {
-		t.Fatal("expected onReady from NBSP marker")
-	}
+	d.Feed(make([]byte, 20))
+	time.Sleep(10 * time.Millisecond)
 
-	// Idle with regular space variant.
-	d.Feed(spaceMarker())
+	d.Feed(make([]byte, 5))
+	time.Sleep(80 * time.Millisecond)
+
 	if idleCount.Load() != 1 {
-		t.Fatalf("expected 1 idle from space marker, got %d", idleCount.Load())
-	}
-
-	// Idle with NBSP variant.
-	d.Feed(nbspMarker())
-	if idleCount.Load() != 2 {
-		t.Fatalf("expected 2 idle (mixed variants), got %d", idleCount.Load())
+		t.Fatalf("expected 1 idle firing (small data ignored), got %d", idleCount.Load())
 	}
 }
 
-func TestIdleDetector_TriggeredOnce(t *testing.T) {
-	var count atomic.Int32
+func TestIdleDetector_OnActiveFiresOnTransition(t *testing.T) {
+	var idleCalled, activeCalled atomic.Bool
 	d := NewIdleDetector(
-		func() {},
-		func() { count.Add(1) },
+		func() { idleCalled.Store(true) },
+		func() { activeCalled.Store(true) },
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
+	defer d.Stop()
 
-	d.Feed(nbspMarker()) // startup
-	d.Feed(nbspMarker()) // completion — fires
-	d.Feed(nbspMarker()) // should NOT fire again
+	d.Feed(make([]byte, 20))
+	time.Sleep(80 * time.Millisecond)
+	if !idleCalled.Load() {
+		t.Fatal("expected onIdle")
+	}
 
+	d.Feed(make([]byte, 20))
 	time.Sleep(10 * time.Millisecond)
-	if got := count.Load(); got != 1 {
-		t.Fatalf("expected onIdle to fire exactly once, got %d", got)
+	if !activeCalled.Load() {
+		t.Fatal("expected onActive on idle→active transition")
 	}
 }
 
-func TestIdleDetector_KeepAlive_SignalsWithoutExit(t *testing.T) {
-	var count atomic.Int32
+func TestIdleDetector_OnActiveDoesNotFireInitially(t *testing.T) {
+	var activeCalled atomic.Bool
 	d := NewIdleDetector(
 		func() {},
-		func() { count.Add(1) },
-		WithKeepAlive(true),
+		func() { activeCalled.Store(true) },
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
+	defer d.Stop()
 
-	d.Feed(nbspMarker()) // startup
-	d.Feed(nbspMarker()) // idle #1
-	d.Feed(nbspMarker()) // idle #2
-	d.Feed(nbspMarker()) // idle #3
-
+	d.Feed(make([]byte, 20))
 	time.Sleep(10 * time.Millisecond)
-	if got := count.Load(); got != 3 {
-		t.Fatalf("expected onIdle to fire 3 times in keep-alive mode, got %d", got)
+	if activeCalled.Load() {
+		t.Fatal("onActive should not fire on initial feed, only on idle→active transition")
 	}
 }
 
-func TestIdleDetector_KeepAlive_PreservesStartupGuard(t *testing.T) {
-	var readyCalled atomic.Bool
+func TestIdleDetector_StartupTimeoutFallback(t *testing.T) {
+	var idleCalled atomic.Bool
+	d := NewIdleDetector(
+		func() { idleCalled.Store(true) },
+		nil,
+		WithStartupTimeout(50*time.Millisecond),
+		WithSilenceTimeout(10*time.Second),
+	)
+	d.Start()
+	defer d.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+	if !idleCalled.Load() {
+		t.Fatal("expected onIdle from startup timeout fallback")
+	}
+}
+
+func TestIdleDetector_StartupTimeoutCancelledByOutput(t *testing.T) {
 	var idleCount atomic.Int32
-
 	d := NewIdleDetector(
-		func() { readyCalled.Store(true) },
 		func() { idleCount.Add(1) },
-		WithKeepAlive(true),
-		WithStartupTimeout(10*time.Millisecond),
+		nil,
+		WithStartupTimeout(100*time.Millisecond),
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
+	defer d.Stop()
 
-	// Wait for timeout to fire onReady.
-	time.Sleep(50 * time.Millisecond)
-	if !readyCalled.Load() {
-		t.Fatal("expected onReady from timeout")
-	}
+	d.Feed(make([]byte, 20))
+	time.Sleep(150 * time.Millisecond)
 
-	// First real marker after timeout should be consumed by startup guard, not idle.
-	d.Feed(nbspMarker())
-	time.Sleep(10 * time.Millisecond)
-	if idleCount.Load() != 0 {
-		t.Fatal("first marker after startup timeout should be consumed by guard, not idle")
-	}
-
-	// Second marker should fire idle.
-	d.Feed(nbspMarker())
-	time.Sleep(10 * time.Millisecond)
 	if idleCount.Load() != 1 {
 		t.Fatalf("expected 1 idle firing, got %d", idleCount.Load())
 	}
 }
 
-func TestIdleDetector_KeepAlive_BufferResetOnDetection(t *testing.T) {
-	// Verify buffer is reset after detection so partial marker in buffer
-	// doesn't cause spurious re-detection on next Feed.
-	var idleCount atomic.Int32
-	marker := nbspMarker()
-
+func TestIdleDetector_StopCancelsTimers(t *testing.T) {
+	var idleCalled atomic.Bool
 	d := NewIdleDetector(
-		func() {},
-		func() { idleCount.Add(1) },
-		WithKeepAlive(true),
+		func() { idleCalled.Store(true) },
+		nil,
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
 
-	d.Feed(marker) // startup
+	d.Feed(make([]byte, 20))
+	d.Stop()
+	time.Sleep(100 * time.Millisecond)
 
-	// Feed marker followed by first byte of marker in same chunk.
-	chunk := make([]byte, 0, len(marker)+1)
-	chunk = append(chunk, marker...)
-	chunk = append(chunk, marker[0])
-	d.Feed(chunk)
-
-	time.Sleep(10 * time.Millisecond)
-	if idleCount.Load() != 1 {
-		t.Fatalf("expected exactly 1 idle firing, got %d", idleCount.Load())
-	}
-
-	// Feed remaining bytes of marker — should NOT trigger again because
-	// buffer was reset and we only have a partial marker.
-	d.Feed(marker[1:])
-	time.Sleep(10 * time.Millisecond)
-
-	// After reset, buf was cleared. Then we fed marker+marker[0], detected marker,
-	// reset buf. Then we fed marker[1:] — buf is marker[1:] which is NOT a full marker.
-	if idleCount.Load() != 1 {
-		t.Fatalf("expected 1 idle firing after partial feed, got %d", idleCount.Load())
+	if idleCalled.Load() {
+		t.Fatal("onIdle should not fire after Stop()")
 	}
 }
 
-func TestIdleDetector_ResetToPhase1(t *testing.T) {
-	var idleCount atomic.Int32
+func TestIdleDetector_StopIsIdempotent(t *testing.T) {
+	d := NewIdleDetector(func() {}, nil, WithSilenceTimeout(50*time.Millisecond))
+	d.Start()
+	d.Stop()
+	d.Stop()
+}
+
+func TestIdleDetector_RepeatedIdleActiveCycles(t *testing.T) {
+	var idleCount, activeCount atomic.Int32
 	d := NewIdleDetector(
-		func() {},
 		func() { idleCount.Add(1) },
-		WithKeepAlive(true),
+		func() { activeCount.Add(1) },
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
+	defer d.Stop()
 
-	// Phase 0 → 1: startup marker.
-	d.Feed(nbspMarker())
-	// Phase 1: first idle fires (Feed calls onIdle synchronously).
-	d.Feed(nbspMarker())
-	if got := idleCount.Load(); got != 1 {
-		t.Fatalf("expected 1 idle firing before reset, got %d", got)
+	for i := 0; i < 3; i++ {
+		d.Feed(make([]byte, 20))
+		time.Sleep(80 * time.Millisecond)
+		d.Feed(make([]byte, 20))
+		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Reset and verify next marker fires idle again.
-	d.ResetToPhase1()
-	d.Feed(nbspMarker())
-	if got := idleCount.Load(); got != 2 {
-		t.Fatalf("expected 2 idle firings after reset, got %d", got)
+	if idleCount.Load() != 3 {
+		t.Fatalf("expected 3 idle firings, got %d", idleCount.Load())
+	}
+	if activeCount.Load() != 3 {
+		t.Fatalf("expected 3 active firings, got %d", activeCount.Load())
 	}
 }
 
-func TestIdleDetector_ResetToPhase1_ClearsTriggered(t *testing.T) {
-	var idleCount atomic.Int32
+func TestIdleDetector_NilOnActive(t *testing.T) {
+	var idleCalled atomic.Bool
 	d := NewIdleDetector(
-		func() {},
-		func() { idleCount.Add(1) },
-		// Normal mode (not keep-alive): triggered flag prevents re-fire.
+		func() { idleCalled.Store(true) },
+		nil,
+		WithSilenceTimeout(50*time.Millisecond),
 	)
 	d.Start()
+	defer d.Stop()
 
-	// Phase 0 → 1: startup marker.
-	d.Feed(nbspMarker())
-	// Phase 1: idle fires and sets triggered=true (synchronous).
-	d.Feed(nbspMarker())
-	if got := idleCount.Load(); got != 1 {
-		t.Fatalf("expected 1 idle firing, got %d", got)
-	}
-
-	// Further markers should NOT fire (triggered=true).
-	d.Feed(nbspMarker())
-	if got := idleCount.Load(); got != 1 {
-		t.Fatalf("expected still 1 idle firing (triggered=true blocks), got %d", got)
-	}
-
-	// Reset clears triggered, so next marker should fire again.
-	d.ResetToPhase1()
-	d.Feed(nbspMarker())
-	if got := idleCount.Load(); got != 2 {
-		t.Fatalf("expected 2 idle firings after reset, got %d", got)
-	}
+	d.Feed(make([]byte, 20))
+	time.Sleep(80 * time.Millisecond)
+	d.Feed(make([]byte, 20))
 }
 
-func TestIdleDetector_KeepAlive_ConcurrentFeeds(t *testing.T) {
+func TestIdleDetector_ConcurrentFeeds(t *testing.T) {
 	var idleCount atomic.Int32
 	d := NewIdleDetector(
-		func() {},
 		func() { idleCount.Add(1) },
-		WithKeepAlive(true),
+		nil,
+		WithSilenceTimeout(100*time.Millisecond),
 	)
 	d.Start()
-
-	d.Feed(nbspMarker()) // startup
+	defer d.Stop()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			d.Feed(nbspMarker())
+			d.Feed(make([]byte, 20))
 		}()
 	}
 	wg.Wait()
-
-	time.Sleep(10 * time.Millisecond)
-	got := idleCount.Load()
-	if got < 1 {
-		t.Fatalf("expected at least 1 idle firing from concurrent feeds, got %d", got)
-	}
-}
-
-func TestIdleDetector_NBSPMarkerInRealOutput(t *testing.T) {
-	// Simulate real Claude CLI output where ❯ is wrapped in ANSI color codes
-	// and followed by NBSP (U+00A0 = C2 A0).
-	var readyCalled, idleCalled atomic.Bool
-	d := NewIdleDetector(
-		func() { readyCalled.Store(true) },
-		func() { idleCalled.Store(true) },
-	)
-	d.Start()
-
-	// Real output pattern: \033[38;5;246m❯\u00A0\033[39m
-	realStartup := []byte("\x1b[38;5;246m\xe2\x9d\xaf\xc2\xa0\x1b[39m")
-	d.Feed(realStartup)
-	if !readyCalled.Load() {
-		t.Fatal("expected onReady to fire with real ANSI-wrapped NBSP prompt")
-	}
-
-	// Simulate Claude response output, then new prompt.
-	d.Feed([]byte("Some response text...\r\n"))
-	d.Feed(realStartup)
-	if !idleCalled.Load() {
-		t.Fatal("expected onIdle to fire with real ANSI-wrapped NBSP prompt")
-	}
 }
