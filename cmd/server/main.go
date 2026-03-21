@@ -331,7 +331,7 @@ func newServeCmd() *cobra.Command {
 				"email":    &notify.SMTPNotifier{},
 				"telegram": notify.NewTelegramNotifier(nil),
 			}
-			notifyDispatcher := notify.NewDispatcher(s, notifiers, notify.DefaultEventRenderer, slog.Default())
+			notifyDispatcher := notify.NewDispatcher(s, nil, notifiers, nil, notify.DefaultEventRenderer, slog.Default())
 			eventBus.Subscribe("*", notifyDispatcher.Handler(), event.SubscriberOptions{Concurrency: 2, BufferSize: 256})
 
 			// Wire event publisher into components.

@@ -21,17 +21,21 @@ type SubscriptionStore interface {
 // matching channel notifiers, with rate limiting.
 type Dispatcher struct {
 	store     SubscriptionStore
+	resolver  ConnectorResolver
 	notifiers map[string]Notifier
+	renderers map[string]EventRenderer
 	limiter   *RateLimiter
-	renderer  func(event.Event) (subject, body string)
+	renderer  EventRenderer
 	logger    *slog.Logger
 }
 
 // NewDispatcher creates a notification Dispatcher.
 func NewDispatcher(
 	s SubscriptionStore,
+	resolver ConnectorResolver,
 	notifiers map[string]Notifier,
-	renderer func(event.Event) (string, string),
+	renderers map[string]EventRenderer,
+	defaultRenderer EventRenderer,
 	logger *slog.Logger,
 ) *Dispatcher {
 	if logger == nil {
@@ -39,9 +43,11 @@ func NewDispatcher(
 	}
 	return &Dispatcher{
 		store:     s,
+		resolver:  resolver,
 		notifiers: notifiers,
+		renderers: renderers,
 		limiter:   NewRateLimiter(60 * time.Second),
-		renderer:  renderer,
+		renderer:  defaultRenderer,
 		logger:    logger,
 	}
 }
@@ -59,8 +65,6 @@ func (d *Dispatcher) Handler() event.HandlerFunc {
 			return nil
 		}
 
-		subject, body := d.renderer(e)
-
 		for _, sub := range subs {
 			if !d.limiter.Allow(sub.ChannelID, e.Type) {
 				d.logger.Debug("notification rate-limited",
@@ -75,7 +79,30 @@ func (d *Dispatcher) Handler() event.HandlerFunc {
 				continue
 			}
 
-			if err := notifier.Send(ctx, sub.Config, subject, body); err != nil {
+			// Select per-channel-type renderer, falling back to default.
+			render := d.renderer
+			if d.renderers != nil {
+				if r, ok := d.renderers[sub.ChannelType]; ok {
+					render = r
+				}
+			}
+			subject, body := render(e)
+
+			// Resolve connector config if ConnectorID is set.
+			config := sub.Config
+			if sub.ConnectorID != nil && *sub.ConnectorID != "" && d.resolver != nil {
+				resolved, err := d.resolver.ResolveConnectorConfig(ctx, *sub.ConnectorID)
+				if err != nil {
+					d.logger.Warn("notification dispatcher: resolve connector config",
+						"channel_id", sub.ChannelID,
+						"connector_id", *sub.ConnectorID,
+						"error", err)
+					continue
+				}
+				config = resolved
+			}
+
+			if err := notifier.Send(ctx, config, subject, body); err != nil {
 				d.logger.Warn("notification dispatcher: send failed",
 					"channel_id", sub.ChannelID,
 					"channel_type", sub.ChannelType,
