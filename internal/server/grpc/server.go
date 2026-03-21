@@ -474,10 +474,11 @@ func (s *agentService) CommandStream(stream grpc.BidiStreamingServer[pb.AgentEve
 						case status.WaitingForInput:
 							evType = event.TypeSessionWaitingForInput
 						case status.Running:
-							// No event published here. The initial created→running transition
-							// is already covered by session.started in the session creation handler.
-							// The running status update still persists to the DB (above), so the
-							// frontend picks it up on the next query invalidation.
+							// Publish session.resumed when transitioning back from waiting_for_input.
+							// The initial created→running is covered by session.started in the
+							// session creation handler, but idle→active needs its own event so the
+							// frontend updates the sessions list immediately.
+							evType = event.TypeSessionResumed
 						}
 						if evType != "" {
 							if err := s.eventPublisher.Publish(ctx, event.NewSessionEvent(evType, ss.GetSessionId(), machineID, "", "")); err != nil {
