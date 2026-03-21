@@ -12,6 +12,7 @@ import { usePagination } from '../hooks/usePagination.ts';
 import { useMultiviewStore } from '../stores/multiview.ts';
 
 const STATUS_OPTIONS = ['all', 'active', 'running', 'waiting_for_input', 'created', 'completed', 'failed', 'terminated'] as const;
+const ACTIVE_STATUSES = new Set(['running', 'waiting_for_input', 'created']);
 
 export function SessionsPage() {
   const navigate = useNavigate();
@@ -24,8 +25,6 @@ export function SessionsPage() {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const createScratchWorkspace = useMultiviewStore((s) => s.createScratchWorkspace);
-
-  const ACTIVE_STATUSES = new Set(['running', 'waiting_for_input', 'created']);
 
   const filters = useMemo(() => {
     const f: Record<string, string> = {};
