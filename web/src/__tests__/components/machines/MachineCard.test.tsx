@@ -154,6 +154,24 @@ describe('MachineCard', () => {
   });
 
   describe('rename (edit) functionality', () => {
+    beforeEach(() => {
+      useAuthStore.setState({
+        user: { userId: 'u1', email: 'admin@test.com', displayName: 'Admin', role: 'admin' },
+        authenticated: true,
+        loading: false,
+      });
+    });
+
+    it('does not show rename button for non-admin users', () => {
+      useAuthStore.setState({
+        user: { userId: 'u1', email: 'user@test.com', displayName: 'User', role: 'user' },
+        authenticated: true,
+        loading: false,
+      });
+      renderCard({ display_name: 'Worker A' });
+      expect(screen.queryByRole('button', { name: 'Rename machine' })).not.toBeInTheDocument();
+    });
+
     it('shows the rename button on the display name row', () => {
       renderCard({ display_name: 'Worker A' });
       expect(screen.getByRole('button', { name: 'Rename machine' })).toBeInTheDocument();

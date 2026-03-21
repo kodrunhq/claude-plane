@@ -1,9 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth.ts';
 import { useChangePassword, useUpdateProfile } from '../../hooks/useUsers.ts';
 
 export function AccountTab() {
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const changePassword = useChangePassword();
   const updateProfile = useUpdateProfile();
@@ -57,12 +59,15 @@ export function AccountTab() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      toast.success('Password changed successfully');
+      toast.success('Password changed — please log in again');
+      await useAuthStore.getState().logout();
+      navigate('/');
+      return;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to change password';
       setPasswordError(message);
     }
-  }, [currentPassword, newPassword, confirmPassword, changePassword]);
+  }, [currentPassword, newPassword, confirmPassword, changePassword, navigate]);
 
   return (
     <div className="space-y-8">

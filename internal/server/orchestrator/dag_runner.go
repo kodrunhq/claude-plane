@@ -333,6 +333,9 @@ func (d *DAGRunner) launchStep(ctx context.Context, rs store.RunStep) {
 	resolveCtx := d.buildResolveContext()
 	d.mu.Unlock()
 
+	// Publish step started event.
+	d.publishStepEvent(ctx, event.TypeJobRunStepStarted, rs.RunStepID, rs.StepID, store.StatusRunning)
+
 	delay := time.Duration(rs.DelaySecondsSnapshot) * time.Second
 	if delay > 0 {
 		go func() {

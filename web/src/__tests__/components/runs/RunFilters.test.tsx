@@ -63,7 +63,7 @@ describe('RunFilters', () => {
     renderWithProviders(<RunFilters {...defaultProps} />);
     const triggerSelect = getSelectByLabel('Trigger');
     const options = Array.from(triggerSelect.options).map((o) => o.text);
-    expect(options).toEqual(['All Triggers', 'Manual', 'Scheduled']);
+    expect(options).toEqual(['All Triggers', 'Manual', 'Scheduled (Cron)', 'Manual Schedule', 'Event Trigger']);
   });
 
   it('reflects selected job value', () => {
@@ -115,8 +115,8 @@ describe('RunFilters', () => {
     const { user } = renderWithProviders(
       <RunFilters {...defaultProps} onTriggerTypeChange={onTriggerTypeChange} />,
     );
-    await user.selectOptions(getSelectByLabel('Trigger'), 'scheduled');
-    expect(onTriggerTypeChange).toHaveBeenCalledWith('scheduled');
+    await user.selectOptions(getSelectByLabel('Trigger'), 'cron');
+    expect(onTriggerTypeChange).toHaveBeenCalledWith('cron');
   });
 
   it('calls onJobChange with "all" when All Jobs is selected', async () => {

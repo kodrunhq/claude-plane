@@ -42,6 +42,7 @@ const (
 	TypeTemplateDeleted = "template.deleted"
 
 	// Run step events.
+	TypeJobRunStepStarted   = "run.step.started"
 	TypeJobRunStepCompleted = "run.step.completed"
 	TypeJobRunStepFailed    = "run.step.failed"
 
@@ -66,6 +67,7 @@ const (
 
 	// Webhook lifecycle events.
 	TypeWebhookCreated = "webhook.created"
+	TypeWebhookUpdated = "webhook.updated"
 	TypeWebhookDeleted = "webhook.deleted"
 	TypeWebhookTest    = "webhook.test"
 

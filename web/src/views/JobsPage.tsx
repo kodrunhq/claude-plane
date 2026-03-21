@@ -11,16 +11,9 @@ import { RefreshButton } from '../components/shared/RefreshButton.tsx';
 import { CopyableId } from '../components/shared/CopyableId.tsx';
 import { SortableHeader } from '../components/shared/SortableHeader.tsx';
 import { Pagination } from '../components/shared/Pagination.tsx';
+import { RunStatusBadge } from '../components/runs/RunStatusBadge.tsx';
 import { toast } from 'sonner';
 import type { Job } from '../types/job.ts';
-
-const statusColors: Record<string, string> = {
-  pending: 'text-gray-400',
-  running: 'text-blue-400',
-  completed: 'text-green-400',
-  failed: 'text-red-400',
-  cancelled: 'text-yellow-400',
-};
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Statuses' },
@@ -163,6 +156,7 @@ export function JobsPage() {
             placeholder="Search by name or ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search jobs"
             className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-9 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/50"
           />
         </div>
@@ -230,9 +224,7 @@ export function JobsPage() {
                 </td>
                 <td className="px-4 py-2">
                   {job.last_run_status ? (
-                    <span className={`text-xs ${statusColors[job.last_run_status] ?? 'text-gray-400'}`}>
-                      {job.last_run_status}
-                    </span>
+                    <RunStatusBadge status={job.last_run_status} size="sm" />
                   ) : (
                     <span className="text-xs text-text-secondary/40">—</span>
                   )}

@@ -184,7 +184,12 @@ func newServeCmd() *cobra.Command {
 				if c == nil {
 					return nil
 				}
-				return &handler.UserClaims{UserID: c.UserID, Role: c.Role, Scopes: c.Scopes}
+				claims := &handler.UserClaims{UserID: c.UserID, Role: c.Role, Scopes: c.Scopes}
+				claims.JTI = c.ID
+				if c.ExpiresAt != nil {
+					claims.ExpiresAt = c.ExpiresAt.Time
+				}
+				return claims
 			}
 
 			// Step executor — creates real PTY sessions on agents.
@@ -361,7 +366,7 @@ func newServeCmd() *cobra.Command {
 
 			// New event/webhook/trigger/ingest handlers.
 			eventHandler := handler.NewEventHandler(s)
-			webhookHandler := handler.NewWebhookHandler(s)
+			webhookHandler := handler.NewWebhookHandler(s, handlerClaimsGetter)
 			triggerHandler := handler.NewTriggerHandler(s,
 				handler.WithTriggerJobStore(s),
 				handler.WithTriggerClaims(handlerClaimsGetter),
@@ -414,6 +419,7 @@ func newServeCmd() *cobra.Command {
 			// Wire event publishers into CRUD handlers.
 			jobHandler.SetPublisher(eventBus)
 			userHandler.SetPublisher(eventBus)
+			userHandler.SetTokenRevoker(authSvc)
 			scheduleHandler.SetPublisher(eventBus)
 			scheduleHandler.SetRunCreator(orch)
 			credentialHandler.SetPublisher(eventBus)

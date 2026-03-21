@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { User } from '../../types/user.ts';
 
@@ -11,12 +11,21 @@ interface ResetPasswordModalProps {
 }
 
 export function ResetPasswordModal({ open, user, onClose, onSubmit, submitting }: ResetPasswordModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [open, onClose]);
+
   if (!open || !user) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="reset-password-title" className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div aria-labelledby="reset-password-title" className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
           <h2 id="reset-password-title" className="text-lg font-semibold text-text-primary">Reset Password</h2>
           <button
@@ -30,6 +39,7 @@ export function ResetPasswordModal({ open, user, onClose, onSubmit, submitting }
         <ResetPasswordForm
           key={user.user_id}
           user={user}
+          onClose={onClose}
           onSubmit={onSubmit}
           submitting={submitting}
         />
@@ -41,10 +51,12 @@ export function ResetPasswordModal({ open, user, onClose, onSubmit, submitting }
 
 function ResetPasswordForm({
   user,
+  onClose,
   onSubmit,
   submitting,
 }: {
   user: User;
+  onClose: () => void;
   onSubmit: (userId: string, newPassword: string) => Promise<void>;
   submitting: boolean;
 }) {
@@ -112,6 +124,13 @@ function ResetPasswordForm({
       {error && <p className="text-sm text-status-error">{error}</p>}
 
       <div className="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 text-sm rounded-md text-text-secondary hover:text-text-primary bg-bg-tertiary hover:bg-bg-tertiary/80 transition-colors"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={submitting || !newPassword || !confirmPassword}

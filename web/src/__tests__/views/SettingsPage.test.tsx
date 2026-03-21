@@ -35,7 +35,6 @@ const mockPreferences: UserPreferences = {
   ui: {
     theme: 'dark',
     terminal_font_size: 14,
-    auto_attach_session: false,
     command_center_cards: ['sessions', 'machines', 'jobs', 'runs'],
   },
   default_session_timeout: 300,

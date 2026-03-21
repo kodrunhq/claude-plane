@@ -140,7 +140,7 @@ export const useMultiviewStore = create<MultiviewState>((set, get) => ({
 
   createScratchWorkspace: (sessionIds) => {
     const clamped = sessionIds.slice(0, 6);
-    if (clamped.length < 1) return;
+    if (clamped.length < 2) return;
     const workspace = makeWorkspace(clamped);
     persistScratch(workspace);
     set({ activeWorkspace: workspace, focusedPaneId: null });

@@ -20,10 +20,12 @@ const STATUS_OPTIONS = [
 ];
 
 const TRIGGER_OPTIONS = [
-  { value: 'all', label: 'All Triggers' },
+  { value: '', label: 'All Triggers' },
   { value: 'manual', label: 'Manual' },
-  { value: 'scheduled', label: 'Scheduled' },
-];
+  { value: 'cron', label: 'Scheduled (Cron)' },
+  { value: 'manual_schedule', label: 'Manual Schedule' },
+  { value: 'event_trigger', label: 'Event Trigger' },
+] as const;
 
 const SELECT_CLASS =
   'rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary';

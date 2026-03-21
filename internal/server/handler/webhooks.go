@@ -28,11 +28,17 @@ type WebhookCRUDStore interface {
 type WebhookHandler struct {
 	store     WebhookCRUDStore
 	publisher event.Publisher
+	getClaims ClaimsGetter
 }
 
 // NewWebhookHandler creates a new WebhookHandler.
-func NewWebhookHandler(store WebhookCRUDStore) *WebhookHandler {
-	return &WebhookHandler{store: store}
+func NewWebhookHandler(store WebhookCRUDStore, getClaims ClaimsGetter) *WebhookHandler {
+	return &WebhookHandler{store: store, getClaims: getClaims}
+}
+
+// requireAdminAccess delegates to the package-level requireAdmin helper.
+func (h *WebhookHandler) requireAdminAccess(w http.ResponseWriter, r *http.Request) bool {
+	return requireAdmin(w, r, h.getClaims)
 }
 
 // SetPublisher configures the event publisher for webhook lifecycle events.
@@ -97,6 +103,10 @@ func (h *WebhookHandler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 
 // CreateWebhook handles POST /api/v1/webhooks.
 func (h *WebhookHandler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminAccess(w, r) {
+		return
+	}
+
 	var req createWebhookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -160,6 +170,10 @@ func (h *WebhookHandler) GetWebhook(w http.ResponseWriter, r *http.Request) {
 
 // UpdateWebhook handles PUT /api/v1/webhooks/{webhookID}.
 func (h *WebhookHandler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminAccess(w, r) {
+		return
+	}
+
 	id := chi.URLParam(r, "webhookID")
 
 	// Verify the webhook exists before decoding body.
@@ -224,10 +238,15 @@ func (h *WebhookHandler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+	h.publishWebhookEvent(event.TypeWebhookUpdated, updated.WebhookID, updated.Name)
 }
 
 // DeleteWebhook handles DELETE /api/v1/webhooks/{webhookID}.
 func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminAccess(w, r) {
+		return
+	}
+
 	id := chi.URLParam(r, "webhookID")
 
 	existing, err := h.store.GetWebhook(r.Context(), id)
@@ -256,6 +275,10 @@ func (h *WebhookHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 // Publishes a synthetic webhook.test event so the existing WebhookDeliverer
 // picks it up and delivers it to the webhook's URL.
 func (h *WebhookHandler) TestDelivery(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdminAccess(w, r) {
+		return
+	}
+
 	id := chi.URLParam(r, "webhookID")
 
 	webhook, err := h.store.GetWebhook(r.Context(), id)

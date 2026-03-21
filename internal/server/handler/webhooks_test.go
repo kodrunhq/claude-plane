@@ -121,7 +121,7 @@ func toJSON(t *testing.T, v interface{}) *bytes.Buffer {
 
 func TestWebhookHandler_ListWebhooks_Empty(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -146,7 +146,7 @@ func TestWebhookHandler_ListWebhooks_Empty(t *testing.T) {
 
 func TestWebhookHandler_CreateWebhook(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -182,7 +182,7 @@ func TestWebhookHandler_CreateWebhook(t *testing.T) {
 
 func TestWebhookHandler_CreateWebhook_MissingName(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -204,7 +204,7 @@ func TestWebhookHandler_CreateWebhook_MissingName(t *testing.T) {
 
 func TestWebhookHandler_CreateWebhook_MissingURL(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -226,7 +226,7 @@ func TestWebhookHandler_CreateWebhook_MissingURL(t *testing.T) {
 
 func TestWebhookHandler_CreateWebhook_MissingEvents(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -249,7 +249,7 @@ func TestWebhookHandler_CreateWebhook_MissingEvents(t *testing.T) {
 func TestWebhookHandler_CreateWebhook_StoreError(t *testing.T) {
 	mock := newMockWebhookStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -272,7 +272,7 @@ func TestWebhookHandler_CreateWebhook_StoreError(t *testing.T) {
 
 func TestWebhookHandler_GetWebhook(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -309,7 +309,7 @@ func TestWebhookHandler_GetWebhook(t *testing.T) {
 
 func TestWebhookHandler_GetWebhook_NotFound(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -326,7 +326,7 @@ func TestWebhookHandler_GetWebhook_NotFound(t *testing.T) {
 
 func TestWebhookHandler_UpdateWebhook(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -375,7 +375,7 @@ func TestWebhookHandler_UpdateWebhook(t *testing.T) {
 
 func TestWebhookHandler_UpdateWebhook_NotFound(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -401,7 +401,7 @@ func TestWebhookHandler_UpdateWebhook_NotFound(t *testing.T) {
 
 func TestWebhookHandler_DeleteWebhook(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -434,7 +434,7 @@ func TestWebhookHandler_DeleteWebhook(t *testing.T) {
 
 func TestWebhookHandler_DeleteWebhook_NotFound(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -452,7 +452,7 @@ func TestWebhookHandler_DeleteWebhook_NotFound(t *testing.T) {
 
 func TestWebhookHandler_ListDeliveries(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -492,7 +492,7 @@ func TestWebhookHandler_ListDeliveries(t *testing.T) {
 
 func TestWebhookHandler_ListDeliveries_WebhookNotFound(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -509,7 +509,7 @@ func TestWebhookHandler_ListDeliveries_WebhookNotFound(t *testing.T) {
 
 func TestWebhookHandler_ListDeliveries_Empty(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -546,7 +546,7 @@ func TestWebhookHandler_ListDeliveries_Empty(t *testing.T) {
 func TestWebhookHandler_CreateWebhook_PublishesEvent(t *testing.T) {
 	mock := newMockWebhookStore()
 	pub := &mockPublisher{}
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	h.SetPublisher(pub)
 	srv := newWebhookRouter(h)
 	defer srv.Close()
@@ -584,7 +584,7 @@ func TestWebhookHandler_CreateWebhook_PublishesEvent(t *testing.T) {
 func TestWebhookHandler_TestDelivery(t *testing.T) {
 	mock := newMockWebhookStore()
 	pub := &mockPublisher{}
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	h.SetPublisher(pub)
 	srv := newWebhookRouter(h)
 	defer srv.Close()
@@ -629,7 +629,7 @@ func TestWebhookHandler_TestDelivery(t *testing.T) {
 func TestWebhookHandler_TestDelivery_NotFound(t *testing.T) {
 	mock := newMockWebhookStore()
 	pub := &mockPublisher{}
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	h.SetPublisher(pub)
 	srv := newWebhookRouter(h)
 	defer srv.Close()
@@ -647,7 +647,7 @@ func TestWebhookHandler_TestDelivery_NotFound(t *testing.T) {
 
 func TestWebhookHandler_TestDelivery_NoPublisher(t *testing.T) {
 	mock := newMockWebhookStore()
-	h := handler.NewWebhookHandler(mock) // no publisher set
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin")) // no publisher set
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
@@ -676,7 +676,7 @@ func TestWebhookHandler_TestDelivery_NoPublisher(t *testing.T) {
 func TestWebhookHandler_ListWebhooks_StoreError(t *testing.T) {
 	mock := newMockWebhookStore()
 	mock.err = context.DeadlineExceeded
-	h := handler.NewWebhookHandler(mock)
+	h := handler.NewWebhookHandler(mock, testClaimsGetter("admin-1", "admin"))
 	srv := newWebhookRouter(h)
 	defer srv.Close()
 
