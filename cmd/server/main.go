@@ -56,6 +56,7 @@ func main() {
 		newServeCmd(),
 		newCACmd(),
 		newSeedAdminCmd(),
+		newCreateAPIKeyCmd(),
 		newProvisionCmd(),
 	)
 
@@ -730,6 +731,61 @@ func newSeedAdminCmd() *cobra.Command {
 	cmd.Flags().String("email", "", "Admin email address")
 	cmd.Flags().String("password-file", "", "Path to file containing admin password")
 	cmd.Flags().String("name", "Admin", "Admin display name")
+	return cmd
+}
+
+func newCreateAPIKeyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create-api-key",
+		Short: "Create an API key for a user (e.g., for the bridge)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dbPath, _ := cmd.Flags().GetString("db")
+			email, _ := cmd.Flags().GetString("email")
+			keyName, _ := cmd.Flags().GetString("name")
+			jwtSecret, _ := cmd.Flags().GetString("jwt-secret")
+
+			if email == "" {
+				return fmt.Errorf("--email is required")
+			}
+			if jwtSecret == "" {
+				return fmt.Errorf("--jwt-secret is required")
+			}
+
+			s, err := store.NewStore(dbPath)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer s.Close()
+
+			user, err := s.GetUserByEmail(email)
+			if err != nil {
+				return fmt.Errorf("lookup user: %w", err)
+			}
+			if user == nil {
+				return fmt.Errorf("no user found with email %q", email)
+			}
+
+			plaintextKey, _, err := s.CreateAPIKey(
+				context.Background(),
+				user.UserID,
+				keyName,
+				[]string{"admin"},
+				nil, // no expiry
+				[]byte(jwtSecret),
+			)
+			if err != nil {
+				return fmt.Errorf("create API key: %w", err)
+			}
+
+			// Print only the key to stdout so scripts can capture it.
+			fmt.Print(plaintextKey)
+			return nil
+		},
+	}
+	cmd.Flags().String("db", "claude-plane.db", "Path to SQLite database file")
+	cmd.Flags().String("email", "", "User email to create the key for")
+	cmd.Flags().String("name", "bridge", "API key name")
+	cmd.Flags().String("jwt-secret", "", "JWT signing secret (same as auth.jwt_secret in server.toml)")
 	return cmd
 }
 

@@ -34,9 +34,6 @@ cd web && npm install && npm run build && cd ..
 # IMPORTANT: If you skip the frontend build, Go build still works if
 # internal/server/frontend/dist/.gitkeep exists (CI stubs this).
 
-# Quickstart (builds, generates certs, configs, admin user, starts server+agent)
-./install.sh quickstart
-
 # Server subcommands
 ./claude-plane-server serve --config server.toml
 ./claude-plane-server ca init --out-dir ./ca

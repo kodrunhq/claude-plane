@@ -3,11 +3,12 @@ set -e
 
 DATA_DIR="/data"
 CONFIG_FILE="${DATA_DIR}/server.toml"
+BRIDGE_CONFIG="${DATA_DIR}/bridge.toml"
 CA_DIR="${DATA_DIR}/ca"
 CERT_DIR="${DATA_DIR}/server-cert"
 DB_FILE="${DATA_DIR}/claude-plane.db"
 
-# First-run initialization: generate certs, config, and admin account.
+# First-run initialization: generate certs, config, admin account, and bridge API key.
 if [ ! -f "$CONFIG_FILE" ]; then
   echo "==> First run detected. Initializing..."
 
@@ -42,10 +43,24 @@ if [ ! -f "$CONFIG_FILE" ]; then
     --email "$ADMIN_EMAIL" \
     --name Admin
 
+  # Generate an API key for the bridge (runs as the admin user).
+  echo "==> Creating bridge API key..."
+  BRIDGE_API_KEY=$(claude-plane-server create-api-key \
+    --db "$DB_FILE" \
+    --email "$ADMIN_EMAIL" \
+    --name "bridge-internal" \
+    --jwt-secret "$JWT_SECRET")
+
+  # Write bridge config pointing to the local server.
+  printf '[claude_plane]\napi_url = "http://localhost:4200"\napi_key = "%s"\n\n[state]\npath = "%s/bridge-state.json"\n\n[health]\naddress = ":8081"\n' \
+    "$BRIDGE_API_KEY" "$DATA_DIR" \
+    > "$BRIDGE_CONFIG"
+
   echo "==> Initialization complete."
   echo "    Admin email:    $ADMIN_EMAIL"
   echo "    Admin password: $ADMIN_PASSWORD"
   echo "    Dashboard:      http://localhost:4200"
+  echo "    Bridge:         auto-configured (internal API key)"
   if [ "$ADMIN_PASSWORD" = "changeme123" ]; then
     echo ""
     echo "=============================================="
@@ -56,6 +71,12 @@ if [ ! -f "$CONFIG_FILE" ]; then
     echo ""
   fi
   echo ""
+fi
+
+# Start bridge in the background if config exists.
+if [ -f "$BRIDGE_CONFIG" ]; then
+  echo "==> Starting bridge..."
+  claude-plane-bridge serve --config "$BRIDGE_CONFIG" &
 fi
 
 exec claude-plane-server serve --config "$CONFIG_FILE"

@@ -27,7 +27,7 @@
 - **External integrations** — Bridge component connects GitHub, Telegram, and Slack to trigger jobs and relay notifications
 - **System logging & monitoring** — Structured logs from server and agents with live streaming, filterable log viewer, dashboard health cards, and real-time toast alerts
 - **Zero-config networking** — Agents dial in to the server, so workers can be behind NATs and firewalls
-- **Single binary per role** — No runtime dependencies. `scp` the binary, add a config file, and run. Agents install as system services with one command
+- **Docker-first deployment** — Single `docker compose up` command runs everything. Agents connect via `curl` + `join` command
 - **mTLS security** — Agent-to-server communication secured with mutual TLS and a built-in CA
 
 ## Architecture
@@ -42,7 +42,7 @@ Three components, each a single Go binary:
 |-----------|------|
 | **Server** | Control plane. Serves the React frontend, manages sessions, orchestrates jobs, accepts inbound gRPC connections from agents. SQLite storage. |
 | **Agent** | Runs on worker machines. Manages Claude CLI processes in PTYs, buffers terminal output, maintains persistent gRPC connection to the server. |
-| **Bridge** | Connects external services (GitHub, Telegram, Slack) to the server via its REST API. |
+| **Bridge** | Connects external services (GitHub, Telegram, Slack) to the server. Auto-configured in Docker — configure connectors from the web UI. |
 
 ## Quickstart
 
@@ -60,6 +60,8 @@ That's it. On first run the container automatically generates TLS certificates, 
 ```bash
 docker logs claude-plane
 ```
+
+The bridge runs automatically inside the container. To set up GitHub or Telegram integrations, go to the **Connectors** page in the dashboard.
 
 Default admin: `admin@localhost` / `changeme123`. Customize with environment variables:
 
@@ -113,6 +115,8 @@ The `--insecure` flag on `join` is required when the server uses plain HTTP (the
 
 ### Build from source
 
+For contributors and advanced users. Docker is the recommended way to run everything together.
+
 **Prerequisites:** Go 1.25+, Node.js 22+
 
 ```bash
@@ -133,8 +137,8 @@ cd web && npm run test -- --run
 
 | Guide | Description |
 |-------|-------------|
-| [Quickstart](docs/quickstart.md) | Single-machine setup for evaluation |
-| [Server Installation](docs/install-server.md) | Production server deployment |
+| [Quickstart](docs/quickstart.md) | Docker setup and agent onboarding |
+| [Server Installation](docs/install-server.md) | Advanced bare-metal server deployment |
 | [Agent Installation](docs/install-agent.md) | Worker machine agent setup |
 | [Configuration Reference](docs/configuration.md) | All config file options |
 | [Architecture](docs/architecture.md) | System design and data flows |
