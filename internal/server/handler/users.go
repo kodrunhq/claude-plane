@@ -29,14 +29,20 @@ type UserAdminStore interface {
 
 // UserHandler handles REST endpoints for user management (admin only).
 type UserHandler struct {
-	store     UserAdminStore
-	getClaims ClaimsGetter
-	publisher event.Publisher
+	store        UserAdminStore
+	getClaims    ClaimsGetter
+	publisher    event.Publisher
+	tokenRevoker TokenRevoker
 }
 
 // NewUserHandler creates a new UserHandler.
 func NewUserHandler(s UserAdminStore, getClaims ClaimsGetter) *UserHandler {
 	return &UserHandler{store: s, getClaims: getClaims}
+}
+
+// SetTokenRevoker configures the token revoker for invalidating JWTs after password changes.
+func (h *UserHandler) SetTokenRevoker(tr TokenRevoker) {
+	h.tokenRevoker = tr
 }
 
 // SetPublisher configures the event publisher for user lifecycle events.
@@ -306,7 +312,14 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Revoke the current JWT so the user must re-authenticate with the new password.
+	if h.tokenRevoker != nil && c.JTI != "" {
+		if err := h.tokenRevoker.RevokeToken(c.JTI, c.UserID, c.ExpiresAt); err != nil {
+			slog.Warn("failed to revoke token after password change", "user_id", c.UserID, "error", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "re_login": true})
 }
 
 // resetPasswordRequest is the JSON body for POST /api/v1/users/{userID}/reset-password.
@@ -365,6 +378,11 @@ func (h *UserHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	// Note: we cannot revoke the target user's existing tokens here because we
+	// don't have their JTI. Their tokens will expire naturally per the configured TTL.
+	slog.Warn("admin reset password — target user's existing tokens cannot be revoked",
+		"admin_id", c.UserID, "target_user_id", userID)
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

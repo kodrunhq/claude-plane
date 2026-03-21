@@ -28,7 +28,17 @@ curl -sfL "{{.DownloadURL}}" -o "${INSTALL_DIR}/claude-plane-agent"
 chmod +x "${INSTALL_DIR}/claude-plane-agent"
 
 # Portable base64 decode (GNU uses -d, BSD/macOS uses -D)
-b64decode() { base64 -d 2>/dev/null || base64 -D; }
+b64decode() {
+    if command -v base64 >/dev/null 2>&1; then
+        if base64 --help 2>&1 | grep -q '\-d'; then
+            base64 -d
+        else
+            base64 -D
+        fi
+    else
+        openssl base64 -d
+    fi
+}
 
 # Write certificates
 echo "==> Writing certificates..."
