@@ -21,9 +21,11 @@ type Session struct {
 	Args          string `json:"args,omitempty"`
 	InitialPrompt string `json:"initial_prompt,omitempty"`
 	// CreatedAt corresponds to the database column `started_at`.
-	CreatedAt time.Time `json:"created_at"`
-	// UpdatedAt corresponds to the database column `ended_at` (or CreatedAt if not ended).
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time  `json:"created_at"`
+	// UpdatedAt corresponds to the database column `updated_at`.
+	UpdatedAt time.Time  `json:"updated_at"`
+	// EndedAt corresponds to the database column `ended_at` (NULL if session has not ended).
+	EndedAt   *time.Time `json:"ended_at,omitempty"`
 }
 
 // CreateSession inserts a new session into the sessions table.
@@ -51,21 +53,18 @@ func (s *Store) CreateSession(sess *Session) error {
 func (s *Store) GetSession(id string) (*Session, error) {
 	sess := &Session{}
 	var userID, templateID sql.NullString
-	// endedAt temporarily holds the database `ended_at` column, which is then
-	// mapped to Session.UpdatedAt (or left equal to CreatedAt if NULL).
 	var endedAt sql.NullTime
 	err := s.reader.QueryRow(`
 		SELECT session_id, machine_id, user_id, COALESCE(template_id, ''),
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
 		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
 		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
-		       started_at, ended_at
+		       started_at, updated_at, ended_at
 		FROM sessions WHERE session_id = ?`, id,
-	// Note: started_at -> sess.CreatedAt, ended_at -> endedAt (-> sess.UpdatedAt).
 	).Scan(&sess.SessionID, &sess.MachineID, &userID, &templateID,
 		&sess.Command, &sess.WorkingDir, &sess.Status,
 		&sess.Model, &sess.SkipPerms, &sess.EnvVars, &sess.Args, &sess.InitialPrompt,
-		&sess.CreatedAt, &endedAt)
+		&sess.CreatedAt, &sess.UpdatedAt, &endedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("session %s: %w", id, ErrNotFound)
 	}
@@ -79,9 +78,8 @@ func (s *Store) GetSession(id string) (*Session, error) {
 		sess.TemplateID = templateID.String
 	}
 	if endedAt.Valid {
-		sess.UpdatedAt = endedAt.Time
-	} else {
-		sess.UpdatedAt = sess.CreatedAt
+		t := endedAt.Time
+		sess.EndedAt = &t
 	}
 	return sess, nil
 }
@@ -93,7 +91,7 @@ func (s *Store) ListSessions() ([]Session, error) {
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
 		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
 		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
-		       started_at, ended_at
+		       started_at, updated_at, ended_at
 		FROM sessions ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
@@ -110,7 +108,7 @@ func (s *Store) ListSessionsByMachine(machineID string) ([]Session, error) {
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
 		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
 		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
-		       started_at, ended_at
+		       started_at, updated_at, ended_at
 		FROM sessions WHERE machine_id = ? ORDER BY started_at DESC`, machineID)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions by machine: %w", err)
@@ -127,7 +125,7 @@ func (s *Store) ListSessionsByStatus(status string) ([]Session, error) {
 		       COALESCE(command, 'claude'), COALESCE(working_dir, ''),
 		       status, COALESCE(model, ''), COALESCE(skip_permissions, ''),
 		       COALESCE(env_vars, ''), COALESCE(args, ''), COALESCE(initial_prompt, ''),
-		       started_at, ended_at
+		       started_at, updated_at, ended_at
 		FROM sessions WHERE status = ? ORDER BY started_at DESC`, status)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions by status: %w", err)
@@ -138,14 +136,14 @@ func (s *Store) ListSessionsByStatus(status string) ([]Session, error) {
 }
 
 // UpdateSessionStatus updates the status for a session.
-// Sets ended_at only when transitioning to a terminal state.
+// Sets updated_at on every call; sets ended_at only for terminal states.
 func (s *Store) UpdateSessionStatus(id, status string) error {
 	var query string
 	switch status {
 	case StatusCompleted, StatusFailed, StatusTerminated:
-		query = `UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP WHERE session_id = ?`
+		query = `UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP, ended_at = CURRENT_TIMESTAMP WHERE session_id = ?`
 	default:
-		query = `UPDATE sessions SET status = ? WHERE session_id = ?`
+		query = `UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?`
 	}
 	result, err := s.writer.Exec(query, status, id)
 	if err != nil {
@@ -162,7 +160,7 @@ func (s *Store) UpdateSessionStatus(id, status string) error {
 // already in a terminal state (completed, failed, terminated). This prevents
 // agent exit events from overwriting user-initiated terminations.
 func (s *Store) UpdateSessionStatusIfNotTerminal(id, status string) error {
-	query := `UPDATE sessions SET status = ?, ended_at = CURRENT_TIMESTAMP
+	query := `UPDATE sessions SET status = ?, updated_at = CURRENT_TIMESTAMP, ended_at = CURRENT_TIMESTAMP
 		WHERE session_id = ? AND status NOT IN (?, ?, ?)`
 	result, err := s.writer.Exec(query, status, id, StatusCompleted, StatusFailed, StatusTerminated)
 	if err != nil {
@@ -208,7 +206,7 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 		if err := rows.Scan(&sess.SessionID, &sess.MachineID, &userID, &templateID,
 			&sess.Command, &sess.WorkingDir, &sess.Status,
 			&sess.Model, &sess.SkipPerms, &sess.EnvVars, &sess.Args, &sess.InitialPrompt,
-			&sess.CreatedAt, &endedAt); err != nil {
+			&sess.CreatedAt, &sess.UpdatedAt, &endedAt); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		if userID.Valid {
@@ -218,9 +216,8 @@ func scanSessions(rows *sql.Rows) ([]Session, error) {
 			sess.TemplateID = templateID.String
 		}
 		if endedAt.Valid {
-			sess.UpdatedAt = endedAt.Time
-		} else {
-			sess.UpdatedAt = sess.CreatedAt
+			t := endedAt.Time
+			sess.EndedAt = &t
 		}
 		sessions = append(sessions, sess)
 	}
