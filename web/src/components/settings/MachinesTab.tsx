@@ -182,18 +182,9 @@ function MachineOverrideCard({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">Max Concurrent Sessions</label>
-            <input
-              type="number"
-              value={override.max_concurrent_sessions || ''}
-              onChange={(e) => onUpdate({ max_concurrent_sessions: Number(e.target.value) || 0 })}
-              min={0}
-              placeholder="0 (use machine default)"
-              className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary"
-            />
-            <p className="text-xs text-text-secondary mt-1">0 uses the machine default</p>
-          </div>
+          <p className="text-xs text-text-secondary">
+            Max concurrent sessions is configured in the agent&apos;s TOML config file (agent.max_sessions).
+          </p>
         </div>
       )}
     </div>

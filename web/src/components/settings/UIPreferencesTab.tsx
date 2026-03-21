@@ -15,6 +15,7 @@ const CARD_OPTIONS = [
   { value: 'jobs', label: 'Jobs' },
   { value: 'runs', label: 'Runs' },
   { value: 'templates', label: 'Templates' },
+  { value: 'health', label: 'Health Dashboard' },
 ] as const;
 
 const THEME_OPTIONS: ReadonlyArray<{ value: UIPrefs['theme']; label: string }> = [
@@ -26,7 +27,6 @@ const THEME_OPTIONS: ReadonlyArray<{ value: UIPrefs['theme']; label: string }> =
 export function UIPreferencesTab({ preferences, onSave, saving }: UIPreferencesTabProps) {
   const [theme, setTheme] = useState<UIPrefs['theme']>(preferences.ui?.theme ?? 'system');
   const [fontSize, setFontSize] = useState(String(preferences.ui?.terminal_font_size ?? 14));
-  const [autoAttach, setAutoAttach] = useState(preferences.ui?.auto_attach_session ?? false);
   const [selectedCards, setSelectedCards] = useState<ReadonlySet<string>>(
     new Set(preferences.ui?.command_center_cards ?? ['sessions', 'machines', 'jobs', 'runs']),
   );
@@ -51,7 +51,6 @@ export function UIPreferencesTab({ preferences, onSave, saving }: UIPreferencesT
         ui: {
           theme,
           terminal_font_size: Number(fontSize) || 14,
-          auto_attach_session: autoAttach,
           command_center_cards: Array.from(selectedCards),
         },
       });
@@ -59,7 +58,7 @@ export function UIPreferencesTab({ preferences, onSave, saving }: UIPreferencesT
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
-  }, [preferences, theme, fontSize, autoAttach, selectedCards, onSave]);
+  }, [preferences, theme, fontSize, selectedCards, onSave]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -89,21 +88,6 @@ export function UIPreferencesTab({ preferences, onSave, saving }: UIPreferencesT
           className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg bg-bg-tertiary border border-border-primary text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary"
         />
         <p className="text-xs text-text-secondary mt-1">8-32px</p>
-      </div>
-
-      <div>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoAttach}
-            onChange={(e) => setAutoAttach(e.target.checked)}
-            className="w-4 h-4 rounded border-border-primary bg-bg-tertiary text-accent-primary focus:ring-accent-primary"
-          />
-          <div>
-            <p className="text-sm font-medium text-text-primary">Auto-Attach Sessions</p>
-            <p className="text-xs text-text-secondary">Automatically attach to new sessions when created</p>
-          </div>
-        </label>
       </div>
 
       <div>

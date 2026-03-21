@@ -18,7 +18,7 @@ export function SessionCard({ session, onAttach, onTerminate, selectable, select
 
   return (
     <div
-      className="gradient-border-card p-4 cursor-pointer relative"
+      className="gradient-border-card p-4 cursor-pointer relative overflow-hidden"
       style={{ '--glow-color': '#06b6d4' } as React.CSSProperties}
       onClick={() => selectable ? onSelect?.(session.session_id) : onAttach(session.session_id)}
     >
@@ -35,7 +35,7 @@ export function SessionCard({ session, onAttach, onTerminate, selectable, select
         </div>
       )}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <StatusBadge status={session.status} size="sm" />
           {isTerminalSession ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium rounded bg-cyan-500/10 text-cyan-400">
