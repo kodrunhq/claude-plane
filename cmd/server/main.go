@@ -438,7 +438,7 @@ func newServeCmd() *cobra.Command {
 			}
 
 			// Bridge handler — uses encryption key for connector secrets
-			bridgeHandler := handler.NewBridgeHandler(s, handlerClaimsGetter, encryptionKey)
+			bridgeHandler := handler.NewBridgeHandler(s, handlerClaimsGetter, encryptionKey, s)
 
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, grpcSrv.Broker(), cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)

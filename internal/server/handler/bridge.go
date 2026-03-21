@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,19 +30,29 @@ type BridgeStore interface {
 	GetBridgeControl(ctx context.Context, key string) (string, error)
 }
 
+// NotifStore is the persistence interface for notification channel auto-sync.
+type NotifStore interface {
+	CreateNotificationChannel(ctx context.Context, ch store.NotificationChannel) (*store.NotificationChannel, error)
+	UpdateNotificationChannel(ctx context.Context, ch store.NotificationChannel) (*store.NotificationChannel, error)
+	DeleteNotificationChannel(ctx context.Context, channelID string) error
+	GetChannelByConnectorID(ctx context.Context, connectorID string) (*store.NotificationChannel, error)
+}
+
 // BridgeHandler handles REST endpoints for bridge connectors and control signals.
 type BridgeHandler struct {
-	store     BridgeStore
-	getClaims ClaimsGetter
-	encKey    []byte // AES-256 encryption key for connector secrets
+	store      BridgeStore
+	notifStore NotifStore
+	getClaims  ClaimsGetter
+	encKey     []byte // AES-256 encryption key for connector secrets
 }
 
 // NewBridgeHandler creates a new BridgeHandler.
-func NewBridgeHandler(s BridgeStore, getClaims ClaimsGetter, encKey []byte) *BridgeHandler {
+func NewBridgeHandler(s BridgeStore, getClaims ClaimsGetter, encKey []byte, notifStore NotifStore) *BridgeHandler {
 	return &BridgeHandler{
-		store:     s,
-		getClaims: getClaims,
-		encKey:    encKey,
+		store:      s,
+		notifStore: notifStore,
+		getClaims:  getClaims,
+		encKey:     encKey,
 	}
 }
 
@@ -108,6 +120,116 @@ func toConnectorResponse(c *store.BridgeConnector, secretJSON []byte) connectorR
 	return resp
 }
 
+// buildTelegramChannelConfig parses a connector's Config JSON to extract
+// group_id and events_topic_id, then builds the notification channel config.
+func buildTelegramChannelConfig(connectorConfig string) (string, error) {
+	var publicCfg struct {
+		GroupID       int64 `json:"group_id"`
+		EventsTopicID int   `json:"events_topic_id"`
+	}
+	if connectorConfig != "" {
+		if err := json.Unmarshal([]byte(connectorConfig), &publicCfg); err != nil {
+			return "", err
+		}
+	}
+
+	chCfg := map[string]any{
+		"chat_id": strconv.FormatInt(publicCfg.GroupID, 10),
+	}
+	if publicCfg.EventsTopicID > 0 {
+		chCfg["topic_id"] = publicCfg.EventsTopicID
+	}
+
+	out, err := json.Marshal(chCfg)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// syncNotifChannelCreate auto-creates a linked notification channel for a
+// Telegram connector. Errors are logged but do not fail the connector creation.
+func (h *BridgeHandler) syncNotifChannelCreate(ctx context.Context, connector *store.BridgeConnector, userID string) {
+	if h.notifStore == nil || connector.ConnectorType != "telegram" {
+		return
+	}
+
+	chConfig, err := buildTelegramChannelConfig(connector.Config)
+	if err != nil {
+		slog.Error("auto-sync: build telegram channel config", "error", err, "connector_id", connector.ConnectorID)
+		return
+	}
+
+	ch := store.NotificationChannel{
+		ChannelType: "telegram",
+		Name:        connector.Name,
+		Config:      chConfig,
+		Enabled:     true,
+		ConnectorID: &connector.ConnectorID,
+		CreatedBy:   userID,
+	}
+
+	if _, err := h.notifStore.CreateNotificationChannel(ctx, ch); err != nil {
+		slog.Error("auto-sync: create notification channel for connector", "error", err, "connector_id", connector.ConnectorID)
+	}
+}
+
+// syncNotifChannelUpdate syncs a linked notification channel when a Telegram
+// connector is updated. Errors are logged but do not fail the update.
+func (h *BridgeHandler) syncNotifChannelUpdate(ctx context.Context, connectorID, connectorType, name, config string) {
+	if h.notifStore == nil || connectorType != "telegram" {
+		return
+	}
+
+	existing, err := h.notifStore.GetChannelByConnectorID(ctx, connectorID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("auto-sync: lookup channel for connector", "error", err, "connector_id", connectorID)
+		}
+		return
+	}
+
+	chConfig, err := buildTelegramChannelConfig(config)
+	if err != nil {
+		slog.Error("auto-sync: build telegram channel config on update", "error", err, "connector_id", connectorID)
+		return
+	}
+
+	updated := store.NotificationChannel{
+		ChannelID:   existing.ChannelID,
+		ChannelType: existing.ChannelType,
+		Name:        name,
+		Config:      chConfig,
+		Enabled:     existing.Enabled,
+		ConnectorID: existing.ConnectorID,
+		CreatedBy:   existing.CreatedBy,
+	}
+
+	if _, err := h.notifStore.UpdateNotificationChannel(ctx, updated); err != nil {
+		slog.Error("auto-sync: update notification channel for connector", "error", err, "connector_id", connectorID)
+	}
+}
+
+// syncNotifChannelDelete removes the linked notification channel when a
+// connector is deleted. Errors are logged but do not fail the deletion.
+func (h *BridgeHandler) syncNotifChannelDelete(ctx context.Context, connectorID string) {
+	if h.notifStore == nil {
+		return
+	}
+
+	existing, err := h.notifStore.GetChannelByConnectorID(ctx, connectorID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("auto-sync: lookup channel for connector on delete", "error", err, "connector_id", connectorID)
+		}
+		return
+	}
+
+	if err := h.notifStore.DeleteNotificationChannel(ctx, existing.ChannelID); err != nil {
+		slog.Error("auto-sync: delete notification channel for connector", "error", err, "connector_id", connectorID)
+	}
+}
+
 // CreateConnector handles POST /api/v1/bridge/connectors.
 func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeAdmin(w, r) {
@@ -156,6 +278,8 @@ func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	h.syncNotifChannelCreate(r.Context(), created, c.UserID)
 
 	writeJSON(w, http.StatusCreated, toConnectorResponse(created, nil))
 }
@@ -302,6 +426,8 @@ func (h *BridgeHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.syncNotifChannelUpdate(r.Context(), connectorID, updated.ConnectorType, updated.Name, updated.Config)
+
 	writeJSON(w, http.StatusOK, toConnectorResponse(updated, nil))
 }
 
@@ -312,6 +438,10 @@ func (h *BridgeHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) 
 	}
 
 	connectorID := chi.URLParam(r, "connectorID")
+
+	// Delete the linked notification channel first (before the connector row
+	// disappears and the connector_id FK would be orphaned).
+	h.syncNotifChannelDelete(r.Context(), connectorID)
 
 	if err := h.store.DeleteConnector(r.Context(), connectorID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
