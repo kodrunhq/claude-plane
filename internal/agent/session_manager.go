@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"strings"
@@ -266,10 +267,9 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 			}
 		} else {
 			// Job session with initial prompt.
-			var promptSubmitted bool
+			var promptSubmitted atomic.Bool
 			onIdle = func() {
-				if !promptSubmitted {
-					promptSubmitted = true
+				if !promptSubmitted.Swap(true) {
 					input := []byte(prompt + "\r")
 					if err := sess.WriteInput(input); err != nil {
 						sm.logger.Error("failed to write initial prompt", "session_id", sessionID, "error", err)

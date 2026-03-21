@@ -541,7 +541,7 @@ ALTER TABLE sessions ADD COLUMN env_vars TEXT DEFAULT '';`,
 		Version:     19,
 		Description: "add updated_at column to sessions",
 		SQL: `
-ALTER TABLE sessions ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE sessions ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;
 UPDATE sessions SET updated_at = ended_at
     WHERE status IN ('completed', 'failed', 'terminated');
 UPDATE sessions SET updated_at = CURRENT_TIMESTAMP

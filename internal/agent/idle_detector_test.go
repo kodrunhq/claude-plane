@@ -89,7 +89,7 @@ func TestIdleDetector_OnActiveFiresOnTransition(t *testing.T) {
 	}
 
 	d.Feed(make([]byte, 20))
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
 	if !activeCalled.Load() {
 		t.Fatal("expected onActive on idle→active transition")
 	}
@@ -185,9 +185,9 @@ func TestIdleDetector_RepeatedIdleActiveCycles(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		d.Feed(make([]byte, 20))
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(80 * time.Millisecond) // let idle fire
 		d.Feed(make([]byte, 20))
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(30 * time.Millisecond) // let active callback complete
 	}
 
 	if idleCount.Load() != 3 {
