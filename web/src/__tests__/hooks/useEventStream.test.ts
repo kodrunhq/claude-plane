@@ -115,19 +115,19 @@ describe('useEventStream', () => {
   it('invalidates sessions query on session.started', () => {
     renderStream();
     act(() => sendEvent('session.started', { session_id: 's1' }));
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sessions'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sessions'], refetchType: 'all' });
   });
 
   it('invalidates sessions query on session.waiting_for_input', () => {
     renderStream();
     act(() => sendEvent('session.waiting_for_input', { session_id: 's1' }));
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sessions'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sessions'], refetchType: 'all' });
   });
 
   it('invalidates sessions query on session.resumed', () => {
     renderStream();
     act(() => sendEvent('session.resumed', { session_id: 's1' }));
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sessions'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['sessions'], refetchType: 'all' });
   });
 
   it('invalidates runs query on run.completed', () => {

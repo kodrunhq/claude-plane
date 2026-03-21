@@ -76,7 +76,7 @@ func isRepositioningNoise(data []byte) bool {
 			// H/f=absolute position, J=erase display, K=erase line.
 			// SGR is 'm' — we explicitly exclude it.
 			switch cmd {
-			case 'A', 'B', 'H', 'f', 'J', 'K':
+			case 'A', 'B', 'C', 'D', 'H', 'f', 'J', 'K':
 				return true
 			}
 		}
