@@ -12,13 +12,17 @@ Agents dial in to the server — the server never dials out. This means agents c
 
 ## Quick Start
 
-The fastest way to get running is with the install script:
+The fastest way to get running is with Docker:
 
 ```bash
-./install.sh quickstart
+docker run -d --name claude-plane \
+  -p 4200:4200 -p 4201:4201 \
+  -v claude-plane-data:/data \
+  -e SERVER_URL=http://YOUR_IP:4200 \
+  jurel89/claude-plane:latest
 ```
 
-This builds all binaries, generates TLS certificates, creates configuration files, seeds an admin user, and starts the server and a local agent.
+This starts the server, bridge, and web UI. Check `docker logs claude-plane` for the admin credentials. See the [Quickstart](/docs/quickstart) for full setup instructions including adding agents.
 
 ## Provisioning Agent Machines
 

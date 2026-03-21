@@ -1,8 +1,8 @@
-# Server Installation
+# Server Installation (Advanced)
+
+> **For most users:** Use Docker instead — see the [Quickstart](quickstart.md). This guide is for bare-metal deployments without Docker.
 
 Production deployment guide for `claude-plane-server`.
-
-> **Note:** The full HTTP serve loop is under active development. The server binary currently supports config loading, database initialization, CA tooling, and admin seeding. The serve command will be fully wired in an upcoming release.
 
 ## Prerequisites
 
