@@ -6,6 +6,7 @@ import { useMachines } from '../hooks/useMachines.ts';
 import { useJobs } from '../hooks/useJobs.ts';
 import { useRuns } from '../hooks/useRuns.ts';
 import { useTemplates } from '../hooks/useTemplates.ts';
+import { useBridgeStatus, type BridgeStatus } from '../hooks/useBridgeStatus.ts';
 import { SessionList } from '../components/sessions/SessionList.tsx';
 import { MachineCard } from '../components/machines/MachineCard.tsx';
 import { NewSessionModal } from '../components/sessions/NewSessionModal.tsx';
@@ -27,6 +28,7 @@ export function CommandCenter() {
   const { data: jobs, isLoading: jobsLoading } = useJobs();
   const { data: runs, isLoading: runsLoading } = useRuns({ limit: 20 });
   const { data: templates } = useTemplates();
+  const { data: bridgeStatus, isLoading: bridgeLoading } = useBridgeStatus();
   const terminateSession = useTerminateSession();
 
   const { command_center_cards: visibleCards } = useUIPrefs();
@@ -116,7 +118,10 @@ export function CommandCenter() {
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-text-primary">Command Center</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold text-text-primary">Command Center</h1>
+          <BridgeStatusPill status={bridgeStatus} isLoading={bridgeLoading} />
+        </div>
         <button
           onClick={() => { setPreselectedMachine(undefined); setModalOpen(true); }}
           className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg font-medium bg-accent-primary hover:bg-accent-primary/90 text-white transition-all hover:shadow-[0_0_20px_rgba(59,130,246,0.3)]"
@@ -464,5 +469,29 @@ function SkeletonGrid({ count }: { count: number }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function BridgeStatusPill({ status, isLoading }: { status: BridgeStatus | undefined; isLoading: boolean }) {
+  const dotColor = isLoading || !status
+    ? 'bg-text-tertiary'
+    : status.running
+      ? 'bg-status-success'
+      : 'bg-status-error';
+
+  const label = isLoading || !status
+    ? 'Bridge'
+    : status.running
+      ? `Bridge\u00A0\u00B7\u00A0${status.connectors.length} connector${status.connectors.length !== 1 ? 's' : ''}`
+      : 'Bridge offline';
+
+  return (
+    <Link
+      to="/connectors"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bg-secondary border border-border-primary text-xs text-text-secondary hover:text-text-primary hover:border-border-secondary transition-colors"
+    >
+      <span className={`inline-block w-2 h-2 rounded-full ${dotColor}`} />
+      {label}
+    </Link>
   );
 }
