@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useParams } from 'react-router'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { AppShell } from './components/layout/AppShell.tsx'
@@ -51,6 +51,14 @@ const queryClient = new QueryClient({
 function ThemeApplier() {
   useThemeEffect()
   return null
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (user?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
 }
 
 function TerminalRoute() {
@@ -133,7 +141,7 @@ function App() {
             <Route path="/schedules" element={<SchedulesPage />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/logs" element={<LogsPage />} />
-            <Route path="/users" element={<AdminPage />} />
+            <Route path="/users" element={<AdminRoute><AdminPage /></AdminRoute>} />
             <Route path="/provisioning" element={<ProvisioningPage />} />
             <Route path="/credentials" element={<CredentialsPage />} />
             <Route path="/api-keys" element={<ApiKeysPage />} />

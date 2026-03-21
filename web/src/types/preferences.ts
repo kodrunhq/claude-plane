@@ -12,7 +12,6 @@ export interface NotificationPrefs {
 export interface UIPrefs {
   theme: 'light' | 'dark' | 'system';
   terminal_font_size: number;
-  auto_attach_session: boolean;
   command_center_cards: string[];
 }
 

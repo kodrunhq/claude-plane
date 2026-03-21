@@ -5,13 +5,16 @@ import {
   SESSION_STARTED,
   SESSION_EXITED,
   SESSION_TERMINATED,
+  SESSION_DISPATCH_FAILED,
   MACHINE_CONNECTED,
   MACHINE_DISCONNECTED,
+  MACHINE_STALE,
   RUN_CREATED,
   RUN_STARTED,
   RUN_COMPLETED,
   RUN_FAILED,
   RUN_CANCELLED,
+  RUN_STEP_STARTED,
   RUN_STEP_COMPLETED,
   RUN_STEP_FAILED,
   TEMPLATE_CREATED,
@@ -29,6 +32,7 @@ import {
   CREDENTIAL_CREATED,
   CREDENTIAL_DELETED,
   WEBHOOK_CREATED,
+  WEBHOOK_UPDATED,
   WEBHOOK_DELETED,
   WEBHOOK_TEST,
   TRIGGER_CRON,
@@ -108,10 +112,12 @@ export function useEventStream() {
             case SESSION_TERMINATED:
             case SESSION_WAITING_FOR_INPUT:
             case SESSION_RESUMED:
+            case SESSION_DISPATCH_FAILED:
               queryClient.invalidateQueries({ queryKey: ['sessions'], refetchType: 'all' });
               break;
             case MACHINE_CONNECTED:
             case MACHINE_DISCONNECTED:
+            case MACHINE_STALE:
               queryClient.invalidateQueries({ queryKey: ['machines'] });
               break;
             case RUN_CREATED:
@@ -121,6 +127,7 @@ export function useEventStream() {
             case RUN_CANCELLED:
               queryClient.invalidateQueries({ queryKey: ['runs'] });
               break;
+            case RUN_STEP_STARTED:
             case RUN_STEP_COMPLETED:
             case RUN_STEP_FAILED: {
               const p = msg.payload as { run_id?: string; step_id?: string; status?: string; session_id?: string };
@@ -155,6 +162,7 @@ export function useEventStream() {
               queryClient.invalidateQueries({ queryKey: ['credentials'] });
               break;
             case WEBHOOK_CREATED:
+            case WEBHOOK_UPDATED:
             case WEBHOOK_DELETED:
               queryClient.invalidateQueries({ queryKey: ['webhooks'] });
               break;

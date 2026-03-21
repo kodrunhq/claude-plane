@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { User, UpdateUserParams } from '../../types/user.ts';
 
@@ -11,10 +11,19 @@ interface EditUserModalProps {
 }
 
 export function EditUserModal({ open, user, onClose, onSubmit, submitting }: EditUserModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [open, onClose]);
+
   if (!open || !user) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">
@@ -27,7 +36,7 @@ export function EditUserModal({ open, user, onClose, onSubmit, submitting }: Edi
             &times;
           </button>
         </div>
-        <EditUserForm key={user.user_id} user={user} onSubmit={onSubmit} submitting={submitting} />
+        <EditUserForm key={user.user_id} user={user} onClose={onClose} onSubmit={onSubmit} submitting={submitting} />
       </div>
     </div>,
     document.body,
@@ -36,10 +45,12 @@ export function EditUserModal({ open, user, onClose, onSubmit, submitting }: Edi
 
 function EditUserForm({
   user,
+  onClose,
   onSubmit,
   submitting,
 }: {
   user: User;
+  onClose: () => void;
   onSubmit: (id: string, params: UpdateUserParams) => Promise<void>;
   submitting: boolean;
 }) {
@@ -93,6 +104,13 @@ function EditUserForm({
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2 text-sm rounded-md text-text-secondary hover:text-text-primary bg-bg-tertiary hover:bg-bg-tertiary/80 transition-colors"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={submitting}

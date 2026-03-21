@@ -92,6 +92,7 @@ export function TemplatesPage() {
             placeholder="Search by name, ID, or description..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search templates"
             className="w-full rounded-md bg-bg-tertiary border border-gray-600 text-text-primary text-sm pl-9 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-text-secondary/50"
           />
         </div>

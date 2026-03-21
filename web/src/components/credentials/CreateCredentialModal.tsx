@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 interface CreateCredentialModalProps {
@@ -12,6 +12,14 @@ export function CreateCredentialModal({ onSubmit, onCancel, submitting }: Create
   const [value, setValue] = useState('');
   const [showValue, setShowValue] = useState(false);
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [onCancel]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !value.trim()) return;
@@ -19,7 +27,7 @@ export function CreateCredentialModal({ onSubmit, onCancel, submitting }: Create
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
       <div className="relative bg-bg-secondary border border-border-primary rounded-lg shadow-xl max-w-md w-full mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-primary">

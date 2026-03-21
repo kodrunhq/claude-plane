@@ -33,6 +33,7 @@ export const TEMPLATE_UPDATED = 'template.updated';
 export const TEMPLATE_DELETED = 'template.deleted';
 
 // Run step events.
+export const RUN_STEP_STARTED = 'run.step.started';
 export const RUN_STEP_COMPLETED = 'run.step.completed';
 export const RUN_STEP_FAILED = 'run.step.failed';
 
@@ -57,6 +58,7 @@ export const CREDENTIAL_DELETED = 'credential.deleted';
 
 // Webhook lifecycle events.
 export const WEBHOOK_CREATED = 'webhook.created';
+export const WEBHOOK_UPDATED = 'webhook.updated';
 export const WEBHOOK_DELETED = 'webhook.deleted';
 export const WEBHOOK_TEST = 'webhook.test';
 
@@ -85,6 +87,7 @@ export const ALL_EVENT_TYPES = [
   TEMPLATE_CREATED,
   TEMPLATE_UPDATED,
   TEMPLATE_DELETED,
+  RUN_STEP_STARTED,
   RUN_STEP_COMPLETED,
   RUN_STEP_FAILED,
   JOB_CREATED,
@@ -99,6 +102,7 @@ export const ALL_EVENT_TYPES = [
   CREDENTIAL_CREATED,
   CREDENTIAL_DELETED,
   WEBHOOK_CREATED,
+  WEBHOOK_UPDATED,
   WEBHOOK_DELETED,
   WEBHOOK_TEST,
   SERVER_SHUTDOWN,
@@ -114,7 +118,7 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   },
   {
     label: 'Steps',
-    events: [RUN_STEP_COMPLETED, RUN_STEP_FAILED],
+    events: [RUN_STEP_STARTED, RUN_STEP_COMPLETED, RUN_STEP_FAILED],
   },
   {
     label: 'Sessions',
@@ -142,7 +146,7 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   },
   {
     label: 'Webhooks',
-    events: [WEBHOOK_CREATED, WEBHOOK_DELETED, WEBHOOK_TEST],
+    events: [WEBHOOK_CREATED, WEBHOOK_UPDATED, WEBHOOK_DELETED, WEBHOOK_TEST],
   },
   {
     label: 'Users',

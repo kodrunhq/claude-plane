@@ -110,18 +110,20 @@ export function MachineCard({ machine, onCreateSession }: MachineCardProps) {
             <p className="text-sm text-text-primary font-medium truncate">
               {machine.display_name || machine.machine_id}
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                setEditValue(machine.display_name || '');
-                setIsEditing(true);
-              }}
-              className="p-0.5 text-text-secondary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-opacity"
-              title="Rename machine"
-              aria-label="Rename machine"
-            >
-              <Pencil size={12} />
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditValue(machine.display_name || '');
+                  setIsEditing(true);
+                }}
+                className="p-0.5 text-text-secondary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-opacity"
+                title="Rename machine"
+                aria-label="Rename machine"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
           </div>
         )}
         <span className="font-mono text-xs truncate max-w-[200px] opacity-60 text-text-secondary" title={machine.machine_id}>
