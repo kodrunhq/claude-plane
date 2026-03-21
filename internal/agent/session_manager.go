@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"strings"
@@ -193,11 +194,9 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 	sm.logger.Info("session created", "session_id", cmd.GetSessionId(), "command", command, "task_type", taskType)
 
-	// For Claude sessions, set up an IdleDetector that watches for Claude CLI's
-	// startup prompt (❯) to submit the prompt at exactly the right time, then
-	// watches for the completion prompt to either send /exit (normal job),
-	// emit a StepIdleEvent (keep-alive shared sessions), or report
-	// waiting_for_input (standalone sessions). Shell tasks skip this entirely.
+	// For Claude sessions, set up an IdleDetector that watches for silence
+	// in PTY output to detect when the CLI is idle (waiting for input).
+	// Shell tasks skip this entirely.
 	if taskType != "shell" {
 		sessionID := cmd.GetSessionId()
 		keepAlive := cmd.GetKeepAlive()
@@ -210,23 +209,11 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 			sm.standaloneMu.Unlock()
 		}
 
-		onReady := func() {
-			if prompt == "" {
-				return // Standalone without initial prompt — no-op.
-			}
-			input := []byte(prompt + "\r")
-			if err := sess.WriteInput(input); err != nil {
-				sm.logger.Error("failed to write initial prompt", "session_id", sessionID, "error", err)
-			} else {
-				sm.logger.Info("initial prompt submitted", "session_id", sessionID, "prompt_len", len(prompt))
-			}
-		}
-
 		var onIdle func()
+		var onActive func()
+
 		if isStandalone {
 			onIdle = func() {
-				// Short-circuit if already waiting_for_input to avoid event spam
-				// (keep-alive mode means Feed can fire onIdle on repeated markers).
 				sm.lastStatusMu.Lock()
 				if sm.lastStatus[sessionID] == status.WaitingForInput {
 					sm.lastStatusMu.Unlock()
@@ -235,7 +222,7 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 				sm.lastStatus[sessionID] = status.WaitingForInput
 				sm.lastStatusMu.Unlock()
 
-				sm.logger.Info("idle prompt detected, reporting waiting_for_input (standalone)", "session_id", sessionID)
+				sm.logger.Info("silence detected, reporting waiting_for_input (standalone)", "session_id", sessionID)
 				sm.sendEvent(&pb.AgentEvent{
 					Event: &pb.AgentEvent_SessionStatus{
 						SessionStatus: &pb.SessionStatusEvent{
@@ -245,10 +232,28 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 					},
 				})
 			}
+			onActive = func() {
+				sm.lastStatusMu.Lock()
+				if sm.lastStatus[sessionID] == status.Running {
+					sm.lastStatusMu.Unlock()
+					return
+				}
+				sm.lastStatus[sessionID] = status.Running
+				sm.lastStatusMu.Unlock()
+
+				sm.logger.Info("output resumed, reporting running (standalone)", "session_id", sessionID)
+				sm.sendEvent(&pb.AgentEvent{
+					Event: &pb.AgentEvent_SessionStatus{
+						SessionStatus: &pb.SessionStatusEvent{
+							SessionId: sessionID,
+							Status:    status.Running,
+						},
+					},
+				})
+			}
 		} else if keepAlive {
-			// Keep-alive (shared session): existing behavior unchanged.
 			onIdle = func() {
-				sm.logger.Info("idle prompt detected, extracting task values and sending StepIdleEvent (keep-alive)",
+				sm.logger.Info("silence detected, extracting task values and sending StepIdleEvent (keep-alive)",
 					"session_id", sessionID,
 				)
 				sm.extractAndSendStepTaskValues(sessionID)
@@ -261,27 +266,30 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 				})
 			}
 		} else {
-			// Normal mode: send /exit. Existing behavior unchanged.
+			// Job session with initial prompt.
+			var promptSubmitted atomic.Bool
 			onIdle = func() {
-				sm.logger.Info("idle prompt detected, sending /exit",
-					"session_id", sessionID,
-				)
+				if !promptSubmitted.Swap(true) {
+					input := []byte(prompt + "\r")
+					if err := sess.WriteInput(input); err != nil {
+						sm.logger.Error("failed to write initial prompt", "session_id", sessionID, "error", err)
+					} else {
+						sm.logger.Info("initial prompt submitted (on first silence)", "session_id", sessionID, "prompt_len", len(prompt))
+					}
+					return
+				}
+				sm.logger.Info("silence detected, sending /exit", "session_id", sessionID)
 				if err := sess.WriteInput([]byte("/exit\r")); err != nil {
 					sm.logger.Error("failed to send /exit after idle",
-						"session_id", sessionID,
-						"error", err,
-					)
+						"session_id", sessionID, "error", err)
 				}
 			}
 		}
 
 		opts := make([]IdleDetectorOption, len(sm.idleDetectorOpts))
 		copy(opts, sm.idleDetectorOpts)
-		if keepAlive || isStandalone {
-			opts = append(opts, WithKeepAlive(true))
-		}
 
-		detector := NewIdleDetector(onReady, onIdle, opts...)
+		detector := NewIdleDetector(onIdle, onActive, opts...)
 		detector.Start()
 		sess.SetOutputObserver(detector.Feed)
 
@@ -314,38 +322,6 @@ func (sm *SessionManager) handleInput(cmd *pb.InputDataCmd) {
 	if sess == nil {
 		sm.logger.Warn("input for unknown session", "session_id", sessionID)
 		return
-	}
-
-	sm.standaloneMu.RLock()
-	isStandalone := sm.standalone[sessionID]
-	sm.standaloneMu.RUnlock()
-
-	if isStandalone {
-		// Check and update status without nesting locks.
-		sm.lastStatusMu.Lock()
-		shouldTransition := sm.lastStatus[sessionID] == status.WaitingForInput
-		if shouldTransition {
-			sm.lastStatus[sessionID] = status.Running
-		}
-		sm.lastStatusMu.Unlock()
-
-		if shouldTransition {
-			// Disarm detector so it watches for the next completion prompt.
-			sm.detectorMu.RLock()
-			if d, ok := sm.detectors[sessionID]; ok {
-				d.ResetToPhase1()
-			}
-			sm.detectorMu.RUnlock()
-
-			sm.sendEvent(&pb.AgentEvent{
-				Event: &pb.AgentEvent_SessionStatus{
-					SessionStatus: &pb.SessionStatusEvent{
-						SessionId: sessionID,
-						Status:    status.Running,
-					},
-				},
-			})
-		}
 	}
 
 	if err := sess.WriteInput(cmd.GetData()); err != nil {
@@ -585,7 +561,10 @@ func (sm *SessionManager) removeSession(sessionID string) {
 	sm.standaloneMu.Unlock()
 
 	sm.detectorMu.Lock()
-	delete(sm.detectors, sessionID)
+	if d, ok := sm.detectors[sessionID]; ok {
+		d.Stop()
+		delete(sm.detectors, sessionID)
+	}
 	sm.detectorMu.Unlock()
 
 	sm.lastStatusMu.Lock()

@@ -2,6 +2,7 @@ package store
 
 import (
 	"testing"
+	"time"
 )
 
 func TestSessionCRUD(t *testing.T) {
@@ -161,5 +162,54 @@ func TestListSessionsByMachine(t *testing.T) {
 	}
 	if len(sessions) != 1 {
 		t.Errorf("ListSessionsByMachine count = %d, want 1", len(sessions))
+	}
+}
+
+func TestUpdateSessionStatus_SetsUpdatedAt(t *testing.T) {
+	s := mustNewStore(t)
+	machineID := mustCreateMachine(t, s)
+
+	sess := &Session{
+		SessionID: "sess-upd-001",
+		MachineID: machineID,
+		Command:   "claude",
+		Status:    StatusRunning,
+	}
+	if err := s.CreateSession(sess); err != nil {
+		t.Fatal(err)
+	}
+
+	// CURRENT_TIMESTAMP in SQLite has second-level granularity, so we
+	// must sleep long enough to land in a different second.
+	time.Sleep(1100 * time.Millisecond)
+
+	if err := s.UpdateSessionStatus("sess-upd-001", StatusWaitingForInput); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetSession("sess-upd-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got.UpdatedAt.After(got.CreatedAt) {
+		t.Errorf("UpdatedAt (%v) should be after CreatedAt (%v)", got.UpdatedAt, got.CreatedAt)
+	}
+	if got.EndedAt != nil {
+		t.Error("EndedAt should be nil for non-terminal status")
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+	if err := s.UpdateSessionStatus("sess-upd-001", StatusCompleted); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = s.GetSession("sess-upd-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.EndedAt == nil {
+		t.Error("EndedAt should be set for terminal status")
 	}
 }

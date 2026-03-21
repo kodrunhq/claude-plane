@@ -88,8 +88,12 @@ func newRunCmd() *cobra.Command {
 
 			// Build idle detector options from config.
 			var idleOpts []agent.IdleDetectorOption
-			if cfg.Agent.IdlePromptMarker != "" {
-				idleOpts = append(idleOpts, agent.WithPromptMarker([]byte(cfg.Agent.IdlePromptMarker)))
+			if cfg.Agent.IdleSilenceTimeout != "" {
+				if d, err := time.ParseDuration(cfg.Agent.IdleSilenceTimeout); err == nil {
+					idleOpts = append(idleOpts, agent.WithSilenceTimeout(d))
+				} else {
+					slog.Warn("invalid idle_silence_timeout, using default", "value", cfg.Agent.IdleSilenceTimeout, "error", err)
+				}
 			}
 			if cfg.Agent.IdleStartupTimeout != "" {
 				if d, err := time.ParseDuration(cfg.Agent.IdleStartupTimeout); err == nil {
