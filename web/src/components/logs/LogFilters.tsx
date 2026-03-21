@@ -2,7 +2,7 @@ import { Search, Radio } from 'lucide-react';
 import { useLogsStore } from '../../stores/logs.ts';
 
 const LEVELS = ['ALL', 'DEBUG', 'INFO', 'WARN', 'ERROR'] as const;
-const SOURCES = ['ALL', 'server', 'agent'] as const;
+const SOURCES = ['ALL', 'server', 'agent', 'bridge'] as const;
 const COMPONENTS = [
   'ALL',
   'grpc',
