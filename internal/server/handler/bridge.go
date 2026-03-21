@@ -541,30 +541,20 @@ func (h *BridgeHandler) populateBridgeHealth(resp *bridgeStatusResponse, events 
 	latest := events[0].Timestamp
 	resp.LastSeen = &latest
 
-	// Determine running state: look for the most recent started/stopped.
-	bridgeStartedSeen := false
+	// Determine running state: find the most recent bridge lifecycle event
+	// (bridge.started or bridge.stopped). The bridge is running if the most
+	// recent lifecycle event is bridge.started AND that timestamp is within
+	// 60 seconds (staleness check).
 	for _, e := range events {
 		switch e.Type {
 		case event.TypeBridgeStarted:
-			bridgeStartedSeen = true
-			// Running if bridge started recently (within 60 seconds).
-			if time.Since(e.Timestamp) < 60*time.Second {
-				resp.Running = true
-			}
+			resp.Running = time.Since(e.Timestamp) < 60*time.Second
 		case event.TypeBridgeStopped:
-			// If stopped is more recent than started, not running.
-			if !bridgeStartedSeen {
-				resp.Running = false
-			}
+			resp.Running = false
+		default:
+			continue
 		}
-		if bridgeStartedSeen {
-			break
-		}
-	}
-
-	// If we saw a bridge.started and the last event was recent, consider it running.
-	if bridgeStartedSeen && time.Since(latest) < 60*time.Second {
-		resp.Running = true
+		break
 	}
 
 	// Build per-connector status from most recent connector events.
@@ -572,7 +562,7 @@ func (h *BridgeHandler) populateBridgeHealth(resp *bridgeStatusResponse, events 
 	// since events are newest-first).
 	seen := make(map[string]bool)
 	for _, e := range events {
-		name, _ := e.Payload["connector_name"].(string)
+		name, _ := e.Payload["name"].(string)
 		if name == "" {
 			continue
 		}

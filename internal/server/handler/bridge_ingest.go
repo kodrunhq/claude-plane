@@ -12,6 +12,8 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/server/logging"
 )
 
+const maxIngestEntries = 200
+
 // BridgeIngestHandler handles REST endpoints for ingesting logs and events
 // from the bridge binary into the server's logging and event systems.
 type BridgeIngestHandler struct {
@@ -79,10 +81,13 @@ func (h *BridgeIngestHandler) HandleLogs(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	source := req.Source
-	if source == "" {
-		source = "bridge"
+	if len(req.Entries) > maxIngestEntries {
+		writeError(w, http.StatusBadRequest, "too many entries (max 200)")
+		return
 	}
+
+	// Issue 5: Always force source to "bridge" — do not trust caller-supplied value.
+	source := "bridge"
 
 	records := make([]logging.LogRecord, 0, len(req.Entries))
 	for _, entry := range req.Entries {
@@ -143,6 +148,16 @@ func (h *BridgeIngestHandler) HandleLogs(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusAccepted)
 }
 
+// allowedIngestEventTypes is the set of event types permitted through the
+// bridge ingest endpoint. Any other type is rejected with 400.
+var allowedIngestEventTypes = map[string]bool{
+	event.TypeBridgeStarted:          true,
+	event.TypeBridgeStopped:          true,
+	event.TypeBridgeConnectorStarted: true,
+	event.TypeBridgeConnectorError:   true,
+	event.TypeBridgeConnectorCommand: true,
+}
+
 // HandleEvents ingests events from the bridge and publishes them on the event bus.
 func (h *BridgeIngestHandler) HandleEvents(w http.ResponseWriter, r *http.Request) {
 	var req eventsRequest
@@ -154,6 +169,19 @@ func (h *BridgeIngestHandler) HandleEvents(w http.ResponseWriter, r *http.Reques
 	if len(req.Events) == 0 {
 		w.WriteHeader(http.StatusAccepted)
 		return
+	}
+
+	if len(req.Events) > maxIngestEntries {
+		writeError(w, http.StatusBadRequest, "too many events (max 200)")
+		return
+	}
+
+	// Validate all event types before publishing any.
+	for _, entry := range req.Events {
+		if !allowedIngestEventTypes[entry.Type] {
+			writeError(w, http.StatusBadRequest, "disallowed event type: "+entry.Type)
+			return
+		}
 	}
 
 	if h.eventBus != nil {

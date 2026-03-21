@@ -160,7 +160,8 @@ export function NotificationsTab() {
           <div>
             <h3 className="text-base font-semibold text-text-primary">Channels</h3>
             <p className="text-sm text-text-secondary">
-              Configure where notifications are delivered.
+              Configure email notification channels. For Telegram, set up a connector on the{' '}
+              <Link to="/connectors" className="text-accent-primary hover:underline">Connectors page</Link>.
             </p>
           </div>
           <button
@@ -174,7 +175,16 @@ export function NotificationsTab() {
 
         {channels.length === 0 ? (
           <div className="text-center py-8 text-text-secondary text-sm border border-border-primary rounded-lg bg-bg-secondary">
-            No notification channels configured yet.
+            <p>No notification channels configured yet.</p>
+            {!channels.some((ch) => !!ch.connector_id) && (
+              <p className="mt-1">
+                For Telegram notifications,{' '}
+                <Link to="/connectors" className="text-accent-primary hover:underline">
+                  set up a Telegram connector
+                </Link>{' '}
+                first.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -201,6 +211,11 @@ export function NotificationsTab() {
                     {isConnectorBacked && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary font-medium">
                         Connector
+                      </span>
+                    )}
+                    {ch.channel_type === 'telegram' && !ch.connector_id && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-status-warning/15 text-status-warning font-medium" title="Created before connector integration">
+                        Legacy
                       </span>
                     )}
                   </div>

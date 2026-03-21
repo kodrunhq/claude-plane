@@ -8,8 +8,20 @@ claude-plane is a self-hosted control plane for managing interactive Claude CLI 
 
 - **`claude-plane-server`** — Control plane. Serves the frontend, manages sessions, orchestrates jobs, accepts inbound gRPC connections from agents. SQLite storage.
 - **`claude-plane-agent`** — Runs on worker machines. Manages Claude CLI processes in PTYs, buffers terminal output, maintains persistent gRPC connection to the server.
-- **`claude-plane-bridge`** — Connects external services (GitHub, Telegram, Slack) to the server via its REST API. Polls for events, triggers jobs, and relays notifications.
+- **`claude-plane-bridge`** — Connects external services (GitHub, Telegram, Slack) to the server via its REST API. Polls for events, triggers jobs, and relays notifications. Auto-configured when running via Docker.
 - **Frontend** — React 19 + TypeScript SPA embedded via `go:embed` into the server binary. Modes: Command Center (dashboard), single-session terminal view, and Multi-View (2-6 sessions in resizable split panes).
+
+## Product-First Development (CRITICAL)
+
+**Every code change must be validated against the full user workflow it affects.** We have repeatedly introduced bugs by fixing one piece of code in isolation without tracing how it impacts the rest of the system. Before implementing any feature or fix:
+
+1. **Trace the full user story.** Walk through the complete user journey that touches the code you're changing — from the UI action, through the API, to the backend, to the agent, and back. Map every component in the chain.
+2. **Check all consumers.** A session status change affects: the session terminal header, the SessionsPage list, the CommandCenter dashboard cards, the MultiView picker, the event stream, and the reaper. If you change how status works, verify ALL of them.
+3. **Think about state transitions.** What happens when a session goes from `created` → `running` → `waiting_for_input` → `running` → `completed`? What about `created` → `running` → `errored`? What about a machine disconnecting mid-session? Trace every transition.
+4. **Test with real Claude CLI.** The CLI has behaviors that are invisible in unit tests: Ink status bar redraws, periodic tips/updates below the prompt, cursor repositioning escape sequences. Assumptions about terminal output patterns have caused multiple critical bugs.
+5. **Frontend views share data but display independently.** When you invalidate a query, use `refetchType: 'all'` to ensure unmounted components (other pages the user navigates to) also get fresh data. Stale caches cause status mismatches between views.
+
+**The cost of tracing a full workflow is 10 minutes. The cost of a bug that reaches production is hours of debugging.**
 
 ## Architecture Principles
 
@@ -19,6 +31,19 @@ claude-plane is a self-hosted control plane for managing interactive Claude CLI 
 4. **Single binary per role.** No runtime dependencies. `scp` the binary and run.
 
 ## Build & Run
+
+### Docker (recommended — production & development)
+
+```bash
+# Start server + bridge (bridge auto-configures on first run)
+docker compose up -d
+
+# The server image includes the bridge binary. On first start,
+# docker-entrypoint.sh auto-generates an API key and bridge.toml.
+# No manual bridge configuration needed.
+```
+
+### Local Development
 
 **Prerequisites:** Go 1.25+, Node.js 22+
 
@@ -40,6 +65,7 @@ cd web && npm install && npm run build && cd ..
 ./claude-plane-server ca issue-server --ca-dir ./ca --out-dir ./server-cert
 ./claude-plane-server ca issue-agent --ca-dir ./ca --machine-id "worker-1"
 ./claude-plane-server seed-admin --email admin@example.com --name Admin
+./claude-plane-server create-api-key --name bridge --admin  # for manual bridge setup
 
 # Agent subcommands
 ./claude-plane-agent run --config agent.toml
@@ -66,6 +92,14 @@ When debugging frontend issues in production mode, verify the bundle hash in the
 **Shell task Command field:** The backend (`ValidateJobSteps` in `orchestrator/dag_runner.go`) requires shell tasks to have a non-empty `Command` field. The `session_executor.go` also aborts if `CommandSnapshot` is empty. The frontend TaskEditor must preserve and submit the `command` field for shell tasks — don't clear it.
 
 **WebSocket attach failure:** When `runSession` in `session/ws.go` fails to attach to the agent, it must publish end markers (`scrollback_end` + `session_ended`) AND close the WebSocket. Do not fall through to the relay loops — the reader loop would repeatedly call `sendToAgent()` against a missing agent.
+
+**Idle detection and CLI noise:** The idle detector (`idle_detector.go`) uses silence-based timing, NOT prompt marker matching. Claude CLI renders its UI with Ink (React for terminals), which sends cursor repositioning escape sequences (`\x1b7`, `\x1b8`, `\x1b[<n>;<m>H`, `\x1b[<n>A/B/C/D`) for status bar redraws even when idle. The `isRepositioningNoise()` classifier filters these out — only sequential text with SGR color codes (`\x1b[...m`) counts as real output. Do NOT attempt to detect idle state by matching prompt characters (❯) — they are persistent TUI elements, not line-delimited prompts.
+
+**Machine connection debounce:** When an agent registers, there's a brief gap between `Register()` and `CommandStream()` that causes a legitimate disconnect/reconnect cycle. The connection manager uses a 5-second grace period (`disconnectGrace`) before publishing `machine.disconnected`. Never publish disconnect events immediately.
+
+**Session status across views:** Session status is displayed in: terminal header, SessionsPage list, CommandCenter cards, MultiView picker, and event stream. All these views use independent TanStack Query caches. When invalidating session queries, always use `refetchType: 'all'` to ensure unmounted views also refresh — otherwise users see stale status when navigating between pages.
+
+**Bridge auto-config in Docker:** The server Docker image includes the bridge binary. `docker-entrypoint.sh` auto-generates an API key via `create-api-key` CLI command and writes `bridge.toml` on first start. Do not require manual bridge configuration for Docker deployments.
 
 ## Testing
 
@@ -144,6 +178,12 @@ Single proto file: `proto/claudeplane/v1/agent.proto`. Defines `Register()` and 
 | `event/` | In-process pub/sub bus with glob-style pattern matching, WebSocket fanout, webhook delivery with retry |
 | `provision/` | Agent provisioning token generation and install script building |
 | `agentdl/` | Multi-platform agent binary download endpoints (embedded via `go:embed`) |
+| `broker/` | Message broker for inter-component communication |
+| `ingest/` | Data ingestion pipeline for agent metrics and token usage |
+| `logging/` | Structured logging infrastructure — slog TeeHandler writing to stderr + SQLite (async batch) + WebSocket broadcast |
+| `notify/` | Notification delivery (email, Slack, etc.) |
+| `reaper/` | Background cleanup — terminates idle sessions, sweeps stale `created` sessions stuck > 5 min |
+| `retention/` | Data retention policies and cleanup for old sessions/runs/events |
 | `config/` | TOML config parsing |
 
 **Key patterns:**
@@ -162,7 +202,7 @@ Single proto file: `proto/claudeplane/v1/agent.proto`. Defines `Register()` and 
 | `connector/` | Connector interface + implementations (GitHub, Telegram) |
 | `state/` | State management for connector sync |
 
-Connectors implement a common interface. Each polls an external service, maps events to job triggers, and relays via the server's REST API.
+Connectors implement a common interface. Each polls an external service, maps events to job triggers, and relays via the server's REST API. In Docker deployments, the bridge binary is embedded in the server image and auto-configured by `docker-entrypoint.sh` — no manual setup required.
 
 ## Agent Architecture (`internal/agent/`)
 
@@ -170,8 +210,11 @@ Connectors implement a common interface. Each polls an external service, maps ev
 - `client.go` — gRPC client with automatic reconnection and backoff
 - `backoff.go` — Exponential backoff logic for reconnection
 - `health.go` — Health check reporting
-- `idle_detector.go` — Session idle tracking
+- `idle_detector.go` — Silence-based idle detection with noise classifier. Uses `isRepositioningNoise()` to filter Ink cursor-positioning escape sequences from real Claude output. Configurable silence timeout, minimum activity bytes threshold.
 - `scrollback.go` — Scrollback buffer persistence
+- `directory.go` — Working directory resolution and validation
+- `join.go` — Agent provisioning join flow (exchanges join code for mTLS certs)
+- `log_sink.go` — Structured log forwarding to server via gRPC
 - `config/` — Agent TOML config loading
 - `lifecycle/` — Agent lifecycle utilities: PID file, process scanning, orphan reaping, service detection
 
@@ -189,16 +232,16 @@ When using `vi.fn()` in tests, use the Vitest 3.x single-type-parameter form: `v
 | Directory | Purpose |
 |-----------|---------|
 | `api/` | HTTP client (`/api/v1` base), per-domain API functions |
-| `stores/` | Zustand stores: auth, jobs, runs, UI state, multiview (workspace persistence via localStorage) |
-| `hooks/` | TanStack Query hooks for data fetching; `useTerminalSession()` for xterm.js + WebSocket (supports optional WebGL toggle); `useEventStream()` for multiplexed event WS with exponential backoff |
+| `stores/` | Zustand stores: auth, jobs, runs, logs, UI state, multiview (workspace persistence via localStorage) |
+| `hooks/` | TanStack Query hooks for data fetching (~29 hooks); `useTerminalSession()` for xterm.js + WebSocket (supports optional WebGL toggle); `useEventStream()` for multiplexed event WS with exponential backoff and `refetchType: 'all'` |
 | `types/` | TypeScript interfaces for all domain entities |
-| `components/` | Feature-organized: layout, jobs, runs, terminal, sessions, multiview, webhooks, triggers, events, admin, credentials, dag, shared |
+| `components/` | Feature-organized: layout, jobs, runs, terminal, sessions, multiview, webhooks, triggers, events, admin, credentials, dag, shared, apikeys, connectors, docs, logs, machines, provisioning, templates, settings, dashboard |
 | `views/` | Page-level route components |
 | `lib/` | Utility functions |
 
 **Notable frontend libraries:** `@xyflow/react` + `@dagrejs/dagre` for DAG visualization, `cron-parser` + `cronstrue` for cron display, `xterm.js` with WebGL addon for terminal rendering, `react-resizable-panels` for multi-view split panes.
 
-**Routing (React Router 7):** Protected redirect to LoginPage. Routes: `/` (CommandCenter), `/sessions`, `/multiview`, `/multiview/:workspaceId`, `/machines`, `/jobs`, `/runs`, `/webhooks`, `/events`, `/users`, `/provisioning`, `/credentials`.
+**Routing (React Router 7):** Protected redirect to LoginPage. `/users` requires admin role (`AdminRoute` guard). Routes: `/` (CommandCenter), `/sessions`, `/sessions/:sessionId`, `/multiview`, `/multiview/:workspaceId`, `/machines`, `/jobs`, `/jobs/new`, `/jobs/:id`, `/templates`, `/templates/new`, `/templates/:id/edit`, `/runs`, `/runs/:id`, `/webhooks`, `/webhooks/:id/deliveries`, `/triggers`, `/schedules`, `/events`, `/logs`, `/users` (admin), `/provisioning`, `/credentials`, `/api-keys`, `/connectors`, `/connectors/:connectorId`, `/search`, `/settings`, `/docs`, `/docs/:guideId`.
 
 **WebSocket patterns:**
 - Terminal WS (`/ws/terminal/{sessionID}`): binary data, real-time terminal I/O, scrollback replay on connect
@@ -215,7 +258,7 @@ When using `vi.fn()` in tests, use the Vitest 3.x single-type-parameter form: `v
 
 ## Data Model (SQLite)
 
-Core tables: `machines`, `sessions`, `jobs`, `job_steps`, `job_runs`, `job_step_results`, `token_usage`, `model_pricing`
+Core tables: `machines`, `sessions`, `jobs`, `steps`, `step_dependencies`, `runs`, `run_steps`, `run_step_values`, `users`, `api_keys`, `credentials`, `webhooks`, `webhook_deliveries`, `events`, `cron_schedules`, `job_triggers`, `session_templates`, `injections`, `bridge_connectors`, `bridge_control`, `provisioning_tokens`, `revoked_tokens`, `audit_log`, `user_preferences`, `notification_channels`, `notification_subscriptions`, `server_settings`
 
 ## Release Process
 

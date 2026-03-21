@@ -390,7 +390,11 @@ export function ConnectorDetailPage() {
       <ConfirmDialog
         open={showDeleteConfirm}
         title="Delete Connector"
-        message={`Are you sure you want to delete "${connector.name}"? This cannot be undone.`}
+        message={
+          connector.connector_type === 'telegram'
+            ? `Are you sure you want to delete "${connector.name}"? The linked notification channel and its subscriptions will also be deleted. This cannot be undone.`
+            : `Are you sure you want to delete "${connector.name}"? This cannot be undone.`
+        }
         confirmLabel="Delete"
         variant="danger"
         onConfirm={handleDelete}

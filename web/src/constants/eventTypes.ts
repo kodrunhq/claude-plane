@@ -175,7 +175,6 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
       BRIDGE_STOPPED,
       BRIDGE_CONNECTOR_STARTED,
       BRIDGE_CONNECTOR_ERROR,
-      BRIDGE_CONNECTOR_COMMAND,
     ],
   },
   {
