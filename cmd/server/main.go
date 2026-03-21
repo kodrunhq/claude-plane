@@ -326,12 +326,29 @@ func newServeCmd() *cobra.Command {
 			triggerSub := event.NewTriggerSubscriber(triggerStore, orchAdapter, slog.Default())
 			eventBus.Subscribe("*", triggerSub.Handler(), event.SubscriberOptions{Concurrency: 2, BufferSize: 256})
 
+			// Credentials vault — encryption key is auto-generated if not configured.
+			// Parsed early because it's needed by both the notification dispatcher
+			// (connector config resolver) and the credential handler.
+			dataDir := filepath.Dir(cfg.Database.Path)
+			encryptionKey, err := cfg.Secrets.ParseEncryptionKey(dataDir)
+			if err != nil {
+				if cfg.Secrets.EncryptionKey == "" && cfg.Secrets.EncryptionKeyFile == "" {
+					slog.Warn("encryption key unavailable, credentials will be stored as plaintext", "error", err)
+				} else {
+					return fmt.Errorf("parse encryption key: %w", err)
+				}
+			}
+
 			// Notification dispatcher — fans out event bus events to configured notification channels.
 			notifiers := map[string]notify.Notifier{
 				"email":    &notify.SMTPNotifier{},
 				"telegram": notify.NewTelegramNotifier(nil),
 			}
-			notifyDispatcher := notify.NewDispatcher(s, nil, notifiers, nil, notify.DefaultEventRenderer, slog.Default())
+			connectorResolver := store.NewConnectorConfigResolver(s, encryptionKey)
+			renderers := map[string]notify.EventRenderer{
+				"telegram": notify.TelegramEventRenderer,
+			}
+			notifyDispatcher := notify.NewDispatcher(s, connectorResolver, notifiers, renderers, notify.DefaultEventRenderer, slog.Default())
 			eventBus.Subscribe("*", notifyDispatcher.Handler(), event.SubscriberOptions{Concurrency: 2, BufferSize: 256})
 
 			// Wire event publisher into components.
@@ -388,17 +405,6 @@ func newServeCmd() *cobra.Command {
 
 			settingsHandler := handler.NewSettingsHandler(s, handlerClaimsGetter)
 
-			// Credentials vault handler — encryption key is auto-generated if not configured.
-			// If an explicit key was configured but fails to parse, that's a hard error.
-			dataDir := filepath.Dir(cfg.Database.Path)
-			encryptionKey, err := cfg.Secrets.ParseEncryptionKey(dataDir)
-			if err != nil {
-				if cfg.Secrets.EncryptionKey == "" && cfg.Secrets.EncryptionKeyFile == "" {
-					slog.Warn("encryption key unavailable, credentials will be stored as plaintext", "error", err)
-				} else {
-					return fmt.Errorf("parse encryption key: %w", err)
-				}
-			}
 			credentialHandler := handler.NewCredentialHandler(s, handlerClaimsGetter, encryptionKey)
 
 			// Provisioning service
@@ -439,6 +445,8 @@ func newServeCmd() *cobra.Command {
 
 			// Bridge handler — uses encryption key for connector secrets
 			bridgeHandler := handler.NewBridgeHandler(s, handlerClaimsGetter, encryptionKey, s)
+			bridgeHandler.SetEventStore(s)
+			bridgeIngestHandler := handler.NewBridgeIngestHandler(logStore, teeHandler.Broadcaster(), eventBus, slog.Default())
 
 			// HTTP router
 			handlers := api.NewHandlers(s, authSvc, connMgr, grpcSrv.Broker(), cfg.Auth.GetRegistrationMode(), cfg.Auth.InviteCode)
@@ -497,6 +505,7 @@ func newServeCmd() *cobra.Command {
 			router.Group(func(r chi.Router) {
 				r.Use(api.JWTAuthMiddleware(authSvc, apiKeyAuth))
 				handler.RegisterBridgeRoutes(r, bridgeHandler)
+				handler.RegisterBridgeIngestRoutes(r, bridgeIngestHandler)
 			})
 
 			// Provisioning: JWT-protected route for creating tokens.

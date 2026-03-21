@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
@@ -38,10 +39,16 @@ type NotifStore interface {
 	GetChannelByConnectorID(ctx context.Context, connectorID string) (*store.NotificationChannel, error)
 }
 
+// BridgeEventStore is an optional interface for querying bridge events.
+type BridgeEventStore interface {
+	ListEvents(ctx context.Context, filter store.EventFilter) ([]event.Event, error)
+}
+
 // BridgeHandler handles REST endpoints for bridge connectors and control signals.
 type BridgeHandler struct {
 	store      BridgeStore
 	notifStore NotifStore
+	eventStore BridgeEventStore
 	getClaims  ClaimsGetter
 	encKey     []byte // AES-256 encryption key for connector secrets
 }
@@ -54,6 +61,12 @@ func NewBridgeHandler(s BridgeStore, getClaims ClaimsGetter, encKey []byte, noti
 		getClaims:  getClaims,
 		encKey:     encKey,
 	}
+}
+
+// SetEventStore sets the optional event store used by the Status endpoint
+// to derive bridge health information from persisted events.
+func (h *BridgeHandler) SetEventStore(es BridgeEventStore) {
+	h.eventStore = es
 }
 
 // RegisterBridgeRoutes mounts all bridge routes on the given router.
@@ -471,18 +484,117 @@ func (h *BridgeHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "restart signal sent"})
 }
 
+// bridgeStatusResponse is the response for GET /api/v1/bridge/status.
+type bridgeStatusResponse struct {
+	RestartRequestedAt *string              `json:"restart_requested_at"`
+	Running            bool                 `json:"running"`
+	LastSeen           *time.Time           `json:"last_seen"`
+	Connectors         []connectorStatusDTO `json:"connectors,omitempty"`
+}
+
+// connectorStatusDTO describes the health state of a single bridge connector.
+type connectorStatusDTO struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // "ok", "error", "unknown"
+	Error  string `json:"error,omitempty"`
+}
+
 // Status handles GET /api/v1/bridge/status.
-// Returns restart_requested_at from bridge control, or null if never set.
+// Returns restart_requested_at from bridge control plus bridge health info
+// derived from recent bridge.* events.
 func (h *BridgeHandler) Status(w http.ResponseWriter, r *http.Request) {
+	resp := bridgeStatusResponse{}
+
 	val, err := h.store.GetBridgeControl(r.Context(), bridgeRestartKey)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusOK, map[string]interface{}{"restart_requested_at": nil})
-			return
-		}
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if err == nil {
+		resp.RestartRequestedAt = &val
+	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"restart_requested_at": val})
+	// Derive bridge health from recent events if an event store is available.
+	if h.eventStore != nil {
+		events, err := h.eventStore.ListEvents(r.Context(), store.EventFilter{
+			TypePattern: "bridge.*",
+			Limit:       50,
+		})
+		if err != nil {
+			slog.Error("bridge status: query events", "error", err)
+		} else {
+			h.populateBridgeHealth(&resp, events)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// populateBridgeHealth derives running, last_seen, and connector statuses from
+// a list of recent bridge.* events (ordered newest-first from the store).
+func (h *BridgeHandler) populateBridgeHealth(resp *bridgeStatusResponse, events []event.Event) {
+	if len(events) == 0 {
+		return
+	}
+
+	// Find the most recent event timestamp as last_seen.
+	latest := events[0].Timestamp
+	resp.LastSeen = &latest
+
+	// Determine running state: look for the most recent started/stopped.
+	bridgeStartedSeen := false
+	for _, e := range events {
+		switch e.Type {
+		case event.TypeBridgeStarted:
+			bridgeStartedSeen = true
+			// Running if bridge started recently (within 60 seconds).
+			if time.Since(e.Timestamp) < 60*time.Second {
+				resp.Running = true
+			}
+		case event.TypeBridgeStopped:
+			// If stopped is more recent than started, not running.
+			if !bridgeStartedSeen {
+				resp.Running = false
+			}
+		}
+		if bridgeStartedSeen {
+			break
+		}
+	}
+
+	// If we saw a bridge.started and the last event was recent, consider it running.
+	if bridgeStartedSeen && time.Since(latest) < 60*time.Second {
+		resp.Running = true
+	}
+
+	// Build per-connector status from most recent connector events.
+	// Track which connectors we've already resolved (first occurrence wins
+	// since events are newest-first).
+	seen := make(map[string]bool)
+	for _, e := range events {
+		name, _ := e.Payload["connector_name"].(string)
+		if name == "" {
+			continue
+		}
+		if seen[name] {
+			continue
+		}
+
+		switch e.Type {
+		case event.TypeBridgeConnectorStarted:
+			seen[name] = true
+			resp.Connectors = append(resp.Connectors, connectorStatusDTO{
+				Name:   name,
+				Status: "ok",
+			})
+		case event.TypeBridgeConnectorError:
+			seen[name] = true
+			errMsg, _ := e.Payload["error"].(string)
+			resp.Connectors = append(resp.Connectors, connectorStatusDTO{
+				Name:   name,
+				Status: "error",
+				Error:  errMsg,
+			})
+		}
+	}
 }
