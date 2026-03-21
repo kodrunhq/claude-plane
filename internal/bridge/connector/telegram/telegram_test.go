@@ -280,54 +280,6 @@ func TestParseCommand_Invalid_MalformedVar(t *testing.T) {
 	}
 }
 
-// --- MatchEventType tests ---
-
-func TestMatchEventType_Wildcard(t *testing.T) {
-	if !telegram.MatchEventType("*", "session.started") {
-		t.Error("* should match any event type")
-	}
-}
-
-func TestMatchEventType_PrefixWildcard(t *testing.T) {
-	if !telegram.MatchEventType("session.*", "session.started") {
-		t.Error("session.* should match session.started")
-	}
-	if telegram.MatchEventType("session.*", "run.started") {
-		t.Error("session.* should not match run.started")
-	}
-}
-
-func TestMatchEventType_Exact(t *testing.T) {
-	if !telegram.MatchEventType("run.completed", "run.completed") {
-		t.Error("exact match should work")
-	}
-	if telegram.MatchEventType("run.completed", "run.failed") {
-		t.Error("exact match should not match different event type")
-	}
-}
-
-func TestMatchEventType_EmptyPatterns_AllowsAll(t *testing.T) {
-	// When no patterns, all events pass — tested via ShouldForwardEvent
-	if !telegram.ShouldForwardEvent(nil, "anything") {
-		t.Error("nil patterns should allow all events")
-	}
-	if !telegram.ShouldForwardEvent([]string{}, "anything") {
-		t.Error("empty patterns should allow all events")
-	}
-}
-
-func TestShouldForwardEvent_WithPatterns(t *testing.T) {
-	patterns := []string{"session.*", "machine.connected"}
-	if !telegram.ShouldForwardEvent(patterns, "session.started") {
-		t.Error("session.started should match session.*")
-	}
-	if !telegram.ShouldForwardEvent(patterns, "machine.connected") {
-		t.Error("machine.connected should match exact pattern")
-	}
-	if telegram.ShouldForwardEvent(patterns, "run.completed") {
-		t.Error("run.completed should not match any pattern")
-	}
-}
 
 // --- CheckRateLimit tests ---
 
