@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"sync"
 	"time"
 )
@@ -20,10 +21,76 @@ const (
 	DefaultStartupTimeout = 60 * time.Second
 )
 
-// IdleDetector watches PTY output volume to determine when a CLI session
-// is idle. It fires onIdle when no meaningful output (>= minActivityBytes)
-// arrives within silenceTimeout, and fires onActive when output resumes
-// after an idle period.
+// Cursor positioning escape sequences used by Ink (React for terminals)
+// to re-render status areas below the prompt. These indicate UI chrome
+// redraws, not real Claude response output.
+var (
+	// DECSC — save cursor position.
+	cursorSave = []byte{0x1b, '7'}
+	// DECRC — restore cursor position.
+	cursorRestore = []byte{0x1b, '8'}
+	// CSI prefix for cursor movement commands (CUP, CUU, CUD, etc.).
+	csiPrefix = []byte{0x1b, '['}
+)
+
+// isRepositioningNoise returns true if the data chunk contains cursor
+// positioning escape sequences that indicate an Ink status bar redraw
+// rather than real Claude response output.
+//
+// Ink (Claude CLI's terminal renderer) updates status areas below the
+// prompt by saving the cursor, jumping to an absolute position, writing
+// the update, and restoring the cursor. This produces sequences like:
+//
+//	\x1b7              (save cursor)
+//	\x1b[14;1H         (move to row 14, col 1)
+//	\x1b[2K            (erase line)
+//	...status text...
+//	\x1b8              (restore cursor)
+//
+// Real Claude response output only uses SGR color codes (\x1b[...m) and
+// sequential forward-flowing text — it never repositions the cursor.
+func isRepositioningNoise(data []byte) bool {
+	// Fast path: save/restore cursor is the strongest Ink signal.
+	if bytes.Contains(data, cursorSave) || bytes.Contains(data, cursorRestore) {
+		return true
+	}
+
+	// Check for CSI cursor movement: \x1b[<digits>A (up), \x1b[<digits>;<digits>H (absolute).
+	// SGR color codes end in 'm', so we look for CSI sequences that end in
+	// a cursor movement command letter instead.
+	idx := 0
+	for {
+		pos := bytes.Index(data[idx:], csiPrefix)
+		if pos < 0 {
+			break
+		}
+		seqStart := idx + pos + len(csiPrefix)
+		// Walk past digits and semicolons to find the command byte.
+		i := seqStart
+		for i < len(data) && ((data[i] >= '0' && data[i] <= '9') || data[i] == ';') {
+			i++
+		}
+		if i < len(data) {
+			cmd := data[i]
+			// Cursor movement commands: A=up, B=down, C=forward, D=back,
+			// H/f=absolute position, J=erase display, K=erase line.
+			// SGR is 'm' — we explicitly exclude it.
+			switch cmd {
+			case 'A', 'B', 'C', 'D', 'H', 'f', 'J', 'K':
+				return true
+			}
+		}
+		idx = seqStart
+	}
+
+	return false
+}
+
+// IdleDetector watches PTY output to determine when a CLI session is idle.
+// It uses a silence timer that resets on meaningful output. Output containing
+// cursor positioning escape sequences (Ink status bar redraws) is classified
+// as noise and ignored, preventing false "active" transitions from CLI chrome
+// updates while the session is actually idle at the prompt.
 type IdleDetector struct {
 	silenceTimeout   time.Duration
 	minActivityBytes int
@@ -125,11 +192,12 @@ func (d *IdleDetector) Stop() {
 }
 
 // Feed processes a chunk of PTY output. Chunks smaller than minActivityBytes
-// are ignored (filters cursor noise). Meaningful output resets the silence
-// timer and transitions the detector from idle to active if applicable.
+// are ignored. Chunks containing cursor positioning escape sequences are
+// classified as Ink status bar noise and ignored. Only sequential text output
+// (real Claude responses) resets the silence timer.
 func (d *IdleDetector) Feed(data []byte) {
 	d.mu.Lock()
-	if d.stopped || len(data) < d.minActivityBytes {
+	if d.stopped || len(data) < d.minActivityBytes || isRepositioningNoise(data) {
 		d.mu.Unlock()
 		return
 	}

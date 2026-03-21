@@ -213,6 +213,101 @@ func TestIdleDetector_NilOnActive(t *testing.T) {
 	d.Feed(make([]byte, 20))
 }
 
+func TestIsRepositioningNoise_CursorSave(t *testing.T) {
+	// Ink status bar redraw: save cursor + absolute move + text + restore cursor
+	data := []byte("\x1b7\x1b[14;1H\x1b[2KTip: try /help\x1b8")
+	if !isRepositioningNoise(data) {
+		t.Fatal("expected cursor save/restore to be classified as noise")
+	}
+}
+
+func TestIsRepositioningNoise_AbsolutePosition(t *testing.T) {
+	// CSI cursor position command without save/restore
+	data := []byte("\x1b[14;1HSome status text")
+	if !isRepositioningNoise(data) {
+		t.Fatal("expected absolute cursor position to be classified as noise")
+	}
+}
+
+func TestIsRepositioningNoise_CursorUp(t *testing.T) {
+	data := []byte("\x1b[3AOverwrite previous line")
+	if !isRepositioningNoise(data) {
+		t.Fatal("expected cursor up to be classified as noise")
+	}
+}
+
+func TestIsRepositioningNoise_SGROnly(t *testing.T) {
+	// Real Claude output: SGR color codes + text (no cursor movement)
+	data := []byte("\x1b[32mdef foo():\x1b[0m\n  return 42\n")
+	if isRepositioningNoise(data) {
+		t.Fatal("SGR-only output should NOT be classified as noise")
+	}
+}
+
+func TestIsRepositioningNoise_PlainText(t *testing.T) {
+	data := []byte("Here is some response text from Claude.\n")
+	if isRepositioningNoise(data) {
+		t.Fatal("plain text should NOT be classified as noise")
+	}
+}
+
+func TestIsRepositioningNoise_EraseLineOnly(t *testing.T) {
+	// Erase line (K) is a repositioning signal — Ink uses it to clear status lines
+	data := []byte("\x1b[2KNew status content")
+	if !isRepositioningNoise(data) {
+		t.Fatal("erase line should be classified as noise")
+	}
+}
+
+func TestIdleDetector_IgnoresRepositioningNoise(t *testing.T) {
+	var idleCalled atomic.Bool
+	d := NewIdleDetector(
+		func() { idleCalled.Store(true) },
+		nil,
+		WithSilenceTimeout(50*time.Millisecond),
+	)
+	d.Start()
+	defer d.Stop()
+
+	// Feed real output first to start the silence timer.
+	d.Feed(make([]byte, 20))
+	time.Sleep(10 * time.Millisecond)
+
+	// Feed Ink status bar noise — should NOT reset the silence timer.
+	inkNoise := []byte("\x1b7\x1b[14;1H\x1b[2K\x1b[38;5;243mTip: try /help\x1b8")
+	d.Feed(inkNoise)
+	time.Sleep(80 * time.Millisecond)
+
+	// Silence timer should have fired because noise was ignored.
+	if !idleCalled.Load() {
+		t.Fatal("expected onIdle — Ink noise should not reset the silence timer")
+	}
+}
+
+func TestIdleDetector_NoiseDoesNotTransitionToActive(t *testing.T) {
+	var activeCalled atomic.Bool
+	d := NewIdleDetector(
+		func() {},
+		func() { activeCalled.Store(true) },
+		WithSilenceTimeout(50*time.Millisecond),
+	)
+	d.Start()
+	defer d.Stop()
+
+	// Feed real output, wait for idle.
+	d.Feed(make([]byte, 20))
+	time.Sleep(80 * time.Millisecond)
+
+	// Feed noise while idle — should NOT trigger onActive.
+	inkNoise := []byte("\x1b7\x1b[14;1H\x1b[2KUpdate available\x1b8")
+	d.Feed(inkNoise)
+	time.Sleep(30 * time.Millisecond)
+
+	if activeCalled.Load() {
+		t.Fatal("Ink noise should not trigger idle→active transition")
+	}
+}
+
 func TestIdleDetector_ConcurrentFeeds(t *testing.T) {
 	var idleCount atomic.Int32
 	d := NewIdleDetector(

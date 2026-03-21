@@ -108,7 +108,7 @@ export function useEventStream() {
             case SESSION_TERMINATED:
             case SESSION_WAITING_FOR_INPUT:
             case SESSION_RESUMED:
-              queryClient.invalidateQueries({ queryKey: ['sessions'] });
+              queryClient.invalidateQueries({ queryKey: ['sessions'], refetchType: 'all' });
               break;
             case MACHINE_CONNECTED:
             case MACHINE_DISCONNECTED:
