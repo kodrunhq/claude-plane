@@ -22,9 +22,13 @@ RUN mkdir -p internal/server/agentdl/binaries && \
 # Build the server (embeds frontend + agent binaries via go:embed)
 RUN CGO_ENABLED=0 go build -o /claude-plane-server ./cmd/server
 
+# Build the bridge
+RUN CGO_ENABLED=0 go build -o /claude-plane-bridge ./cmd/bridge
+
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /claude-plane-server /usr/local/bin/
+COPY --from=builder /claude-plane-bridge /usr/local/bin/
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN mkdir -p /data && \
     addgroup -S claude && adduser -S claude -G claude && \
