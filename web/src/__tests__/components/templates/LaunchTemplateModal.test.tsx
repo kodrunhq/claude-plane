@@ -79,7 +79,7 @@ describe('LaunchTemplateModal', () => {
   it('shows warning when no online machines are available', async () => {
     server.use(
       http.get('/api/v1/machines', () => HttpResponse.json([
-        { machine_id: 'm1', display_name: 'Offline Worker', status: 'disconnected', max_sessions: 5, home_dir: '', last_health: '', last_seen_at: '', cert_expires: '', created_at: '' },
+        { machine_id: 'm1', display_name: 'Offline Worker', status: 'disconnected', max_sessions: 5, home_dir: '', last_seen_at: '', created_at: '' },
       ])),
     );
 

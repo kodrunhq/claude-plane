@@ -39,9 +39,7 @@ export function buildMachine(overrides?: Partial<Machine>): Machine {
     status: 'connected',
     max_sessions: 5,
     home_dir: '',
-    last_health: NOW,
     last_seen_at: NOW,
-    cert_expires: '2027-01-15T10:00:00Z',
     created_at: NOW,
     ...overrides,
   };

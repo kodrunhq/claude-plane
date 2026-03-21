@@ -6,16 +6,14 @@ export interface MachineHealth {
   max_sessions: number;
 }
 
-// Machine type -- matches Go machineResponse struct
+// Machine type -- matches Go machineResponse struct in api/machine_handler.go
 export interface Machine {
   machine_id: string;
   display_name: string;
   status: 'connected' | 'disconnected';
   max_sessions: number;
   home_dir: string;
-  last_health: string;
   last_seen_at: string;
-  cert_expires: string;
   created_at: string;
   health?: MachineHealth;
 }
