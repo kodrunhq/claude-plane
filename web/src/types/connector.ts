@@ -23,6 +23,17 @@ export interface UpdateConnectorParams {
   config_secret?: string;
 }
 
+export interface ConnectorStatus {
+  connector_id: string;
+  name: string;
+  type: string;
+  healthy: boolean;
+  last_error: string | null;
+}
+
 export interface BridgeStatus {
+  running: boolean;
+  last_seen: string | null;
+  connectors: ConnectorStatus[];
   restart_requested_at: string | null;
 }

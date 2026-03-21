@@ -55,6 +55,6 @@ export function useBridgeStatus() {
   return useQuery({
     queryKey: ['bridge-status'],
     queryFn: () => bridgeApi.status(),
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
 }
