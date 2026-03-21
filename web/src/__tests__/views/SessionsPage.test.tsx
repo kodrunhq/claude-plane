@@ -32,7 +32,7 @@ describe('SessionsPage', () => {
     renderWithProviders(<SessionsPage />);
 
     // The status select should be present with expected options
-    const statusSelect = screen.getByDisplayValue('Running');
+    const statusSelect = screen.getByDisplayValue('Active');
     expect(statusSelect).toBeInTheDocument();
 
     // Verify the label

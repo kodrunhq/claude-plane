@@ -11,12 +11,12 @@ import { Pagination } from '../components/shared/Pagination.tsx';
 import { usePagination } from '../hooks/usePagination.ts';
 import { useMultiviewStore } from '../stores/multiview.ts';
 
-const STATUS_OPTIONS = ['all', 'running', 'created', 'completed', 'failed', 'terminated'] as const;
+const STATUS_OPTIONS = ['all', 'active', 'running', 'waiting_for_input', 'created', 'completed', 'failed', 'terminated'] as const;
 
 export function SessionsPage() {
   const navigate = useNavigate();
 
-  const [statusFilter, setStatusFilter] = useState<string>('running');
+  const [statusFilter, setStatusFilter] = useState<string>('active');
   const [machineFilter, setMachineFilter] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [terminateId, setTerminateId] = useState<string | null>(null);
@@ -25,9 +25,12 @@ export function SessionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const createScratchWorkspace = useMultiviewStore((s) => s.createScratchWorkspace);
 
+  const ACTIVE_STATUSES = new Set(['running', 'waiting_for_input', 'created']);
+
   const filters = useMemo(() => {
     const f: Record<string, string> = {};
-    if (statusFilter !== 'all') f.status = statusFilter;
+    // 'active' is a virtual filter — fetch all and filter client-side.
+    if (statusFilter !== 'all' && statusFilter !== 'active') f.status = statusFilter;
     if (machineFilter !== 'all') f.machine_id = machineFilter;
     return Object.keys(f).length > 0 ? f : undefined;
   }, [statusFilter, machineFilter]);
@@ -37,7 +40,11 @@ export function SessionsPage() {
   const terminateSession = useTerminateSession();
 
   const filteredSessions = useMemo(() => {
-    const list = sessions ?? [];
+    let list = sessions ?? [];
+    // Apply 'active' virtual filter client-side (API doesn't support multi-status).
+    if (statusFilter === 'active') {
+      list = list.filter((s) => ACTIVE_STATUSES.has(s.status));
+    }
     if (!search.trim()) return list;
     const q = search.toLowerCase();
     return list.filter(
@@ -46,7 +53,7 @@ export function SessionsPage() {
         s.command?.toLowerCase().includes(q) ||
         s.working_dir?.toLowerCase().includes(q),
     );
-  }, [sessions, search]);
+  }, [sessions, search, statusFilter]);
 
   const { paged: pagedSessions, page, pageSize, total, setPage, setPageSize } = usePagination(filteredSessions);
 
@@ -142,7 +149,7 @@ export function SessionsPage() {
           >
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {s === 'all' ? 'All Statuses' : s.charAt(0).toUpperCase() + s.slice(1)}
+                {s === 'all' ? 'All Statuses' : s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
               </option>
             ))}
           </select>

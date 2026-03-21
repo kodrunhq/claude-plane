@@ -14,6 +14,11 @@ import (
 	pb "github.com/kodrunhq/claude-plane/internal/shared/proto/claudeplane/v1"
 )
 
+// DefaultDisconnectGrace is how long to wait before publishing a disconnect
+// event. If the agent reconnects within this window, the disconnect is
+// suppressed — preventing false transient notifications in the UI.
+const DefaultDisconnectGrace = 5 * time.Second
+
 // MachineStore is the subset of store operations needed by ConnectionManager.
 // This interface allows testing with a mock store.
 type MachineStore interface {
@@ -43,7 +48,7 @@ type ConnectedAgent struct {
 	HomeDir      string
 	Cancel       context.CancelFunc
 	// Ctx is the stream context — checked by the health sweep to detect dead transports.
-	Ctx          context.Context
+	Ctx context.Context
 	// Stream holds the gRPC stream reference. Typed as interface{} to avoid
 	// importing proto package; will be type-asserted when needed.
 	Stream interface{}
@@ -91,6 +96,13 @@ type ConnectionManager struct {
 	store     MachineStore
 	logger    *slog.Logger
 	publisher event.Publisher
+
+	// pendingDisconnects tracks delayed disconnect events. When a stream
+	// closes, the disconnect event is delayed by disconnectGrace to allow
+	// a reconnecting agent to suppress the transient notification.
+	disconnectGrace    time.Duration
+	pendingMu          sync.Mutex
+	pendingDisconnects map[string]*time.Timer
 }
 
 // SetPublisher sets the event publisher used to emit machine connectivity events.
@@ -122,16 +134,52 @@ func NewConnectionManager(store MachineStore, logger *slog.Logger) *ConnectionMa
 		logger = slog.Default()
 	}
 	return &ConnectionManager{
-		agents: make(map[string]*ConnectedAgent),
-		store:  store,
-		logger: logger,
+		agents:             make(map[string]*ConnectedAgent),
+		store:              store,
+		logger:             logger,
+		disconnectGrace:    DefaultDisconnectGrace,
+		pendingDisconnects: make(map[string]*time.Timer),
 	}
+}
+
+// cancelPendingDisconnect cancels any pending delayed disconnect for the machine.
+// Called on Register to suppress transient disconnect notifications during reconnection.
+func (cm *ConnectionManager) cancelPendingDisconnect(machineID string) {
+	cm.pendingMu.Lock()
+	if t, ok := cm.pendingDisconnects[machineID]; ok {
+		t.Stop()
+		delete(cm.pendingDisconnects, machineID)
+		cm.logger.Info("suppressed transient disconnect (agent reconnected within grace period)", "machine_id", machineID)
+	}
+	cm.pendingMu.Unlock()
+}
+
+// scheduleDisconnectEvent delays the disconnect event publication by the grace period.
+// If Register is called for the same machine before the timer fires, the event is cancelled.
+func (cm *ConnectionManager) scheduleDisconnectEvent(machineID string) {
+	cm.pendingMu.Lock()
+	// Cancel any existing pending disconnect (shouldn't happen, but be safe).
+	if t, ok := cm.pendingDisconnects[machineID]; ok {
+		t.Stop()
+	}
+	cm.pendingDisconnects[machineID] = time.AfterFunc(cm.disconnectGrace, func() {
+		cm.pendingMu.Lock()
+		delete(cm.pendingDisconnects, machineID)
+		cm.pendingMu.Unlock()
+
+		cm.logger.Info("agent disconnected (grace period elapsed)", "machine_id", machineID)
+		cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
+	})
+	cm.pendingMu.Unlock()
 }
 
 // Register adds an agent to the in-memory map and updates the DB to "connected".
 // If an agent with the same machineID is already registered, its Cancel function
 // is called before replacement.
 func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) error {
+	// Cancel any pending disconnect event — the agent is reconnecting.
+	cm.cancelPendingDisconnect(machineID)
+
 	// Capture old cancel under lock, but call it after unlock to avoid deadlock.
 	var oldCancel context.CancelFunc
 	cm.mu.Lock()
@@ -170,19 +218,21 @@ func (cm *ConnectionManager) Register(machineID string, agent *ConnectedAgent) e
 	return nil
 }
 
-// Disconnect removes an agent from the in-memory map and updates the DB to "disconnected".
+// Disconnect removes an agent from the in-memory map and schedules a delayed
+// disconnect event. The DB is updated immediately, but the event publication
+// is delayed to suppress transient reconnection flashes.
 func (cm *ConnectionManager) Disconnect(machineID string) {
 	cm.mu.Lock()
 	delete(cm.agents, machineID)
 	cm.mu.Unlock()
 
-	// Persist to DB outside the lock
+	// Persist to DB immediately — the disconnect is real at the transport level.
 	if err := cm.store.UpdateMachineStatus(machineID, "disconnected", time.Now()); err != nil {
 		cm.logger.Error("failed to update status on disconnect", "machine_id", machineID, "error", err)
 	}
 
-	cm.logger.Info("agent disconnected", "machine_id", machineID)
-	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
+	// Delay the event to allow reconnecting agents to suppress the notification.
+	cm.scheduleDisconnectEvent(machineID)
 }
 
 // DisconnectIfMatch removes the agent only if the provided pointer matches
@@ -203,8 +253,8 @@ func (cm *ConnectionManager) DisconnectIfMatch(machineID string, agent *Connecte
 		cm.logger.Error("failed to update status on disconnect", "machine_id", machineID, "error", err)
 	}
 
-	cm.logger.Info("agent disconnected", "machine_id", machineID)
-	cm.publishEvent(context.Background(), event.NewMachineEvent(event.TypeMachineDisconnected, machineID, cm.machineDisplayName(machineID)))
+	// Delay the event to allow reconnecting agents to suppress the notification.
+	cm.scheduleDisconnectEvent(machineID)
 	return true
 }
 
@@ -249,7 +299,7 @@ func (cm *ConnectionManager) sweepStaleAgents() {
 		cm.mu.Unlock()
 
 		if agent.Cancel != nil {
-			agent.Cancel() // Release goroutines blocked on the stream context
+			agent.Cancel()
 		}
 
 		if err := cm.store.UpdateMachineStatus(agent.MachineID, "disconnected", time.Now()); err != nil {
