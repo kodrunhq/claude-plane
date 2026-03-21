@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Plug, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useConnectors, useDeleteConnector, useRestartBridge } from '../hooks/useBridge.ts';
+import { useConnectors, useDeleteConnector, useRestartBridge, useBridgeStatus } from '../hooks/useBridge.ts';
 import { ConnectorCard } from '../components/connectors/ConnectorCard.tsx';
 import { AddConnectorModal } from '../components/connectors/AddConnectorModal.tsx';
 import { TelegramForm } from '../components/connectors/TelegramForm.tsx';
@@ -11,6 +11,7 @@ import type { BridgeConnector } from '../types/connector.ts';
 
 export function ConnectorsPage() {
   const { data: connectors, isLoading } = useConnectors();
+  const { data: bridgeStatus } = useBridgeStatus();
   const deleteConnector = useDeleteConnector();
   const restartBridge = useRestartBridge();
 
@@ -141,6 +142,9 @@ export function ConnectorsPage() {
             <ConnectorCard
               key={connector.connector_id}
               connector={connector}
+              connectorStatus={bridgeStatus?.connectors?.find(
+                (cs) => cs.connector_id === connector.connector_id
+              ) ?? null}
               onEdit={handleEdit}
               onDelete={setDeletingConnector}
             />
