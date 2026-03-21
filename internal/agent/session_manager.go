@@ -288,6 +288,7 @@ func (sm *SessionManager) handleCreate(cmd *pb.CreateSessionCmd) {
 
 		opts := make([]IdleDetectorOption, len(sm.idleDetectorOpts))
 		copy(opts, sm.idleDetectorOpts)
+		opts = append(opts, WithLogger(sm.logger))
 
 		detector := NewIdleDetector(onIdle, onActive, opts...)
 		detector.Start()
