@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { ArrowLeft, Monitor, FolderOpen, Square } from 'lucide-react';
 import { StatusBadge } from '../shared/StatusBadge.tsx';
 import { ConfirmDialog } from '../shared/ConfirmDialog.tsx';
@@ -14,16 +14,14 @@ interface SessionHeaderProps {
 }
 
 export function SessionHeader({ session, isLoading, onTerminate }: SessionHeaderProps) {
-  const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const isActive = session?.status === 'running' || session?.status === 'created';
+  const isActive = session?.status === 'running' || session?.status === 'created' || session?.status === 'waiting_for_input';
 
   function handleConfirmTerminate() {
     if (!session) return;
     onTerminate(session.session_id);
     setConfirmOpen(false);
-    navigate('/sessions');
   }
 
   return (

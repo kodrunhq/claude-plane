@@ -14,7 +14,7 @@ export function SessionPicker({ onSelect, onClose, excludeSessionIds = [] }: Ses
   const [search, setSearch] = useState('');
   const [machineFilter, setMachineFilter] = useState('all');
 
-  const { data: sessions } = useSessions({ status: 'running' });
+  const { data: sessions } = useSessions();
   const { data: machines } = useMachines();
 
   const machineMap = useMemo(() => {
@@ -23,9 +23,13 @@ export function SessionPicker({ onSelect, onClose, excludeSessionIds = [] }: Ses
     return map;
   }, [machines]);
 
+  const activeSessions = useMemo(
+    () => (sessions ?? []).filter((s) => s.status === 'running' || s.status === 'created' || s.status === 'waiting_for_input'),
+    [sessions],
+  );
+
   const filtered = useMemo(() => {
-    if (!sessions) return [];
-    return sessions.filter((s) => {
+    return activeSessions.filter((s) => {
       if (machineFilter !== 'all' && s.machine_id !== machineFilter) return false;
       if (search) {
         const term = search.toLowerCase();
@@ -39,7 +43,7 @@ export function SessionPicker({ onSelect, onClose, excludeSessionIds = [] }: Ses
       }
       return true;
     });
-  }, [sessions, machineFilter, search, machineMap]);
+  }, [activeSessions, machineFilter, search, machineMap]);
 
   const isExcluded = (id: string) => excludeSessionIds.includes(id);
 

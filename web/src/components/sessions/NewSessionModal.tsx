@@ -187,6 +187,9 @@ export function NewSessionModal({ open, onClose, preselectedMachineId }: NewSess
                     setWorkingDir(template.working_dir);
                     setWorkingDirDirty(true);
                   }
+                  if (template.machine_id) {
+                    setMachineId(template.machine_id);
+                  }
                 }}
               />
               {selectedTemplate && (
