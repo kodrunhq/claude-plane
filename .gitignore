@@ -37,10 +37,12 @@ docs/internal/
 docs/plans/
 docs/specs/
 docs/superpowers/
+docs/design/
 
 # Editor/IDE
 # .idea/
 # .vscode/
+.serena/
 
 # Frontend build output (embedded into server binary)
 internal/server/frontend/dist/*
