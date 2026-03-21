@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import type {
   NotificationChannel,
   SMTPConfig,
-  TelegramConfig,
 } from '../../types/notification.ts';
 import {
   useCreateNotificationChannel,
@@ -17,8 +16,6 @@ interface ChannelFormModalProps {
   onClose: () => void;
 }
 
-type TabType = 'email' | 'telegram';
-
 const defaultSMTPConfig: SMTPConfig = {
   host: '',
   port: 587,
@@ -29,12 +26,6 @@ const defaultSMTPConfig: SMTPConfig = {
   tls: true,
 };
 
-const defaultTelegramConfig: TelegramConfig = {
-  bot_token: '',
-  chat_id: '',
-  topic_id: undefined,
-};
-
 function parseSMTPConfig(config: string): SMTPConfig {
   try {
     return { ...defaultSMTPConfig, ...JSON.parse(config) } as SMTPConfig;
@@ -43,29 +34,13 @@ function parseSMTPConfig(config: string): SMTPConfig {
   }
 }
 
-function parseTelegramConfig(config: string): TelegramConfig {
-  try {
-    return { ...defaultTelegramConfig, ...JSON.parse(config) } as TelegramConfig;
-  } catch {
-    return { ...defaultTelegramConfig };
-  }
-}
-
 export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
   const isEdit = !!channel;
-  const [activeTab, setActiveTab] = useState<TabType>(
-    channel?.channel_type ?? 'email',
-  );
   const [name, setName] = useState(channel?.name ?? '');
   const [smtpConfig, setSMTPConfig] = useState<SMTPConfig>(() =>
     channel?.channel_type === 'email'
       ? parseSMTPConfig(channel.config)
       : { ...defaultSMTPConfig },
-  );
-  const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>(() =>
-    channel?.channel_type === 'telegram'
-      ? parseTelegramConfig(channel.config)
-      : { ...defaultTelegramConfig },
   );
 
   const createMutation = useCreateNotificationChannel();
@@ -75,18 +50,8 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
   const saving = createMutation.isPending || updateMutation.isPending;
 
   const getConfig = useCallback((): string => {
-    if (activeTab === 'email') {
-      return JSON.stringify(smtpConfig);
-    }
-    const tg: Record<string, unknown> = {
-      bot_token: telegramConfig.bot_token,
-      chat_id: telegramConfig.chat_id,
-    };
-    if (telegramConfig.topic_id && telegramConfig.topic_id > 0) {
-      tg.topic_id = telegramConfig.topic_id;
-    }
-    return JSON.stringify(tg);
-  }, [activeTab, smtpConfig, telegramConfig]);
+    return JSON.stringify(smtpConfig);
+  }, [smtpConfig]);
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
@@ -105,7 +70,7 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
         toast.success('Channel updated');
       } else {
         await createMutation.mutateAsync({
-          channel_type: activeTab,
+          channel_type: 'email',
           name,
           config,
         });
@@ -115,7 +80,7 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save channel');
     }
-  }, [name, getConfig, isEdit, channel, activeTab, createMutation, updateMutation, onClose]);
+  }, [name, getConfig, isEdit, channel, createMutation, updateMutation, onClose]);
 
   const handleTest = useCallback(async () => {
     if (!channel) return;
@@ -165,27 +130,8 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
             />
           </div>
 
-          {/* Channel type tabs */}
-          {!isEdit && (
-            <div className="flex gap-2">
-              {(['email', 'telegram'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors ${
-                    activeTab === tab
-                      ? 'bg-accent-primary text-white'
-                      : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  {tab === 'email' ? 'Email (SMTP)' : 'Telegram'}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Email config */}
-          {activeTab === 'email' && (
+          {(
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -288,59 +234,6 @@ export function ChannelFormModal({ channel, onClose }: ChannelFormModalProps) {
                     />
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Telegram config */}
-          {activeTab === 'telegram' && (
-            <div className="space-y-3">
-              <div>
-                <label className={labelClass}>Bot Token</label>
-                <input
-                  type="password"
-                  value={telegramConfig.bot_token}
-                  onChange={(e) =>
-                    setTelegramConfig({
-                      ...telegramConfig,
-                      bot_token: e.target.value,
-                    })
-                  }
-                  placeholder="123456:ABC-DEF..."
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Chat ID</label>
-                <input
-                  type="text"
-                  value={telegramConfig.chat_id}
-                  onChange={(e) =>
-                    setTelegramConfig({
-                      ...telegramConfig,
-                      chat_id: e.target.value,
-                    })
-                  }
-                  placeholder="-1001234567890"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Topic ID (optional)</label>
-                <input
-                  type="number"
-                  value={telegramConfig.topic_id ?? ''}
-                  onChange={(e) =>
-                    setTelegramConfig({
-                      ...telegramConfig,
-                      topic_id: e.target.value
-                        ? parseInt(e.target.value, 10)
-                        : undefined,
-                    })
-                  }
-                  placeholder="For forum-style groups"
-                  className={inputClass}
-                />
               </div>
             </div>
           )}
