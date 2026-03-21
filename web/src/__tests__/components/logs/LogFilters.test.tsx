@@ -167,7 +167,7 @@ describe('LogFilters', () => {
     renderWithProviders(<LogFilters />);
     const select = getSelectByLabel('Source');
     const options = Array.from(select.options).map((o) => o.value);
-    expect(options).toEqual(['ALL', 'server', 'agent']);
+    expect(options).toEqual(['ALL', 'server', 'agent', 'bridge']);
   });
 
   it('renders all component options', () => {
