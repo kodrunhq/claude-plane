@@ -7,6 +7,7 @@ export interface NotificationChannel {
   created_by: string;
   created_at: string;
   updated_at: string;
+  connector_id?: string;
 }
 
 export interface NotificationSubscription {

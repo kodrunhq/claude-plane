@@ -19,6 +19,7 @@ type NotificationChannel struct {
 	CreatedBy   string    `json:"created_by"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	ConnectorID *string   `json:"connector_id,omitempty"`
 }
 
 // NotificationSubscription links a user + channel + event type.
@@ -34,6 +35,7 @@ type ChannelSubscription struct {
 	ChannelID   string
 	ChannelType string
 	Config      string
+	ConnectorID *string
 }
 
 // CreateNotificationChannel inserts a new notification channel.
@@ -42,9 +44,9 @@ func (s *Store) CreateNotificationChannel(ctx context.Context, ch NotificationCh
 	now := time.Now().UTC()
 
 	_, err := s.writer.ExecContext(ctx,
-		`INSERT INTO notification_channels (channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, ch.ChannelType, ch.Name, ch.Config, ch.Enabled, ch.CreatedBy, now, now,
+		`INSERT INTO notification_channels (channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at, connector_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, ch.ChannelType, ch.Name, ch.Config, ch.Enabled, ch.CreatedBy, now, now, ch.ConnectorID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create notification channel: %w", err)
@@ -59,6 +61,7 @@ func (s *Store) CreateNotificationChannel(ctx context.Context, ch NotificationCh
 		CreatedBy:   ch.CreatedBy,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+		ConnectorID: ch.ConnectorID,
 	}
 	return &result, nil
 }
@@ -67,9 +70,9 @@ func (s *Store) CreateNotificationChannel(ctx context.Context, ch NotificationCh
 func (s *Store) GetNotificationChannel(ctx context.Context, channelID string) (*NotificationChannel, error) {
 	var ch NotificationChannel
 	err := s.reader.QueryRowContext(ctx,
-		`SELECT channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at
+		`SELECT channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at, connector_id
 		 FROM notification_channels WHERE channel_id = ?`, channelID,
-	).Scan(&ch.ChannelID, &ch.ChannelType, &ch.Name, &ch.Config, &ch.Enabled, &ch.CreatedBy, &ch.CreatedAt, &ch.UpdatedAt)
+	).Scan(&ch.ChannelID, &ch.ChannelType, &ch.Name, &ch.Config, &ch.Enabled, &ch.CreatedBy, &ch.CreatedAt, &ch.UpdatedAt, &ch.ConnectorID)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("notification channel %s: %w", channelID, ErrNotFound)
 	}
@@ -82,7 +85,7 @@ func (s *Store) GetNotificationChannel(ctx context.Context, channelID string) (*
 // ListNotificationChannels returns all notification channels ordered by created_at DESC.
 func (s *Store) ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error) {
 	rows, err := s.reader.QueryContext(ctx,
-		`SELECT channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at
+		`SELECT channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at, connector_id
 		 FROM notification_channels ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -93,7 +96,7 @@ func (s *Store) ListNotificationChannels(ctx context.Context) ([]NotificationCha
 	var channels []NotificationChannel
 	for rows.Next() {
 		var ch NotificationChannel
-		if err := rows.Scan(&ch.ChannelID, &ch.ChannelType, &ch.Name, &ch.Config, &ch.Enabled, &ch.CreatedBy, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
+		if err := rows.Scan(&ch.ChannelID, &ch.ChannelType, &ch.Name, &ch.Config, &ch.Enabled, &ch.CreatedBy, &ch.CreatedAt, &ch.UpdatedAt, &ch.ConnectorID); err != nil {
 			return nil, fmt.Errorf("scan notification channel: %w", err)
 		}
 		channels = append(channels, ch)
@@ -189,7 +192,7 @@ func (s *Store) SetSubscriptions(ctx context.Context, userID string, subs []Noti
 // Only enabled channels are included. This is the method used by the notification dispatcher.
 func (s *Store) ListSubscriptionsForEvent(ctx context.Context, eventType string) ([]ChannelSubscription, error) {
 	rows, err := s.reader.QueryContext(ctx,
-		`SELECT DISTINCT nc.channel_id, nc.channel_type, nc.config
+		`SELECT DISTINCT nc.channel_id, nc.channel_type, nc.config, nc.connector_id
 		 FROM notification_subscriptions ns
 		 JOIN notification_channels nc ON ns.channel_id = nc.channel_id
 		 WHERE ns.event_type = ? AND nc.enabled = 1`, eventType,
@@ -202,10 +205,27 @@ func (s *Store) ListSubscriptionsForEvent(ctx context.Context, eventType string)
 	var subs []ChannelSubscription
 	for rows.Next() {
 		var sub ChannelSubscription
-		if err := rows.Scan(&sub.ChannelID, &sub.ChannelType, &sub.Config); err != nil {
+		if err := rows.Scan(&sub.ChannelID, &sub.ChannelType, &sub.Config, &sub.ConnectorID); err != nil {
 			return nil, fmt.Errorf("scan channel subscription: %w", err)
 		}
 		subs = append(subs, sub)
 	}
 	return subs, rows.Err()
+}
+
+// GetChannelByConnectorID retrieves a notification channel by its connector ID.
+func (s *Store) GetChannelByConnectorID(ctx context.Context, connectorID string) (*NotificationChannel, error) {
+	row := s.reader.QueryRowContext(ctx,
+		`SELECT channel_id, channel_type, name, config, enabled, created_by, created_at, updated_at, connector_id
+		 FROM notification_channels WHERE connector_id = ?`, connectorID)
+	var ch NotificationChannel
+	err := row.Scan(&ch.ChannelID, &ch.ChannelType, &ch.Name, &ch.Config, &ch.Enabled,
+		&ch.CreatedBy, &ch.CreatedAt, &ch.UpdatedAt, &ch.ConnectorID)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("notification channel for connector %s: %w", connectorID, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get channel by connector id: %w", err)
+	}
+	return &ch, nil
 }
