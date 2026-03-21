@@ -65,6 +65,13 @@ export const WEBHOOK_TEST = 'webhook.test';
 // Server lifecycle events.
 export const SERVER_SHUTDOWN = 'server.shutdown';
 
+// Bridge lifecycle events.
+export const BRIDGE_STARTED = 'bridge.started' as const;
+export const BRIDGE_STOPPED = 'bridge.stopped' as const;
+export const BRIDGE_CONNECTOR_STARTED = 'bridge.connector.started' as const;
+export const BRIDGE_CONNECTOR_ERROR = 'bridge.connector.error' as const;
+export const BRIDGE_CONNECTOR_COMMAND = 'bridge.connector.command' as const;
+
 /** All known event types. Useful for exhaustive matching or filtering. */
 export const ALL_EVENT_TYPES = [
   RUN_CREATED,
@@ -106,6 +113,11 @@ export const ALL_EVENT_TYPES = [
   WEBHOOK_DELETED,
   WEBHOOK_TEST,
   SERVER_SHUTDOWN,
+  BRIDGE_STARTED,
+  BRIDGE_STOPPED,
+  BRIDGE_CONNECTOR_STARTED,
+  BRIDGE_CONNECTOR_ERROR,
+  BRIDGE_CONNECTOR_COMMAND,
 ] as const;
 
 type EventType = (typeof ALL_EVENT_TYPES)[number];
@@ -155,6 +167,16 @@ export const EVENT_GROUPS: { label: string; events: EventType[] }[] = [
   {
     label: 'Triggers',
     events: [TRIGGER_CRON, TRIGGER_WEBHOOK, TRIGGER_JOB_COMPLETED],
+  },
+  {
+    label: 'Bridge',
+    events: [
+      BRIDGE_STARTED,
+      BRIDGE_STOPPED,
+      BRIDGE_CONNECTOR_STARTED,
+      BRIDGE_CONNECTOR_ERROR,
+      BRIDGE_CONNECTOR_COMMAND,
+    ],
   },
   {
     label: 'Server',

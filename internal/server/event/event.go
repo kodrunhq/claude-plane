@@ -73,6 +73,13 @@ const (
 
 	// Server lifecycle events.
 	TypeServerShutdown = "server.shutdown"
+
+	// Bridge lifecycle events.
+	TypeBridgeStarted          = "bridge.started"
+	TypeBridgeStopped          = "bridge.stopped"
+	TypeBridgeConnectorStarted = "bridge.connector.started"
+	TypeBridgeConnectorError   = "bridge.connector.error"
+	TypeBridgeConnectorCommand = "bridge.connector.command"
 )
 
 // Event is the envelope for all bus messages.
