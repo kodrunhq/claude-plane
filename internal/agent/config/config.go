@@ -52,7 +52,7 @@ type AgentSettings struct {
 	DataDir            string `toml:"data_dir"`
 	MaxSessions        int    `toml:"max_sessions"`
 	ClaudeCLIPath      string `toml:"claude_cli_path"`
-	IdlePromptMarker   string `toml:"idle_prompt_marker"`
+	IdleSilenceTimeout string `toml:"idle_silence_timeout"`
 	IdleStartupTimeout string `toml:"idle_startup_timeout"`
 }
 

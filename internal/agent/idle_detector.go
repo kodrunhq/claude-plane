@@ -100,16 +100,6 @@ func (d *IdleDetector) Stop() {
 	}
 }
 
-// WithKeepAlive is a deprecated no-op option retained for backward compatibility.
-// It will be removed once session_manager.go is updated to the new API.
-func WithKeepAlive(_ bool) IdleDetectorOption {
-	return func(_ *IdleDetector) {}
-}
-
-// ResetToPhase1 is a deprecated no-op retained for backward compatibility.
-// It will be removed once session_manager.go is updated to the new API.
-func (d *IdleDetector) ResetToPhase1() {}
-
 func (d *IdleDetector) Feed(data []byte) {
 	if len(data) < d.minActivityBytes {
 		return
