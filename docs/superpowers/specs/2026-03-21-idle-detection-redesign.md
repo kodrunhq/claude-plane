@@ -200,9 +200,7 @@ Note: `CreateSession` explicitly lists columns in its INSERT but omits `updated_
 **Problem:** During async `checkSession()` on page load, the app renders near-invisible "Loading..." text (`text-text-secondary text-sm`) on a dark background (`bg-bg-primary` = `#0a0e14`). Appears as a black screen.
 
 **Fix:**
-- Replace with a visible animated spinner and larger `text-text-primary` text ("Connecting...")
-- Add a 5-second timeout that shows "Taking longer than expected" with a retry button
-- If auth check fails, show actionable error instead of silent redirect
+- Replace the near-invisible "Loading..." text with a visible animated spinner and larger `text-text-primary` text ("Connecting...") during the `checkSession()` loading state.
 
 **Scope:** Changes to `App.tsx` loading state only.
 
