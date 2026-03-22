@@ -15,8 +15,10 @@ if [ ! -f "$CONFIG_FILE" ]; then
   mkdir -p "$CA_DIR" "$CERT_DIR"
 
   # External address for provisioning — agents need a reachable address, not 0.0.0.0.
-  # Defaults to hostname if not set via SERVER_URL env var.
-  EXTERNAL_HOST="${SERVER_URL:-http://$(hostname):4200}"
+  # Defaults to localhost for same-machine setups (server + agent on same host).
+  # For remote agents, set SERVER_URL to your machine's reachable IP/hostname.
+  # NOTE: Do NOT use $(hostname) here — inside Docker it returns the container ID.
+  EXTERNAL_HOST="${SERVER_URL:-http://localhost:4200}"
 
   # Extract hostname/IP from SERVER_URL for TLS certificate SANs.
   CERT_HOST=$(echo "$EXTERNAL_HOST" | sed 's|https\?://||;s|:[0-9]*$||')
