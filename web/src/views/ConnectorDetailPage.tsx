@@ -10,6 +10,7 @@ import { createDefaultWatch } from '../components/connectors/watchDefaults.ts';
 import { GithubForm } from '../components/connectors/GithubForm.tsx';
 import { TelegramForm } from '../components/connectors/TelegramForm.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import type { BridgeConnector, BridgeStatus } from '../types/connector.ts';
 
 function buildConfigJson(watches: WatchData[]): string {
   const serialized = watches.map((w) => ({
@@ -406,8 +407,6 @@ export function ConnectorDetailPage() {
 
 /* ---------- Telegram detail sub-sections ---------- */
 
-import type { BridgeConnector, BridgeStatus } from '../types/connector.ts';
-
 function TelegramDetailSections({
   connector,
   bridgeStatus,
@@ -416,6 +415,7 @@ function TelegramDetailSections({
   bridgeStatus: BridgeStatus | undefined;
 }) {
   const telegramConfig = parseTelegramConfig(connector.config);
+  const commandsEnabled = telegramConfig.commands_enabled ?? true;
   const connectorStatus = bridgeStatus?.connectors?.find(
     (c) => c.connector_id === connector.connector_id,
   );
@@ -453,7 +453,7 @@ function TelegramDetailSections({
       </div>
 
       {/* Available Commands */}
-      {telegramConfig.commands_enabled && (
+      {commandsEnabled && (
         <div className="bg-bg-secondary border border-border-primary rounded-lg">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border-primary">
             <Terminal size={14} className="text-text-secondary" />

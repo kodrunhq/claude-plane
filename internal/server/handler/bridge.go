@@ -177,7 +177,7 @@ func (h *BridgeHandler) syncNotifChannelCreate(ctx context.Context, connector *s
 		ChannelType: "telegram",
 		Name:        connector.Name,
 		Config:      chConfig,
-		Enabled:     true,
+		Enabled:     connector.Enabled,
 		ConnectorID: &connector.ConnectorID,
 		CreatedBy:   userID,
 	}
@@ -189,7 +189,7 @@ func (h *BridgeHandler) syncNotifChannelCreate(ctx context.Context, connector *s
 
 // syncNotifChannelUpdate syncs a linked notification channel when a Telegram
 // connector is updated. Errors are logged but do not fail the update.
-func (h *BridgeHandler) syncNotifChannelUpdate(ctx context.Context, connectorID, connectorType, name, config string) {
+func (h *BridgeHandler) syncNotifChannelUpdate(ctx context.Context, connectorID, connectorType, name, config string, enabled bool) {
 	if h.notifStore == nil || connectorType != "telegram" {
 		return
 	}
@@ -213,7 +213,7 @@ func (h *BridgeHandler) syncNotifChannelUpdate(ctx context.Context, connectorID,
 		ChannelType: existing.ChannelType,
 		Name:        name,
 		Config:      chConfig,
-		Enabled:     existing.Enabled,
+		Enabled:     enabled,
 		ConnectorID: existing.ConnectorID,
 		CreatedBy:   existing.CreatedBy,
 	}
@@ -439,7 +439,7 @@ func (h *BridgeHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.syncNotifChannelUpdate(r.Context(), connectorID, updated.ConnectorType, updated.Name, updated.Config)
+	h.syncNotifChannelUpdate(r.Context(), connectorID, updated.ConnectorType, updated.Name, updated.Config, updated.Enabled)
 
 	writeJSON(w, http.StatusOK, toConnectorResponse(updated, nil))
 }
@@ -452,8 +452,8 @@ func (h *BridgeHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) 
 
 	connectorID := chi.URLParam(r, "connectorID")
 
-	// Delete the linked notification channel first (before the connector row
-	// disappears and the connector_id FK would be orphaned).
+	// Delete any linked notification channel first, so we don't leave a
+	// channel referencing a connector that no longer exists.
 	h.syncNotifChannelDelete(r.Context(), connectorID)
 
 	if err := h.store.DeleteConnector(r.Context(), connectorID); err != nil {
@@ -494,9 +494,11 @@ type bridgeStatusResponse struct {
 
 // connectorStatusDTO describes the health state of a single bridge connector.
 type connectorStatusDTO struct {
-	Name   string `json:"name"`
-	Status string `json:"status"` // "ok", "error", "unknown"
-	Error  string `json:"error,omitempty"`
+	ConnectorID string `json:"connector_id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Healthy     bool   `json:"healthy"`
+	LastError   string `json:"last_error,omitempty"`
 }
 
 // Status handles GET /api/v1/bridge/status.
@@ -562,28 +564,39 @@ func (h *BridgeHandler) populateBridgeHealth(resp *bridgeStatusResponse, events 
 	// since events are newest-first).
 	seen := make(map[string]bool)
 	for _, e := range events {
+		connectorID, _ := e.Payload["connector_id"].(string)
 		name, _ := e.Payload["name"].(string)
-		if name == "" {
+		key := connectorID
+		if key == "" {
+			key = name
+		}
+		if key == "" {
 			continue
 		}
-		if seen[name] {
+		if seen[key] {
 			continue
 		}
 
+		connectorType, _ := e.Payload["connector_type"].(string)
+
 		switch e.Type {
 		case event.TypeBridgeConnectorStarted:
-			seen[name] = true
+			seen[key] = true
 			resp.Connectors = append(resp.Connectors, connectorStatusDTO{
-				Name:   name,
-				Status: "ok",
+				ConnectorID: connectorID,
+				Name:        name,
+				Type:        connectorType,
+				Healthy:     true,
 			})
 		case event.TypeBridgeConnectorError:
-			seen[name] = true
+			seen[key] = true
 			errMsg, _ := e.Payload["error"].(string)
 			resp.Connectors = append(resp.Connectors, connectorStatusDTO{
-				Name:   name,
-				Status: "error",
-				Error:  errMsg,
+				ConnectorID: connectorID,
+				Name:        name,
+				Type:        connectorType,
+				Healthy:     false,
+				LastError:   errMsg,
 			})
 		}
 	}
