@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, Fragment } from 'react';
-import { Plus, Pencil, Trash2, Send, Loader2, Mail, MessageCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Send, Loader2, Mail, MessageCircle, Link as LinkIcon, Info } from 'lucide-react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { EVENT_GROUPS } from '../../constants/eventTypes.ts';
 import type { NotificationChannel, NotificationSubscription } from '../../types/notification.ts';
@@ -159,7 +160,8 @@ export function NotificationsTab() {
           <div>
             <h3 className="text-base font-semibold text-text-primary">Channels</h3>
             <p className="text-sm text-text-secondary">
-              Configure where notifications are delivered.
+              Configure email notification channels. For Telegram, set up a connector on the{' '}
+              <Link to="/connectors" className="text-accent-primary hover:underline">Connectors page</Link>.
             </p>
           </div>
           <button
@@ -173,59 +175,107 @@ export function NotificationsTab() {
 
         {channels.length === 0 ? (
           <div className="text-center py-8 text-text-secondary text-sm border border-border-primary rounded-lg bg-bg-secondary">
-            No notification channels configured yet.
+            <p>No notification channels configured yet.</p>
+            {!channels.some((ch) => !!ch.connector_id) && (
+              <p className="mt-1">
+                For Telegram notifications,{' '}
+                <Link to="/connectors" className="text-accent-primary hover:underline">
+                  set up a Telegram connector
+                </Link>{' '}
+                first.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
-            {channels.map((ch) => (
-              <div
-                key={ch.channel_id}
-                className="flex items-center justify-between px-4 py-3 rounded-lg border border-border-primary bg-bg-secondary"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-text-secondary">{channelIcon(ch.channel_type)}</span>
-                  <div>
-                    <span className="text-sm font-medium text-text-primary">{ch.name}</span>
-                    <span className="ml-2 text-xs text-text-tertiary">
-                      {ch.channel_type}
-                    </span>
+            {channels.map((ch) => {
+              const isConnectorBacked = !!ch.connector_id;
+              return (
+                <div
+                  key={ch.channel_id}
+                  className="flex items-center justify-between px-4 py-3 rounded-lg border border-border-primary bg-bg-secondary"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-text-secondary">{channelIcon(ch.channel_type)}</span>
+                    <div>
+                      <span className="text-sm font-medium text-text-primary">{ch.name}</span>
+                      <span className="ml-2 text-xs text-text-tertiary">
+                        {ch.channel_type}
+                      </span>
+                    </div>
+                    {!ch.enabled && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-bg-tertiary text-text-secondary">
+                        disabled
+                      </span>
+                    )}
+                    {isConnectorBacked && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary font-medium">
+                        Connector
+                      </span>
+                    )}
+                    {ch.channel_type === 'telegram' && !ch.connector_id && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-status-warning/15 text-status-warning font-medium" title="Created before connector integration">
+                        Legacy
+                      </span>
+                    )}
                   </div>
-                  {!ch.enabled && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-bg-tertiary text-text-secondary">
-                      disabled
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleTest(ch)}
+                      disabled={testMutation.isPending}
+                      className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+                      title="Send test notification"
+                    >
+                      <Send size={14} />
+                    </button>
+                    {isConnectorBacked ? (
+                      <Link
+                        to={`/connectors/${ch.connector_id}`}
+                        className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-accent-primary transition-colors"
+                        title="Managed from Connectors page"
+                      >
+                        <LinkIcon size={14} />
+                      </Link>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleOpenEdit(ch)}
+                          className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+                          title="Edit channel"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ch)}
+                          disabled={deleteMutation.isPending}
+                          className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-status-error transition-colors"
+                          title="Delete channel"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleTest(ch)}
-                    disabled={testMutation.isPending}
-                    className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
-                    title="Send test notification"
-                  >
-                    <Send size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleOpenEdit(ch)}
-                    className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
-                    title="Edit channel"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(ch)}
-                    disabled={deleteMutation.isPending}
-                    className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary hover:text-status-error transition-colors"
-                    title="Delete channel"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Telegram connector info banner */}
+      {!channels.some((ch) => ch.connector_id && ch.channel_type === 'telegram') && (
+        <div className="flex items-start gap-2 rounded-md bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+          <Info size={14} className="text-blue-400 mt-0.5 shrink-0" />
+          <p className="text-xs text-blue-300">
+            Want Telegram notifications?{' '}
+            <Link to="/connectors" className="underline hover:text-blue-200">
+              Set up a Telegram connector
+            </Link>{' '}
+            first.
+          </p>
+        </div>
+      )}
 
       {/* Section 2: Subscription Matrix */}
       {channels.length > 0 && (

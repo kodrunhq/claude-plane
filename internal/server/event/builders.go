@@ -142,3 +142,9 @@ func NewServerEvent(eventType, reason string) Event {
 		"reason": reason,
 	})
 }
+
+// NewBridgeEvent constructs an event for bridge lifecycle changes.
+// eventType should be one of the TypeBridge* constants.
+func NewBridgeEvent(eventType string, payload map[string]any) Event {
+	return newEvent(eventType, "bridge", payload)
+}

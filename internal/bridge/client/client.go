@@ -231,6 +231,51 @@ func (c *Client) CheckRestartSignal(ctx context.Context, bootTime time.Time) (bo
 	return requestedAt.After(bootTime), nil
 }
 
+// --- Log Ingestion Types & Methods ---
+
+// LogEntry is a single log entry for the ingestion endpoint.
+type LogEntry struct {
+	Timestamp  time.Time      `json:"timestamp"`
+	Level      string         `json:"level"`
+	Message    string         `json:"message"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+}
+
+// LogIngestionRequest is the payload for the log ingestion endpoint.
+type LogIngestionRequest struct {
+	Source  string     `json:"source"`
+	Entries []LogEntry `json:"entries"`
+}
+
+// PostLogs sends a batch of log entries to the server's ingestion endpoint.
+func (c *Client) PostLogs(ctx context.Context, req LogIngestionRequest) error {
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/ingest/logs", req, nil); err != nil {
+		return fmt.Errorf("post logs: %w", err)
+	}
+	return nil
+}
+
+// --- Event Ingestion Methods ---
+
+// EventEntry represents a single event to ingest.
+type EventEntry struct {
+	Type    string         `json:"type"`
+	Payload map[string]any `json:"payload,omitempty"`
+}
+
+// EventIngestionRequest is the payload for the event ingestion endpoint.
+type EventIngestionRequest struct {
+	Events []EventEntry `json:"events"`
+}
+
+// PostEvents sends one or more events to the server's ingestion endpoint.
+func (c *Client) PostEvents(ctx context.Context, req EventIngestionRequest) error {
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/ingest/events", req, nil); err != nil {
+		return fmt.Errorf("post events: %w", err)
+	}
+	return nil
+}
+
 // --- HTTP Helpers ---
 
 // APIError represents a non-2xx response from the server.

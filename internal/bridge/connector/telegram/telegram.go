@@ -17,18 +17,16 @@ import (
 )
 
 const (
-	eventPollInterval = 5 * time.Second
-	telegramAPIBase   = "https://api.telegram.org/bot"
+	telegramAPIBase = "https://api.telegram.org/bot"
 )
 
 // Config holds all configuration for the Telegram connector.
 type Config struct {
-	BotToken        string   `json:"bot_token"`
-	GroupID         int64    `json:"group_id"`
-	EventsTopicID   int      `json:"events_topic_id"`
-	CommandsTopicID int      `json:"commands_topic_id"`
-	PollTimeout     int      `json:"poll_timeout"`
-	EventTypes      []string `json:"event_types"`
+	BotToken        string `json:"bot_token"`
+	GroupID         int64  `json:"group_id"`
+	CommandsTopicID int    `json:"commands_topic_id"`
+	PollTimeout     int    `json:"poll_timeout"`
+	CommandsEnabled *bool  `json:"commands_enabled,omitempty"`
 }
 
 // telegramResponse is the outer envelope of every Telegram Bot API response.
@@ -120,25 +118,29 @@ func (t *Telegram) Name() string { return t.connectorID }
 // Healthy implements connector.Connector.
 func (t *Telegram) Healthy() bool { return t.healthy.Load() }
 
-// Start implements connector.Connector. It runs the events poller and the
-// Telegram commands poller concurrently until ctx is cancelled.
+// Start implements connector.Connector. It runs the Telegram commands poller
+// until ctx is cancelled. If CommandsEnabled is explicitly set to false, the
+// connector marks itself healthy and blocks until ctx is done without polling.
 func (t *Telegram) Start(ctx context.Context) error {
 	t.healthy.Store(true)
 	defer t.healthy.Store(false)
 
+	// CommandsEnabled defaults to true when not explicitly set.
+	if t.config.CommandsEnabled != nil && !*t.config.CommandsEnabled {
+		t.logger.Info("telegram connector started (commands disabled)",
+			"group_id", t.config.GroupID,
+		)
+		<-ctx.Done()
+		t.logger.Info("telegram connector stopping")
+		return nil
+	}
+
 	t.logger.Info("telegram connector starting",
 		"group_id", t.config.GroupID,
-		"events_topic", t.config.EventsTopicID,
 		"commands_topic", t.config.CommandsTopicID,
 	)
 
-	errCh := make(chan error, 2)
-
-	go func() {
-		if err := t.runEventsPoller(ctx); err != nil {
-			errCh <- fmt.Errorf("events poller: %w", err)
-		}
-	}()
+	errCh := make(chan error, 1)
 
 	go func() {
 		if err := t.runCommandsPoller(ctx); err != nil {
@@ -153,68 +155,6 @@ func (t *Telegram) Start(ctx context.Context) error {
 	case err := <-errCh:
 		return err
 	}
-}
-
-// runEventsPoller polls the claude-plane event feed every 5 seconds and forwards
-// matching events to the Telegram Events topic.
-func (t *Telegram) runEventsPoller(ctx context.Context) error {
-	ticker := time.NewTicker(eventPollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ticker.C:
-			if err := t.pollAndForwardEvents(ctx); err != nil {
-				t.logger.Warn("event poll error", "error", err)
-				// Non-fatal: keep running.
-			}
-		}
-	}
-}
-
-// pollAndForwardEvents fetches new events from the server and sends relevant ones to Telegram.
-func (t *Telegram) pollAndForwardEvents(ctx context.Context) error {
-	cursor := t.stateStore.GetCursor(t.connectorID)
-
-	events, nextCursor, err := t.apiClient.PollEvents(ctx, cursor)
-	if err != nil {
-		return fmt.Errorf("poll events: %w", err)
-	}
-
-	for _, e := range events {
-		if t.stateStore.IsProcessed(e.EventID) {
-			continue
-		}
-		if !ShouldForwardEvent(t.config.EventTypes, e.Type) {
-			continue
-		}
-
-		msg := FormatEvent(e)
-		if sendErr := t.sendMessage(ctx, msg, t.config.EventsTopicID); sendErr != nil {
-			t.logger.Warn("failed to send event to telegram",
-				"event_id", e.EventID,
-				"event_type", e.Type,
-				"error", sendErr,
-			)
-			// Continue processing remaining events; do not mark as processed so
-			// we retry next cycle.
-			continue
-		}
-
-		if markErr := t.stateStore.MarkProcessed(e.EventID); markErr != nil {
-			t.logger.Warn("failed to mark event processed", "event_id", e.EventID, "error", markErr)
-		}
-	}
-
-	if nextCursor != "" && nextCursor != cursor {
-		if err := t.stateStore.SetCursor(t.connectorID, nextCursor); err != nil {
-			t.logger.Warn("failed to persist cursor", "cursor", nextCursor, "error", err)
-		}
-	}
-
-	return nil
 }
 
 // runCommandsPoller long-polls Telegram for new updates and dispatches commands.

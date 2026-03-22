@@ -28,7 +28,7 @@ var testEncKey = func() []byte {
 func newBridgeRouter(t *testing.T, s *store.Store, userID, role string) *httptest.Server {
 	t.Helper()
 	seedUser(t, s, userID, role)
-	h := handler.NewBridgeHandler(s, claimsMiddleware(userID, role), testEncKey)
+	h := handler.NewBridgeHandler(s, claimsMiddleware(userID, role), testEncKey, nil)
 	r := chi.NewRouter()
 	handler.RegisterBridgeRoutes(r, h)
 	return httptest.NewServer(r)
@@ -173,7 +173,7 @@ func TestBridgeHandler_ListConnectors_APIKeyAuth_WithScope_IncludesSecrets(t *te
 	s := newTestStore(t)
 	userID := "bridge-user-5"
 	seedUser(t, s, userID, "admin")
-	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"connectors:read_secret"}), testEncKey)
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"connectors:read_secret"}), testEncKey, nil)
 	r := chi.NewRouter()
 	// Simulate API key auth by setting the context flag the middleware would set.
 	r.Use(func(next http.Handler) http.Handler {
@@ -227,7 +227,7 @@ func TestBridgeHandler_ListConnectors_APIKeyAuth_WithoutScope_HidesSecrets(t *te
 	userID := "bridge-user-5b"
 	seedUser(t, s, userID, "admin")
 	// API key auth but no connectors:read_secret scope
-	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"jobs:read"}), testEncKey)
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"jobs:read"}), testEncKey, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +277,7 @@ func TestBridgeHandler_GetConnector_APIKeyAuth_WithScope_IncludesSecrets(t *test
 	s := newTestStore(t)
 	userID := "bridge-user-5c"
 	seedUser(t, s, userID, "admin")
-	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"connectors:read_secret"}), testEncKey)
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", []string{"connectors:read_secret"}), testEncKey, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -324,7 +324,7 @@ func TestBridgeHandler_GetConnector_APIKeyAuth_WithoutScope_HidesSecrets(t *test
 	s := newTestStore(t)
 	userID := "bridge-user-5d"
 	seedUser(t, s, userID, "admin")
-	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", nil), testEncKey)
+	h := handler.NewBridgeHandler(s, claimsMiddlewareWithScopes(userID, "admin", nil), testEncKey, nil)
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -614,5 +614,188 @@ func TestBridgeHandler_Status_AfterRestart(t *testing.T) {
 	}
 	if val == nil || val == "" {
 		t.Error("expected non-nil restart_requested_at after restart signal")
+	}
+}
+
+// --- Notification channel auto-sync tests ---
+
+// newBridgeRouterWithNotifStore creates a test server that also passes the store as NotifStore.
+func newBridgeRouterWithNotifStore(t *testing.T, s *store.Store, userID, role string) *httptest.Server {
+	t.Helper()
+	seedUser(t, s, userID, role)
+	h := handler.NewBridgeHandler(s, claimsMiddleware(userID, role), testEncKey, s)
+	r := chi.NewRouter()
+	handler.RegisterBridgeRoutes(r, h)
+	return httptest.NewServer(r)
+}
+
+func TestBridgeHandler_CreateTelegramConnector_AutoCreatesNotifChannel(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-notif-1"
+	srv := newBridgeRouterWithNotifStore(t, s, userID, "admin")
+	defer srv.Close()
+
+	body := map[string]interface{}{
+		"connector_type": "telegram",
+		"name":           "TG Notif Bot",
+		"config":         `{"group_id":-1001234567890,"events_topic_id":5}`,
+		"enabled":        true,
+	}
+	result := createConnectorViaHTTP(t, srv.URL, body)
+	connectorID := fmt.Sprintf("%v", result["connector_id"])
+
+	// Verify a notification channel was auto-created
+	ch, err := s.GetChannelByConnectorID(t.Context(), connectorID)
+	if err != nil {
+		t.Fatalf("expected notification channel for connector %s, got error: %v", connectorID, err)
+	}
+	if ch.ChannelType != "telegram" {
+		t.Errorf("channel type = %q, want telegram", ch.ChannelType)
+	}
+	if ch.Name != "TG Notif Bot" {
+		t.Errorf("channel name = %q, want 'TG Notif Bot'", ch.Name)
+	}
+	if ch.ConnectorID == nil || *ch.ConnectorID != connectorID {
+		t.Errorf("channel connector_id = %v, want %s", ch.ConnectorID, connectorID)
+	}
+	if !ch.Enabled {
+		t.Error("channel should be enabled")
+	}
+
+	// Verify config contains chat_id and topic_id
+	var chCfg map[string]interface{}
+	if err := json.Unmarshal([]byte(ch.Config), &chCfg); err != nil {
+		t.Fatalf("unmarshal channel config: %v", err)
+	}
+	if chCfg["chat_id"] != "-1001234567890" {
+		t.Errorf("chat_id = %v, want '-1001234567890'", chCfg["chat_id"])
+	}
+	if chCfg["topic_id"] != float64(5) {
+		t.Errorf("topic_id = %v, want 5", chCfg["topic_id"])
+	}
+}
+
+func TestBridgeHandler_CreateGitHubConnector_NoNotifChannel(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-notif-2"
+	srv := newBridgeRouterWithNotifStore(t, s, userID, "admin")
+	defer srv.Close()
+
+	body := map[string]interface{}{
+		"connector_type": "github",
+		"name":           "GH Connector",
+		"config":         `{"owner":"test","repo":"repo"}`,
+		"enabled":        true,
+	}
+	result := createConnectorViaHTTP(t, srv.URL, body)
+	connectorID := fmt.Sprintf("%v", result["connector_id"])
+
+	// Verify no notification channel was created
+	_, err := s.GetChannelByConnectorID(t.Context(), connectorID)
+	if err == nil {
+		t.Error("expected no notification channel for GitHub connector")
+	}
+}
+
+func TestBridgeHandler_UpdateTelegramConnector_SyncsNotifChannel(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-notif-3"
+	srv := newBridgeRouterWithNotifStore(t, s, userID, "admin")
+	defer srv.Close()
+
+	// Create a telegram connector
+	body := map[string]interface{}{
+		"connector_type": "telegram",
+		"name":           "Original Name",
+		"config":         `{"group_id":-100111,"events_topic_id":1}`,
+		"enabled":        true,
+	}
+	result := createConnectorViaHTTP(t, srv.URL, body)
+	connectorID := fmt.Sprintf("%v", result["connector_id"])
+
+	// Verify initial channel
+	ch, err := s.GetChannelByConnectorID(t.Context(), connectorID)
+	if err != nil {
+		t.Fatalf("expected initial channel: %v", err)
+	}
+	if ch.Name != "Original Name" {
+		t.Fatalf("initial channel name = %q, want 'Original Name'", ch.Name)
+	}
+
+	// Update the connector
+	updateBody, _ := json.Marshal(map[string]interface{}{
+		"connector_type": "telegram",
+		"name":           "Updated Name",
+		"config":         `{"group_id":-100222,"events_topic_id":10}`,
+	})
+	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/v1/bridge/connectors/"+connectorID, bytes.NewReader(updateBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Verify channel was updated
+	ch, err = s.GetChannelByConnectorID(t.Context(), connectorID)
+	if err != nil {
+		t.Fatalf("expected channel after update: %v", err)
+	}
+	if ch.Name != "Updated Name" {
+		t.Errorf("channel name = %q, want 'Updated Name'", ch.Name)
+	}
+
+	var chCfg map[string]interface{}
+	if err := json.Unmarshal([]byte(ch.Config), &chCfg); err != nil {
+		t.Fatalf("unmarshal channel config: %v", err)
+	}
+	if chCfg["chat_id"] != "-100222" {
+		t.Errorf("chat_id = %v, want '-100222'", chCfg["chat_id"])
+	}
+	if chCfg["topic_id"] != float64(10) {
+		t.Errorf("topic_id = %v, want 10", chCfg["topic_id"])
+	}
+}
+
+func TestBridgeHandler_DeleteTelegramConnector_DeletesNotifChannel(t *testing.T) {
+	s := newTestStore(t)
+	userID := "bridge-notif-4"
+	srv := newBridgeRouterWithNotifStore(t, s, userID, "admin")
+	defer srv.Close()
+
+	// Create a telegram connector
+	body := map[string]interface{}{
+		"connector_type": "telegram",
+		"name":           "Delete Notif Bot",
+		"config":         `{"group_id":-100333}`,
+		"enabled":        true,
+	}
+	result := createConnectorViaHTTP(t, srv.URL, body)
+	connectorID := fmt.Sprintf("%v", result["connector_id"])
+
+	// Verify channel exists
+	_, err := s.GetChannelByConnectorID(t.Context(), connectorID)
+	if err != nil {
+		t.Fatalf("expected channel before delete: %v", err)
+	}
+
+	// Delete the connector
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/bridge/connectors/"+connectorID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+
+	// Verify channel is gone
+	_, err = s.GetChannelByConnectorID(t.Context(), connectorID)
+	if err == nil {
+		t.Error("expected notification channel to be deleted with connector")
 	}
 }

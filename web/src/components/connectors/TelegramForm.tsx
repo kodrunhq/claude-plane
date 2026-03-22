@@ -10,7 +10,7 @@ interface TelegramConfig {
   events_topic_id: number;
   commands_topic_id: number;
   poll_timeout: number;
-  event_types: string[];
+  commands_enabled: boolean;
 }
 
 interface TelegramFormProps {
@@ -39,8 +39,8 @@ export function TelegramForm({ connector, onClose, onSaved }: TelegramFormProps)
     String(existingConfig.commands_topic_id ?? ''),
   );
   const [pollTimeout, setPollTimeout] = useState(String(existingConfig.poll_timeout ?? 30));
-  const [eventTypes, setEventTypes] = useState(
-    (existingConfig.event_types ?? ['session.*', 'run.*']).join(','),
+  const [commandsEnabled, setCommandsEnabled] = useState(
+    existingConfig.commands_enabled ?? true,
   );
 
   const createConnector = useCreateConnector();
@@ -70,10 +70,7 @@ export function TelegramForm({ connector, onClose, onSaved }: TelegramFormProps)
       events_topic_id: Number(eventsTopicId),
       commands_topic_id: Number(commandsTopicId),
       poll_timeout: Number(pollTimeout),
-      event_types: eventTypes
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      commands_enabled: commandsEnabled,
     };
 
     const configJson = JSON.stringify(config);
@@ -186,27 +183,25 @@ export function TelegramForm({ connector, onClose, onSaved }: TelegramFormProps)
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm text-text-secondary mb-1">
-                Events topic ID <span className="text-status-error">*</span>
+                Events topic ID
               </label>
               <input
                 type="number"
                 value={eventsTopicId}
                 onChange={(e) => setEventsTopicId(e.target.value)}
                 placeholder="1"
-                required
                 className={inputClass}
               />
             </div>
             <div>
               <label className="block text-sm text-text-secondary mb-1">
-                Commands topic ID <span className="text-status-error">*</span>
+                Commands topic ID
               </label>
               <input
                 type="number"
                 value={commandsTopicId}
                 onChange={(e) => setCommandsTopicId(e.target.value)}
                 placeholder="2"
-                required
                 className={inputClass}
               />
             </div>
@@ -228,23 +223,29 @@ export function TelegramForm({ connector, onClose, onSaved }: TelegramFormProps)
             />
           </div>
 
-          {/* Event type filters */}
-          <div>
-            <label className="block text-sm text-text-secondary mb-1">
-              Event type filters{' '}
-              <span className="text-text-secondary/50">(comma-separated patterns)</span>
-            </label>
-            <input
-              type="text"
-              value={eventTypes}
-              onChange={(e) => setEventTypes(e.target.value)}
-              placeholder="session.*,run.*"
-              className={inputClass}
-            />
-            <p className="mt-1 text-xs text-text-secondary/50">
-              Glob patterns like <code className="font-mono">session.*</code> or{' '}
-              <code className="font-mono">run.*</code>
-            </p>
+          {/* Enable remote commands */}
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <span className="text-sm font-medium text-text-primary">Enable Remote Commands</span>
+              <p className="text-xs text-text-secondary">
+                Allow sending commands to claude-plane from this Telegram chat
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCommandsEnabled(!commandsEnabled)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                commandsEnabled ? 'bg-accent-primary' : 'bg-gray-600'
+              }`}
+              role="switch"
+              aria-checked={commandsEnabled}
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                  commandsEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
           </div>
 
           <div className="flex justify-end gap-3 mt-2">

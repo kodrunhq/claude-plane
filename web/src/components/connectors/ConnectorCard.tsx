@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router';
 import { MessageCircle, Github, Pencil, Trash2 } from 'lucide-react';
 import { TimeAgo } from '../shared/TimeAgo.tsx';
-import type { BridgeConnector } from '../../types/connector.ts';
+import type { BridgeConnector, ConnectorStatus } from '../../types/connector.ts';
 
 interface ConnectorCardProps {
   connector: BridgeConnector;
+  connectorStatus?: ConnectorStatus | null;
   onEdit: (connector: BridgeConnector) => void;
   onDelete: (connector: BridgeConnector) => void;
 }
@@ -27,7 +28,20 @@ function typeBadge(type: string): string {
   return labels[type] ?? type;
 }
 
-export function ConnectorCard({ connector, onEdit, onDelete }: ConnectorCardProps) {
+function healthDot(status: ConnectorStatus | null | undefined, enabled: boolean) {
+  if (!enabled) {
+    return { color: 'bg-text-secondary/40', label: 'Disabled', tooltip: undefined };
+  }
+  if (!status) {
+    return { color: 'bg-text-secondary/40', label: 'Unknown', tooltip: 'Bridge status unavailable' };
+  }
+  if (status.healthy) {
+    return { color: 'bg-status-success', label: 'Healthy', tooltip: undefined };
+  }
+  return { color: 'bg-status-error', label: 'Unhealthy', tooltip: status.last_error ?? 'Connector is not healthy' };
+}
+
+export function ConnectorCard({ connector, connectorStatus, onEdit, onDelete }: ConnectorCardProps) {
   const navigate = useNavigate();
 
   function handleCardClick() {
@@ -73,14 +87,29 @@ export function ConnectorCard({ connector, onEdit, onDelete }: ConnectorCardProp
 
       <div className="flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5">
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              connector.enabled ? 'bg-status-success' : 'bg-text-secondary/40'
-            }`}
-          />
-          <span className={connector.enabled ? 'text-status-success' : 'text-text-secondary/60'}>
-            {connector.enabled ? 'Enabled' : 'Disabled'}
-          </span>
+          {(() => {
+            const dot = healthDot(connectorStatus, connector.enabled);
+            return (
+              <>
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${dot.color}`}
+                  title={dot.tooltip}
+                />
+                <span
+                  className={
+                    dot.label === 'Healthy'
+                      ? 'text-status-success'
+                      : dot.label === 'Unhealthy'
+                        ? 'text-status-error'
+                        : 'text-text-secondary/60'
+                  }
+                  title={dot.tooltip}
+                >
+                  {dot.label}
+                </span>
+              </>
+            );
+          })()}
         </div>
         <span className="text-text-secondary/60">
           Added <TimeAgo date={connector.created_at} />

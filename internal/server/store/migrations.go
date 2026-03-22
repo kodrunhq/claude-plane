@@ -548,6 +548,11 @@ UPDATE sessions SET updated_at = CURRENT_TIMESTAMP
     WHERE status NOT IN ('completed', 'failed', 'terminated');
 `,
 	},
+	{
+		Version:     20,
+		Description: "add connector_id to notification_channels",
+		SQL:         `ALTER TABLE notification_channels ADD COLUMN connector_id TEXT NULL;`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

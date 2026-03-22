@@ -154,5 +154,25 @@
   {
     "name": "TypeServerShutdown",
     "value": "server.shutdown"
+  },
+  {
+    "name": "TypeBridgeStarted",
+    "value": "bridge.started"
+  },
+  {
+    "name": "TypeBridgeStopped",
+    "value": "bridge.stopped"
+  },
+  {
+    "name": "TypeBridgeConnectorStarted",
+    "value": "bridge.connector.started"
+  },
+  {
+    "name": "TypeBridgeConnectorError",
+    "value": "bridge.connector.error"
+  },
+  {
+    "name": "TypeBridgeConnectorCommand",
+    "value": "bridge.connector.command"
   }
 ]

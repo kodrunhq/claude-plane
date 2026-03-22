@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kodrunhq/claude-plane/internal/server/event"
 	"github.com/kodrunhq/claude-plane/internal/server/httputil"
 	"github.com/kodrunhq/claude-plane/internal/server/store"
 )
@@ -28,20 +31,42 @@ type BridgeStore interface {
 	GetBridgeControl(ctx context.Context, key string) (string, error)
 }
 
+// NotifStore is the persistence interface for notification channel auto-sync.
+type NotifStore interface {
+	CreateNotificationChannel(ctx context.Context, ch store.NotificationChannel) (*store.NotificationChannel, error)
+	UpdateNotificationChannel(ctx context.Context, ch store.NotificationChannel) (*store.NotificationChannel, error)
+	DeleteNotificationChannel(ctx context.Context, channelID string) error
+	GetChannelByConnectorID(ctx context.Context, connectorID string) (*store.NotificationChannel, error)
+}
+
+// BridgeEventStore is an optional interface for querying bridge events.
+type BridgeEventStore interface {
+	ListEvents(ctx context.Context, filter store.EventFilter) ([]event.Event, error)
+}
+
 // BridgeHandler handles REST endpoints for bridge connectors and control signals.
 type BridgeHandler struct {
-	store     BridgeStore
-	getClaims ClaimsGetter
-	encKey    []byte // AES-256 encryption key for connector secrets
+	store      BridgeStore
+	notifStore NotifStore
+	eventStore BridgeEventStore
+	getClaims  ClaimsGetter
+	encKey     []byte // AES-256 encryption key for connector secrets
 }
 
 // NewBridgeHandler creates a new BridgeHandler.
-func NewBridgeHandler(s BridgeStore, getClaims ClaimsGetter, encKey []byte) *BridgeHandler {
+func NewBridgeHandler(s BridgeStore, getClaims ClaimsGetter, encKey []byte, notifStore NotifStore) *BridgeHandler {
 	return &BridgeHandler{
-		store:     s,
-		getClaims: getClaims,
-		encKey:    encKey,
+		store:      s,
+		notifStore: notifStore,
+		getClaims:  getClaims,
+		encKey:     encKey,
 	}
+}
+
+// SetEventStore sets the optional event store used by the Status endpoint
+// to derive bridge health information from persisted events.
+func (h *BridgeHandler) SetEventStore(es BridgeEventStore) {
+	h.eventStore = es
 }
 
 // RegisterBridgeRoutes mounts all bridge routes on the given router.
@@ -108,6 +133,116 @@ func toConnectorResponse(c *store.BridgeConnector, secretJSON []byte) connectorR
 	return resp
 }
 
+// buildTelegramChannelConfig parses a connector's Config JSON to extract
+// group_id and events_topic_id, then builds the notification channel config.
+func buildTelegramChannelConfig(connectorConfig string) (string, error) {
+	var publicCfg struct {
+		GroupID       int64 `json:"group_id"`
+		EventsTopicID int   `json:"events_topic_id"`
+	}
+	if connectorConfig != "" {
+		if err := json.Unmarshal([]byte(connectorConfig), &publicCfg); err != nil {
+			return "", err
+		}
+	}
+
+	chCfg := map[string]any{
+		"chat_id": strconv.FormatInt(publicCfg.GroupID, 10),
+	}
+	if publicCfg.EventsTopicID > 0 {
+		chCfg["topic_id"] = publicCfg.EventsTopicID
+	}
+
+	out, err := json.Marshal(chCfg)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// syncNotifChannelCreate auto-creates a linked notification channel for a
+// Telegram connector. Errors are logged but do not fail the connector creation.
+func (h *BridgeHandler) syncNotifChannelCreate(ctx context.Context, connector *store.BridgeConnector, userID string) {
+	if h.notifStore == nil || connector.ConnectorType != "telegram" {
+		return
+	}
+
+	chConfig, err := buildTelegramChannelConfig(connector.Config)
+	if err != nil {
+		slog.Error("auto-sync: build telegram channel config", "error", err, "connector_id", connector.ConnectorID)
+		return
+	}
+
+	ch := store.NotificationChannel{
+		ChannelType: "telegram",
+		Name:        connector.Name,
+		Config:      chConfig,
+		Enabled:     connector.Enabled,
+		ConnectorID: &connector.ConnectorID,
+		CreatedBy:   userID,
+	}
+
+	if _, err := h.notifStore.CreateNotificationChannel(ctx, ch); err != nil {
+		slog.Error("auto-sync: create notification channel for connector", "error", err, "connector_id", connector.ConnectorID)
+	}
+}
+
+// syncNotifChannelUpdate syncs a linked notification channel when a Telegram
+// connector is updated. Errors are logged but do not fail the update.
+func (h *BridgeHandler) syncNotifChannelUpdate(ctx context.Context, connectorID, connectorType, name, config string, enabled bool) {
+	if h.notifStore == nil || connectorType != "telegram" {
+		return
+	}
+
+	existing, err := h.notifStore.GetChannelByConnectorID(ctx, connectorID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("auto-sync: lookup channel for connector", "error", err, "connector_id", connectorID)
+		}
+		return
+	}
+
+	chConfig, err := buildTelegramChannelConfig(config)
+	if err != nil {
+		slog.Error("auto-sync: build telegram channel config on update", "error", err, "connector_id", connectorID)
+		return
+	}
+
+	updated := store.NotificationChannel{
+		ChannelID:   existing.ChannelID,
+		ChannelType: existing.ChannelType,
+		Name:        name,
+		Config:      chConfig,
+		Enabled:     enabled,
+		ConnectorID: existing.ConnectorID,
+		CreatedBy:   existing.CreatedBy,
+	}
+
+	if _, err := h.notifStore.UpdateNotificationChannel(ctx, updated); err != nil {
+		slog.Error("auto-sync: update notification channel for connector", "error", err, "connector_id", connectorID)
+	}
+}
+
+// syncNotifChannelDelete removes the linked notification channel when a
+// connector is deleted. Errors are logged but do not fail the deletion.
+func (h *BridgeHandler) syncNotifChannelDelete(ctx context.Context, connectorID string) {
+	if h.notifStore == nil {
+		return
+	}
+
+	existing, err := h.notifStore.GetChannelByConnectorID(ctx, connectorID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("auto-sync: lookup channel for connector on delete", "error", err, "connector_id", connectorID)
+		}
+		return
+	}
+
+	if err := h.notifStore.DeleteNotificationChannel(ctx, existing.ChannelID); err != nil {
+		slog.Error("auto-sync: delete notification channel for connector", "error", err, "connector_id", connectorID)
+	}
+}
+
 // CreateConnector handles POST /api/v1/bridge/connectors.
 func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeAdmin(w, r) {
@@ -156,6 +291,8 @@ func (h *BridgeHandler) CreateConnector(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	h.syncNotifChannelCreate(r.Context(), created, c.UserID)
 
 	writeJSON(w, http.StatusCreated, toConnectorResponse(created, nil))
 }
@@ -302,6 +439,8 @@ func (h *BridgeHandler) UpdateConnector(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.syncNotifChannelUpdate(r.Context(), connectorID, updated.ConnectorType, updated.Name, updated.Config, updated.Enabled)
+
 	writeJSON(w, http.StatusOK, toConnectorResponse(updated, nil))
 }
 
@@ -312,6 +451,10 @@ func (h *BridgeHandler) DeleteConnector(w http.ResponseWriter, r *http.Request) 
 	}
 
 	connectorID := chi.URLParam(r, "connectorID")
+
+	// Delete any linked notification channel first, so we don't leave a
+	// channel referencing a connector that no longer exists.
+	h.syncNotifChannelDelete(r.Context(), connectorID)
 
 	if err := h.store.DeleteConnector(r.Context(), connectorID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -341,18 +484,120 @@ func (h *BridgeHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "restart signal sent"})
 }
 
+// bridgeStatusResponse is the response for GET /api/v1/bridge/status.
+type bridgeStatusResponse struct {
+	RestartRequestedAt *string              `json:"restart_requested_at"`
+	Running            bool                 `json:"running"`
+	LastSeen           *time.Time           `json:"last_seen"`
+	Connectors         []connectorStatusDTO `json:"connectors,omitempty"`
+}
+
+// connectorStatusDTO describes the health state of a single bridge connector.
+type connectorStatusDTO struct {
+	ConnectorID string `json:"connector_id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Healthy     bool   `json:"healthy"`
+	LastError   string `json:"last_error,omitempty"`
+}
+
 // Status handles GET /api/v1/bridge/status.
-// Returns restart_requested_at from bridge control, or null if never set.
+// Returns restart_requested_at from bridge control plus bridge health info
+// derived from recent bridge.* events.
 func (h *BridgeHandler) Status(w http.ResponseWriter, r *http.Request) {
+	resp := bridgeStatusResponse{}
+
 	val, err := h.store.GetBridgeControl(r.Context(), bridgeRestartKey)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeJSON(w, http.StatusOK, map[string]interface{}{"restart_requested_at": nil})
-			return
-		}
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if err == nil {
+		resp.RestartRequestedAt = &val
+	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"restart_requested_at": val})
+	// Derive bridge health from recent events if an event store is available.
+	if h.eventStore != nil {
+		events, err := h.eventStore.ListEvents(r.Context(), store.EventFilter{
+			TypePattern: "bridge.*",
+			Limit:       50,
+		})
+		if err != nil {
+			slog.Error("bridge status: query events", "error", err)
+		} else {
+			h.populateBridgeHealth(&resp, events)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// populateBridgeHealth derives running, last_seen, and connector statuses from
+// a list of recent bridge.* events (ordered newest-first from the store).
+func (h *BridgeHandler) populateBridgeHealth(resp *bridgeStatusResponse, events []event.Event) {
+	if len(events) == 0 {
+		return
+	}
+
+	// Find the most recent event timestamp as last_seen.
+	latest := events[0].Timestamp
+	resp.LastSeen = &latest
+
+	// Determine running state: find the most recent bridge lifecycle event
+	// (bridge.started or bridge.stopped). The bridge is running if the most
+	// recent lifecycle event is bridge.started AND that timestamp is within
+	// 60 seconds (staleness check).
+	for _, e := range events {
+		switch e.Type {
+		case event.TypeBridgeStarted:
+			resp.Running = time.Since(e.Timestamp) < 60*time.Second
+		case event.TypeBridgeStopped:
+			resp.Running = false
+		default:
+			continue
+		}
+		break
+	}
+
+	// Build per-connector status from most recent connector events.
+	// Track which connectors we've already resolved (first occurrence wins
+	// since events are newest-first).
+	seen := make(map[string]bool)
+	for _, e := range events {
+		connectorID, _ := e.Payload["connector_id"].(string)
+		name, _ := e.Payload["name"].(string)
+		key := connectorID
+		if key == "" {
+			key = name
+		}
+		if key == "" {
+			continue
+		}
+		if seen[key] {
+			continue
+		}
+
+		connectorType, _ := e.Payload["connector_type"].(string)
+
+		switch e.Type {
+		case event.TypeBridgeConnectorStarted:
+			seen[key] = true
+			resp.Connectors = append(resp.Connectors, connectorStatusDTO{
+				ConnectorID: connectorID,
+				Name:        name,
+				Type:        connectorType,
+				Healthy:     true,
+			})
+		case event.TypeBridgeConnectorError:
+			seen[key] = true
+			errMsg, _ := e.Payload["error"].(string)
+			resp.Connectors = append(resp.Connectors, connectorStatusDTO{
+				ConnectorID: connectorID,
+				Name:        name,
+				Type:        connectorType,
+				Healthy:     false,
+				LastError:   errMsg,
+			})
+		}
+	}
 }

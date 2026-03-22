@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/kodrunhq/claude-plane/internal/bridge/connector/github"
 	"github.com/kodrunhq/claude-plane/internal/bridge/connector/telegram"
 	"github.com/kodrunhq/claude-plane/internal/bridge/state"
+	"github.com/kodrunhq/claude-plane/internal/shared/buildinfo"
 )
 
 func main() {
@@ -56,6 +58,16 @@ func newServeCmd() *cobra.Command {
 
 			apiClient := client.New(cfg.ClaudePlane.APIURL, cfg.ClaudePlane.APIKey)
 
+			// Set up log forwarding to the server.
+			logFwd := bridge.NewLogForwarder(apiClient, "bridge", bridge.WithMaxBatch(50), bridge.WithFlushInterval(2*time.Second))
+			slog.SetDefault(slog.New(logFwd))
+			defer logFwd.Close()
+
+			// Set up lifecycle event emitter.
+			emitter := bridge.NewEventEmitter(apiClient, slog.Default())
+			emitter.Emit("bridge.started", map[string]any{"version": buildinfo.Version})
+			defer emitter.Emit("bridge.stopped", map[string]any{"reason": "shutdown"})
+
 			stateStore := state.New(cfg.State.Path)
 			if err := stateStore.Load(); err != nil {
 				slog.Warn("Could not load bridge state", "path", cfg.State.Path, "error", err)
@@ -90,6 +102,11 @@ func newServeCmd() *cobra.Command {
 					conn := telegram.New(cc.ConnectorID, tCfg, apiClient, stateStore, slog.Default())
 					b.AddConnector(conn)
 					slog.Info("Registered connector", "type", "telegram", "name", cc.Name, "id", cc.ConnectorID)
+					emitter.Emit("bridge.connector.started", map[string]any{
+						"connector_id":   cc.ConnectorID,
+						"connector_type": cc.ConnectorType,
+						"name":           cc.Name,
+					})
 				case "github":
 					var gCfg github.Config
 					if err := json.Unmarshal([]byte(cc.Config), &gCfg); err != nil {
@@ -107,6 +124,11 @@ func newServeCmd() *cobra.Command {
 					conn := github.New(cc.ConnectorID, gCfg, apiClient, stateStore, slog.Default())
 					b.AddConnector(conn)
 					slog.Info("Registered connector", "type", "github", "name", cc.Name, "id", cc.ConnectorID)
+					emitter.Emit("bridge.connector.started", map[string]any{
+						"connector_id":   cc.ConnectorID,
+						"connector_type": cc.ConnectorType,
+						"name":           cc.Name,
+					})
 				default:
 					slog.Warn("Unknown connector type", "type", cc.ConnectorType, "id", cc.ConnectorID)
 				}

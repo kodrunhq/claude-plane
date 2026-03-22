@@ -214,10 +214,10 @@ func TestDispatcher_CallsCorrectNotifier(t *testing.T) {
 		},
 	}
 
-	d := NewDispatcher(subStore, map[string]Notifier{
+	d := NewDispatcher(subStore, nil, map[string]Notifier{
 		"email":    emailNotifier,
 		"telegram": telegramNotifier,
-	}, DefaultEventRenderer, nil)
+	}, nil, DefaultEventRenderer, nil)
 
 	handler := d.Handler()
 	evt := event.Event{
@@ -253,9 +253,9 @@ func TestDispatcher_RateLimiting(t *testing.T) {
 		},
 	}
 
-	d := NewDispatcher(subStore, map[string]Notifier{
+	d := NewDispatcher(subStore, nil, map[string]Notifier{
 		"mock": notifier,
-	}, DefaultEventRenderer, nil)
+	}, nil, DefaultEventRenderer, nil)
 
 	handler := d.Handler()
 	evt := event.Event{EventID: "evt-1", Type: "run.completed", Payload: map[string]any{}}
@@ -278,7 +278,7 @@ func TestDispatcher_UnknownChannelType(t *testing.T) {
 		},
 	}
 
-	d := NewDispatcher(subStore, map[string]Notifier{}, DefaultEventRenderer, nil)
+	d := NewDispatcher(subStore, nil, map[string]Notifier{}, nil, DefaultEventRenderer, nil)
 
 	handler := d.Handler()
 	evt := event.Event{EventID: "evt-1", Type: "run.completed", Payload: map[string]any{}}
@@ -292,7 +292,7 @@ func TestDispatcher_UnknownChannelType(t *testing.T) {
 func TestDispatcher_NoSubscriptions(t *testing.T) {
 	subStore := &mockSubStore{subs: nil}
 
-	d := NewDispatcher(subStore, map[string]Notifier{}, DefaultEventRenderer, nil)
+	d := NewDispatcher(subStore, nil, map[string]Notifier{}, nil, DefaultEventRenderer, nil)
 
 	handler := d.Handler()
 	evt := event.Event{EventID: "evt-1", Type: "run.completed", Payload: map[string]any{}}

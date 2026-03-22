@@ -1,14 +1,16 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Github, MessageCircle } from 'lucide-react';
+import { useParams, useNavigate, Link } from 'react-router';
+import { ArrowLeft, Plus, Pencil, Trash2, RefreshCw, AlertCircle, Github, MessageCircle, Terminal, Bell, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
-import { useConnector, useUpdateConnector, useDeleteConnector, useRestartBridge } from '../hooks/useBridge.ts';
+import { useConnector, useUpdateConnector, useDeleteConnector, useRestartBridge, useBridgeStatus } from '../hooks/useBridge.ts';
 import { WatchEditor } from '../components/connectors/WatchEditor.tsx';
 import type { WatchData } from '../components/connectors/WatchEditor.tsx';
 import type { TriggerFilters } from '../components/connectors/TriggerConfig.tsx';
 import { createDefaultWatch } from '../components/connectors/watchDefaults.ts';
 import { GithubForm } from '../components/connectors/GithubForm.tsx';
+import { TelegramForm } from '../components/connectors/TelegramForm.tsx';
 import { ConfirmDialog } from '../components/shared/ConfirmDialog.tsx';
+import type { BridgeConnector, BridgeStatus } from '../types/connector.ts';
 
 function buildConfigJson(watches: WatchData[]): string {
   const serialized = watches.map((w) => ({
@@ -89,6 +91,29 @@ function typeBadge(type: string): string {
   return labels[type] ?? type;
 }
 
+interface TelegramConfig {
+  commands_enabled?: boolean;
+}
+
+function parseTelegramConfig(configJson: string): TelegramConfig {
+  try {
+    return JSON.parse(configJson) as TelegramConfig;
+  } catch {
+    return {};
+  }
+}
+
+const TELEGRAM_COMMANDS = [
+  { command: '/sessions', description: 'List active sessions' },
+  { command: '/machines', description: 'List connected machines' },
+  { command: '/status', description: 'Show system status' },
+  { command: '/start', description: 'Start a new session' },
+  { command: '/kill <id>', description: 'Terminate a session' },
+  { command: '/inject <id> <text>', description: 'Send input to a session' },
+  { command: '/list', description: 'List available templates' },
+  { command: '/help', description: 'Show available commands' },
+] as const;
+
 export function ConnectorDetailPage() {
   const { connectorId } = useParams<{ connectorId: string }>();
   const navigate = useNavigate();
@@ -96,6 +121,7 @@ export function ConnectorDetailPage() {
   const updateConnector = useUpdateConnector();
   const deleteConnectorMut = useDeleteConnector();
   const restartBridge = useRestartBridge();
+  const { data: bridgeStatus } = useBridgeStatus();
 
   // Derive watches from connector config; reset local edits when server data changes
   const serverWatches = useMemo(() => {
@@ -232,15 +258,13 @@ export function ConnectorDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {connector.connector_type === 'github' && (
-            <button
-              onClick={() => setShowEditForm(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-text-primary bg-bg-tertiary hover:bg-bg-tertiary/80 transition-colors"
-            >
-              <Pencil size={14} />
-              Edit
-            </button>
-          )}
+          <button
+            onClick={() => setShowEditForm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-text-primary bg-bg-tertiary hover:bg-bg-tertiary/80 transition-colors"
+          >
+            <Pencil size={14} />
+            Edit
+          </button>
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-status-error bg-bg-tertiary hover:bg-status-error/10 transition-colors"
@@ -331,9 +355,29 @@ export function ConnectorDetailPage() {
         </div>
       )}
 
-      {/* Edit form modal -- GitHub only */}
+      {/* Telegram-specific sections */}
+      {connector.connector_type === 'telegram' && (
+        <TelegramDetailSections
+          connector={connector}
+          bridgeStatus={bridgeStatus}
+        />
+      )}
+
+      {/* Edit form modal -- GitHub */}
       {showEditForm && connector.connector_type === 'github' && (
         <GithubForm
+          connector={connector}
+          onClose={() => setShowEditForm(false)}
+          onSaved={() => {
+            setShowEditForm(false);
+            setConfigChanged(true);
+          }}
+        />
+      )}
+
+      {/* Edit form modal -- Telegram */}
+      {showEditForm && connector.connector_type === 'telegram' && (
+        <TelegramForm
           connector={connector}
           onClose={() => setShowEditForm(false)}
           onSaved={() => {
@@ -347,12 +391,116 @@ export function ConnectorDetailPage() {
       <ConfirmDialog
         open={showDeleteConfirm}
         title="Delete Connector"
-        message={`Are you sure you want to delete "${connector.name}"? This cannot be undone.`}
+        message={
+          connector.connector_type === 'telegram'
+            ? `Are you sure you want to delete "${connector.name}"? The linked notification channel and its subscriptions will also be deleted. This cannot be undone.`
+            : `Are you sure you want to delete "${connector.name}"? This cannot be undone.`
+        }
         confirmLabel="Delete"
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
     </div>
+  );
+}
+
+/* ---------- Telegram detail sub-sections ---------- */
+
+function TelegramDetailSections({
+  connector,
+  bridgeStatus,
+}: {
+  connector: BridgeConnector;
+  bridgeStatus: BridgeStatus | undefined;
+}) {
+  const telegramConfig = parseTelegramConfig(connector.config);
+  const commandsEnabled = telegramConfig.commands_enabled ?? true;
+  const connectorStatus = bridgeStatus?.connectors?.find(
+    (c) => c.connector_id === connector.connector_id,
+  );
+
+  return (
+    <>
+      {/* Connection Status */}
+      <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-3">
+        <h2 className="text-sm font-semibold text-text-primary mb-3">Connection Status</h2>
+        <div className="flex items-center gap-2 text-sm">
+          {bridgeStatus == null ? (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-text-secondary/40" />
+              <span className="text-text-secondary">Unknown</span>
+            </>
+          ) : connectorStatus?.healthy ? (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-status-success" />
+              <span className="text-status-success">Connected</span>
+            </>
+          ) : (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-status-error" />
+              <span className="text-status-error">
+                Error{connectorStatus?.last_error ? `: ${connectorStatus.last_error}` : ''}
+              </span>
+            </>
+          )}
+        </div>
+        {bridgeStatus?.last_seen && (
+          <p className="text-xs text-text-secondary/60 mt-1.5">
+            Last seen: {new Date(bridgeStatus.last_seen).toLocaleString()}
+          </p>
+        )}
+      </div>
+
+      {/* Available Commands */}
+      {commandsEnabled && (
+        <div className="bg-bg-secondary border border-border-primary rounded-lg">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border-primary">
+            <Terminal size={14} className="text-text-secondary" />
+            <h2 className="text-sm font-semibold text-text-primary">Available Commands</h2>
+          </div>
+          <div className="p-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-text-secondary/60">
+                  <th className="pb-2 font-medium">Command</th>
+                  <th className="pb-2 font-medium">Description</th>
+                </tr>
+              </thead>
+              <tbody className="text-text-secondary">
+                {TELEGRAM_COMMANDS.map((cmd) => (
+                  <tr key={cmd.command} className="border-t border-border-primary/50">
+                    <td className="py-1.5 pr-4">
+                      <code className="text-xs font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">
+                        {cmd.command}
+                      </code>
+                    </td>
+                    <td className="py-1.5">{cmd.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Notifications Link */}
+      <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Bell size={14} className="text-text-secondary" />
+          <h2 className="text-sm font-semibold text-text-primary">Notifications</h2>
+        </div>
+        <p className="text-sm text-text-secondary mb-3">
+          Configure which events are sent to this connector.
+        </p>
+        <Link
+          to="/settings"
+          className="inline-flex items-center gap-1.5 text-sm text-accent-primary hover:text-accent-primary/80 transition-colors"
+        >
+          <ExternalLink size={13} />
+          Notification settings
+        </Link>
+      </div>
+    </>
   );
 }

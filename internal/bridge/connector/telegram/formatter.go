@@ -238,33 +238,3 @@ func FormatEvent(e client.Event) string {
 	}
 }
 
-// MatchEventType reports whether eventType matches the given pattern.
-// Patterns:
-//   - "*" matches everything.
-//   - "prefix.*" matches any event whose type starts with "prefix.".
-//   - Otherwise an exact string comparison is used.
-func MatchEventType(pattern, eventType string) bool {
-	if pattern == "*" {
-		return true
-	}
-	if strings.HasSuffix(pattern, ".*") {
-		prefix := strings.TrimSuffix(pattern, "*")
-		return strings.HasPrefix(eventType, prefix)
-	}
-	return pattern == eventType
-}
-
-// ShouldForwardEvent reports whether an event of the given type should be forwarded
-// given the configured event type patterns. If patterns is nil or empty, all events
-// are forwarded.
-func ShouldForwardEvent(patterns []string, eventType string) bool {
-	if len(patterns) == 0 {
-		return true
-	}
-	for _, p := range patterns {
-		if MatchEventType(p, eventType) {
-			return true
-		}
-	}
-	return false
-}
