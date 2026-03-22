@@ -127,6 +127,13 @@ jobs:
           git tag -a "$TAG" -m "release: $TAG"
           git push origin "$TAG"
 
+      - name: Clean frontend dist for goreleaser (dirty-state prevention)
+        run: |
+          # Remove build artifacts so goreleaser sees a clean git state.
+          # Goreleaser's own pre-hook rebuilds the frontend before compilation.
+          rm -rf internal/server/frontend/dist/*
+          touch internal/server/frontend/dist/.gitkeep
+
       - name: Release with goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:

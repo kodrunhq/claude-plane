@@ -87,6 +87,8 @@ When debugging frontend issues in production mode, verify the bundle hash in the
 
 ## Gotchas
 
+**NEVER delete or git-add `internal/server/frontend/dist/`:** The `.gitkeep` file in `dist/` MUST remain in git. The `.gitignore` excludes `dist/*` but preserves `.gitkeep`. If `.gitkeep` is deleted, the goreleaser publish workflow fails with "git is in a dirty state" because the frontend build creates untracked files. When committing changes, NEVER `git add` the `dist/` directory or its contents — only the `.gitkeep` should be tracked. If you rebuild the frontend locally, the build output goes into `dist/` but should not be committed.
+
 **Terminal resize:** xterm.js `fitAddon.fit()` fires on `requestAnimationFrame` (before the WebSocket opens). The `term.onResize` callback checks `ws.readyState === WebSocket.OPEN` and silently drops the resize. Always send an **explicit** resize message on `ws.onopen` — never rely on `fit()` triggering `onResize` during connection setup.
 
 **Shell task Command field:** The backend (`ValidateJobSteps` in `orchestrator/dag_runner.go`) requires shell tasks to have a non-empty `Command` field. The `session_executor.go` also aborts if `CommandSnapshot` is empty. The frontend TaskEditor must preserve and submit the `command` field for shell tasks — don't clear it.
