@@ -553,6 +553,11 @@ UPDATE sessions SET updated_at = CURRENT_TIMESTAMP
 		Description: "add connector_id to notification_channels",
 		SQL:         `ALTER TABLE notification_channels ADD COLUMN connector_id TEXT NULL;`,
 	},
+	{
+		Version:     21,
+		Description: "prevent duplicate active provisioning tokens per machine_id",
+		SQL:         `CREATE UNIQUE INDEX IF NOT EXISTS idx_provisioning_tokens_active_machine_id ON provisioning_tokens(machine_id) WHERE redeemed_at IS NULL;`,
+	},
 }
 
 // ensureVersionTable creates the schema_version table if it does not exist.

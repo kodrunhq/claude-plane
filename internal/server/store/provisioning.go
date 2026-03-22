@@ -245,6 +245,23 @@ func (s *Store) RevokeProvisioningToken(ctx context.Context, token string) error
 	return nil
 }
 
+// HasActiveProvisioningToken returns true if an unredeemed, non-expired
+// provisioning token exists for the given machine ID.
+func (s *Store) HasActiveProvisioningToken(ctx context.Context, machineID string) (bool, error) {
+	now := time.Now().UTC()
+	var exists bool
+	err := s.reader.QueryRowContext(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM provisioning_tokens
+			WHERE machine_id = ? AND redeemed_at IS NULL AND expires_at >= ?
+		)`, machineID, now,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check active provisioning token: %w", err)
+	}
+	return exists, nil
+}
+
 // CleanExpiredProvisioningTokens deletes all provisioning tokens whose expiry time
 // is in the past. Returns the number of rows deleted.
 func (s *Store) CleanExpiredProvisioningTokens(ctx context.Context) (int64, error) {

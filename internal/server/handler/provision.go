@@ -50,6 +50,32 @@ func (h *ProvisionHandler) CreateProvision(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Check 1: Reject if an active (unredeemed, non-expired) provisioning token
+	// already exists for this machine_id.
+	hasActive, err := h.store.HasActiveProvisioningToken(r.Context(), req.MachineID)
+	if err != nil {
+		slog.Error("check active provisioning token", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if hasActive {
+		writeError(w, http.StatusConflict, "an active provisioning token already exists for this machine ID")
+		return
+	}
+
+	// Check 2: Reject if a machine with this ID already exists in the machines table.
+	// To re-provision, the admin should first delete the existing machine.
+	_, err = h.store.GetMachine(req.MachineID)
+	if err == nil {
+		writeError(w, http.StatusConflict, "a machine with this ID already exists")
+		return
+	}
+	if !errors.Is(err, store.ErrMachineNotFound) {
+		slog.Error("check existing machine", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	result, err := h.service.CreateAgentProvision(r.Context(), req.MachineID, req.OS, req.Arch, claims.UserID, 1*time.Hour)
 	if err != nil {
 		if errors.Is(err, provision.ErrInvalidMachineID) || errors.Is(err, provision.ErrUnsupportedPlatform) {

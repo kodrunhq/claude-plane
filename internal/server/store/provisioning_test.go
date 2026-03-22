@@ -273,6 +273,113 @@ func TestProvisioningToken_CleanExpired(t *testing.T) {
 	}
 }
 
+// --- HasActiveProvisioningToken ---
+
+func TestHasActiveProvisioningToken_NoTokens(t *testing.T) {
+	s := newTestStoreForProvisioning(t)
+	ctx := context.Background()
+
+	has, err := s.HasActiveProvisioningToken(ctx, "machine-nonexistent")
+	if err != nil {
+		t.Fatalf("HasActiveProvisioningToken: %v", err)
+	}
+	if has {
+		t.Error("expected false when no tokens exist")
+	}
+}
+
+func TestHasActiveProvisioningToken_ActiveToken(t *testing.T) {
+	s := newTestStoreForProvisioning(t)
+	ctx := context.Background()
+
+	pt := makeToken("tok-active-check", "machine-active", time.Hour)
+	if err := s.CreateProvisioningToken(ctx, pt); err != nil {
+		t.Fatalf("CreateProvisioningToken: %v", err)
+	}
+
+	has, err := s.HasActiveProvisioningToken(ctx, "machine-active")
+	if err != nil {
+		t.Fatalf("HasActiveProvisioningToken: %v", err)
+	}
+	if !has {
+		t.Error("expected true when an active token exists")
+	}
+}
+
+func TestHasActiveProvisioningToken_RedeemedToken(t *testing.T) {
+	s := newTestStoreForProvisioning(t)
+	ctx := context.Background()
+
+	pt := makeToken("tok-redeemed-check", "machine-redeemed-check", time.Hour)
+	if err := s.CreateProvisioningToken(ctx, pt); err != nil {
+		t.Fatalf("CreateProvisioningToken: %v", err)
+	}
+	if err := s.RedeemProvisioningToken(ctx, pt.Token); err != nil {
+		t.Fatalf("RedeemProvisioningToken: %v", err)
+	}
+
+	has, err := s.HasActiveProvisioningToken(ctx, "machine-redeemed-check")
+	if err != nil {
+		t.Fatalf("HasActiveProvisioningToken: %v", err)
+	}
+	if has {
+		t.Error("expected false when token is redeemed")
+	}
+}
+
+func TestHasActiveProvisioningToken_ExpiredToken(t *testing.T) {
+	s := newTestStoreForProvisioning(t)
+	ctx := context.Background()
+
+	pt := makeToken("tok-expired-check", "machine-expired-check", -time.Second)
+	if err := s.CreateProvisioningToken(ctx, pt); err != nil {
+		t.Fatalf("CreateProvisioningToken: %v", err)
+	}
+
+	has, err := s.HasActiveProvisioningToken(ctx, "machine-expired-check")
+	if err != nil {
+		t.Fatalf("HasActiveProvisioningToken: %v", err)
+	}
+	if has {
+		t.Error("expected false when token is expired")
+	}
+}
+
+func TestCreateProvisioningToken_DuplicateActiveMachineID(t *testing.T) {
+	s := newTestStoreForProvisioning(t)
+	ctx := context.Background()
+
+	pt1 := makeToken("tok-dup-1", "machine-dup", time.Hour)
+	if err := s.CreateProvisioningToken(ctx, pt1); err != nil {
+		t.Fatalf("first CreateProvisioningToken: %v", err)
+	}
+
+	pt2 := makeToken("tok-dup-2", "machine-dup", time.Hour)
+	err := s.CreateProvisioningToken(ctx, pt2)
+	if err == nil {
+		t.Fatal("expected error when creating duplicate active token for same machine_id")
+	}
+}
+
+func TestCreateProvisioningToken_SameMachineID_AfterRedemption(t *testing.T) {
+	s := newTestStoreForProvisioning(t)
+	ctx := context.Background()
+
+	pt1 := makeToken("tok-reprov-1", "machine-reprov", time.Hour)
+	if err := s.CreateProvisioningToken(ctx, pt1); err != nil {
+		t.Fatalf("first CreateProvisioningToken: %v", err)
+	}
+	if err := s.RedeemProvisioningToken(ctx, pt1.Token); err != nil {
+		t.Fatalf("RedeemProvisioningToken: %v", err)
+	}
+
+	// Creating a new token for the same machine_id should succeed after redemption.
+	pt2 := makeToken("tok-reprov-2", "machine-reprov", time.Hour)
+	if err := s.CreateProvisioningToken(ctx, pt2); err != nil {
+		t.Fatalf("second CreateProvisioningToken after redemption should succeed: %v", err)
+	}
+}
+
 func TestProvisioningToken_CleanExpired_LeavesValid(t *testing.T) {
 	s := newTestStoreForProvisioning(t)
 	ctx := context.Background()

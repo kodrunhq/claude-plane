@@ -145,6 +145,100 @@ func TestCreateProvision_InvalidBody(t *testing.T) {
 	}
 }
 
+func TestCreateProvision_DuplicateMachineID_ActiveToken(t *testing.T) {
+	adminClaims := &handler.UserClaims{UserID: "user-1", Role: "admin"}
+	h, _ := newProvisionHandlerFixture(t, adminClaims)
+
+	body := `{"machine_id":"dup-machine","os":"linux","arch":"amd64"}`
+
+	// First request should succeed.
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/provision/agent", strings.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	h.CreateProvision(w1, req1)
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first request: status = %d, want %d; body: %s", w1.Code, http.StatusCreated, w1.Body.String())
+	}
+
+	// Second request with same machine_id should return 409 Conflict.
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/provision/agent", strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	h.CreateProvision(w2, req2)
+	if w2.Code != http.StatusConflict {
+		t.Errorf("second request: status = %d, want %d; body: %s", w2.Code, http.StatusConflict, w2.Body.String())
+	}
+}
+
+func TestCreateProvision_DuplicateMachineID_AfterRedemption(t *testing.T) {
+	adminClaims := &handler.UserClaims{UserID: "user-1", Role: "admin"}
+	h, s := newProvisionHandlerFixture(t, adminClaims)
+
+	body := `{"machine_id":"reprov-machine","os":"linux","arch":"amd64"}`
+
+	// First provision.
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/provision/agent", strings.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	w1 := httptest.NewRecorder()
+	h.CreateProvision(w1, req1)
+	if w1.Code != http.StatusCreated {
+		t.Fatalf("first request: status = %d, want %d; body: %s", w1.Code, http.StatusCreated, w1.Body.String())
+	}
+
+	// Redeem the token (simulating the agent joining).
+	tokens, err := s.ListProvisioningTokens(context.Background())
+	if err != nil {
+		t.Fatalf("ListProvisioningTokens: %v", err)
+	}
+	var tokenVal string
+	for _, tok := range tokens {
+		if tok.MachineID == "reprov-machine" && tok.RedeemedAt == nil {
+			tokenVal = tok.Token
+			break
+		}
+	}
+	if tokenVal == "" {
+		t.Fatal("could not find active token for reprov-machine")
+	}
+	if err := s.RedeemProvisioningToken(context.Background(), tokenVal); err != nil {
+		t.Fatalf("RedeemProvisioningToken: %v", err)
+	}
+
+	// Second provision after redemption should succeed (no active token exists).
+	// Note: This will still fail because the machine was registered during the first
+	// provisioning flow. In practice, the admin would need to delete the machine first.
+	// But at the token level, the check passes — it's the machine existence check that blocks.
+	// For this test, since no agent actually connected, no machine row was created,
+	// so the second provision should succeed.
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/provision/agent", strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	h.CreateProvision(w2, req2)
+	if w2.Code != http.StatusCreated {
+		t.Errorf("second request after redemption: status = %d, want %d; body: %s", w2.Code, http.StatusCreated, w2.Body.String())
+	}
+}
+
+func TestCreateProvision_ExistingMachine(t *testing.T) {
+	adminClaims := &handler.UserClaims{UserID: "user-1", Role: "admin"}
+	h, s := newProvisionHandlerFixture(t, adminClaims)
+
+	// Insert a machine directly into the store.
+	if err := s.UpsertMachine("existing-machine", 5, "/home/test"); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+
+	body := `{"machine_id":"existing-machine","os":"linux","arch":"amd64"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/provision/agent", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.CreateProvision(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d; body: %s", w.Code, http.StatusConflict, w.Body.String())
+	}
+}
+
 // --- ServeScript tests ---
 
 // insertTestToken inserts a provisioning token directly into the store for testing.

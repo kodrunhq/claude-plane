@@ -86,6 +86,10 @@ func newRunCmd() *cobra.Command {
 			// Reap orphaned claude processes from a previous crash.
 			lifecycle.ReapOrphanedProcesses(slog.Default())
 
+			// Enrich PATH from login shell so npm-installed CLIs (e.g. claude)
+			// are discoverable even when running as a systemd service.
+			agent.EnrichPATH(slog.Default())
+
 			// Build idle detector options from config.
 			var idleOpts []agent.IdleDetectorOption
 			if cfg.Agent.IdleSilenceTimeout != "" {

@@ -41,6 +41,17 @@ func NewSession(id, command string, args []string, workDir string, envVars map[s
 		logger = slog.Default()
 	}
 
+	// Resolve non-absolute commands via PATH (which was enriched at startup).
+	// If still not found, log a warning so the failure is diagnosable.
+	if !filepath.IsAbs(command) {
+		if resolved, err := exec.LookPath(command); err == nil {
+			logger.Debug("resolved command path", "original", command, "resolved", resolved)
+			command = resolved
+		} else {
+			logger.Warn("command not found in PATH, session may fail", "command", command, "error", err)
+		}
+	}
+
 	cmd := exec.Command(command, args...)
 	if workDir != "" {
 		cmd.Dir = workDir
