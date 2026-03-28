@@ -222,3 +222,53 @@ func TestSoftDeleteMachineIdempotent(t *testing.T) {
 		t.Errorf("expected ErrMachineNotFound on double-delete, got %v", err)
 	}
 }
+
+func TestUpsertMachine_ClearsSoftDelete(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create, then soft-delete a machine.
+	if err := s.UpsertMachine("m-reprov", 5, "/home/old"); err != nil {
+		t.Fatalf("UpsertMachine: %v", err)
+	}
+	if err := s.SoftDeleteMachine("m-reprov"); err != nil {
+		t.Fatalf("SoftDeleteMachine: %v", err)
+	}
+
+	// Machine should be invisible after soft-delete.
+	_, err := s.GetMachine("m-reprov")
+	if !errors.Is(err, ErrMachineNotFound) {
+		t.Fatalf("expected ErrMachineNotFound after soft-delete, got %v", err)
+	}
+
+	// Re-upsert (simulating agent re-connect after re-provisioning).
+	if err := s.UpsertMachine("m-reprov", 10, "/home/new"); err != nil {
+		t.Fatalf("UpsertMachine after soft-delete: %v", err)
+	}
+
+	// Machine should be visible again with updated fields.
+	m, err := s.GetMachine("m-reprov")
+	if err != nil {
+		t.Fatalf("GetMachine after re-upsert: %v", err)
+	}
+	if m.MaxSessions != 10 {
+		t.Errorf("MaxSessions = %d, want 10 after re-upsert", m.MaxSessions)
+	}
+	if m.HomeDir != "/home/new" {
+		t.Errorf("HomeDir = %q, want %q after re-upsert", m.HomeDir, "/home/new")
+	}
+
+	// Machine should appear in list.
+	machines, err := s.ListMachines()
+	if err != nil {
+		t.Fatalf("ListMachines: %v", err)
+	}
+	found := false
+	for _, m := range machines {
+		if m.MachineID == "m-reprov" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("re-upserted machine should appear in ListMachines")
+	}
+}

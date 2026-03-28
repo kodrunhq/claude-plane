@@ -24,14 +24,16 @@ type Machine struct {
 }
 
 // UpsertMachine inserts a new machine or updates max_sessions and home_dir if it already exists.
-// New machines start with status "disconnected".
+// New machines start with status "disconnected". If the machine was previously soft-deleted,
+// deleted_at is cleared so the machine becomes visible again (re-provisioning path).
 func (s *Store) UpsertMachine(machineID string, maxSessions int32, homeDir string) error {
 	_, err := s.writer.Exec(`
 		INSERT INTO machines (machine_id, max_sessions, home_dir)
 		VALUES (?, ?, ?)
 		ON CONFLICT(machine_id) DO UPDATE SET
 			max_sessions = excluded.max_sessions,
-			home_dir = excluded.home_dir
+			home_dir = excluded.home_dir,
+			deleted_at = NULL
 	`, machineID, maxSessions, homeDir)
 	if err != nil {
 		return fmt.Errorf("upsert machine %q: %w", machineID, err)

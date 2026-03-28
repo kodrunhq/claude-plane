@@ -82,6 +82,10 @@ func (h *ProvisionHandler) CreateProvision(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if errors.Is(err, provision.ErrDuplicateActiveToken) {
+			writeError(w, http.StatusConflict, "an active provisioning token already exists for this machine ID")
+			return
+		}
 		slog.Error("create provision failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return

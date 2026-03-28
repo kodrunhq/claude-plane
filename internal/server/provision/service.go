@@ -27,6 +27,10 @@ var ErrUnsupportedPlatform = errors.New("unsupported platform")
 // ErrInvalidTTL is returned when the token TTL is not positive.
 var ErrInvalidTTL = errors.New("invalid TTL")
 
+// ErrDuplicateActiveToken is returned when a concurrent request already created an active
+// provisioning token for the same machine ID (DB-level UNIQUE constraint enforcement).
+var ErrDuplicateActiveToken = errors.New("active provisioning token already exists for this machine ID")
+
 // ProvisionResult is the result returned after successfully creating a provisioning token.
 type ProvisionResult struct {
 	Token       string    `json:"token"`
@@ -132,8 +136,15 @@ func (svc *Service) CreateAgentProvision(ctx context.Context, machineID, targetO
 		}
 
 		if err := svc.store.CreateProvisioningToken(ctx, token); err != nil {
-			if attempt < maxRetries-1 && isUniqueConstraintError(err) {
-				continue // Retry with a new short code.
+			if isUniqueConstraintError(err) {
+				// Distinguish between a short_code collision (retry) and a machine_id
+				// conflict (concurrent request already created an active token).
+				if strings.Contains(err.Error(), "machine_id") {
+					return nil, ErrDuplicateActiveToken
+				}
+				if attempt < maxRetries-1 {
+					continue // Retry with a new short code.
+				}
 			}
 			return nil, fmt.Errorf("create token: %w", err)
 		}
